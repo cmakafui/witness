@@ -53,6 +53,14 @@ test("an agent asks over MCP, queries the graph, and gets a refusal it can fix",
   await client.close();
 }, 60_000);
 
+test("ask waits over HTTP for a probe that takes longer than Bun's default idle limit", async () => {
+  const client = await agent();
+  const slow = PROBE.replace("import json, os", "import json, os, time\ntime.sleep(12)").replace("sum(nums) > 10", "sum(nums) > 11");
+  const a = json(await client.callTool({ name: "ask", arguments: { text: "After 12 seconds, is the total above 11?", rule: "sum > 11", probe: slow, inputs: ["data.txt"] } }));
+  expect(a.state).toBe("yes");
+  await client.close();
+}, 60_000);
+
 test("a request from another site's page is refused", async () => {
   const r = await fetch(new URL("/mcp", server.url), { method: "POST", headers: { Origin: "https://evil.example", "Content-Type": "application/json" }, body: "{}" });
   expect(r.status).toBe(403);

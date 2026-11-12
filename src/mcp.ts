@@ -56,7 +56,7 @@ function server(hub: Hub): McpServer {
         disputes: z.array(z.string()).default([]).describe("Ids of questions whose answer this question tries to show is wrong."),
         asker: z.string().optional().describe("Who asks: your name or role. Only for display."),
         timeout_s: z.number().int().positive().max(3600).optional().describe("How long one run may take. Default 600."),
-        wait_s: z.number().int().min(0).max(600).optional().describe("How long to wait for the answer. Default 120. The run goes on after."),
+        wait_s: z.number().int().min(0).max(240).optional().describe("How long to wait for the answer, at most 240 seconds. Default 120. The run goes on after."),
       },
     },
     (a) => tool(() => hub.ask({ ...a, timeoutS: a.timeout_s, waitS: a.wait_s })),
