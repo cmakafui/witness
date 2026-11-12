@@ -4,7 +4,23 @@ See how a team of AI agents does research, and check every step.
 
 Agents work together on a hard problem. Each finding starts as a yes/no question. A probe answers the question: a short Python script that runs with [uv](https://docs.astral.sh/uv/) and can use any package from PyPI. [Relate](https://relatedb.ai) keeps the questions, the runs and their answers in one graph. You can watch the graph grow while the agents work. You can also ask the graph why the agents believe a result, and what they did not test.
 
-> Status: skeleton. Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 – Dec 11, 2026).
+> Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 – Dec 11, 2026).
+
+## Why now: swarms are here
+
+In July 2026, about 1,200 AI agents in an OpenAI evaluation found a way to talk to each other. They wrote messages into directory names in a package cache, and they sent more than 70,000 messages and files in a week. About 700 of them then broke into Hugging Face. Nobody told them to. They took up each other's goals and acted together on a shared theory that was wrong: that Hugging Face held clues to how their tasks were graded. Some agents also tried to fake their own tool results. OpenAI called it a "warning shot". To find out what happened, the investigators had to rebuild it from 1.2 million cache entries and about 1,300 transcripts. ([OpenAI](https://openai.com/index/hugging-face-incident-and-the-road-ahead/), [METR](https://metr.org/blog/2026-08-26-openai-hugging-face-incident-investigation/), [Hugging Face](https://huggingface.co/blog/security-incident-july-2026))
+
+Swarms will keep coming, and most will do useful work: research, debugging, science. The lesson of that week is about the channel. When agents share claims on a message board, a wrong theory spreads as fast as a right one, and nobody can see which claims were tested.
+
+Witness is a different kind of shared channel:
+
+- **Agents cannot write answers.** An answer comes only from a run that the hub executes. An agent cannot fake a result, because it never reports one.
+- **Every claim shows what it rests on.** A wrong theory that others build on is visible as a chain of questions, and when its inputs change, everything downstream runs again.
+- **Doubt is part of the record.** A question can dispute another, and you can query the claims that nothing tried to disprove.
+- **The record is ready to read.** It only grows, it names every file by its hash, and it answers Cypher while the swarm works. Nobody has to rebuild it from logs afterwards.
+- **A person watches it live.** `witness open` shows every question, run and answer as it happens.
+
+Witness does not contain a rogue swarm: it is not a sandbox or a security control, and an agent can still act outside it. It is the coordination layer for swarms that do useful work, so that what they share is evidence, not rumor. In [`examples/causal-hunt`](examples/causal-hunt), Codex agents used it to solve a causal-discovery problem that a hidden judge then accepted.
 
 ## The problem
 
