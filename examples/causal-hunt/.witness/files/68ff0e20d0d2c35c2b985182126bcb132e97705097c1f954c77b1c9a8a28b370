@@ -1,0 +1,21 @@
+# /// script
+# dependencies = ["numpy==2.3.4"]
+# ///
+import numpy as np,json,os
+x=np.genfromtxt('observational.csv',delimiter=',',names=True);names=list(x.dtype.names);X=np.column_stack([x[n] for n in names]);assert X.shape==(2000,6)
+mu=X.mean(0);S=np.cov(X,rowvar=False,bias=True);models=[]
+for order in [list(range(6)),list(range(5,-1,-1))]:
+    B=np.zeros((6,6));var=np.zeros(6)
+    for k,j in enumerate(order):
+        p=order[:k]
+        if p:B[j,p]=np.linalg.solve(S[np.ix_(p,p)],S[p,j])
+        var[j]=S[j,j]-B[j]@S[:,j]
+    a=(np.eye(6)-B)@mu; A=np.linalg.inv(np.eye(6)-B); err=max(float(np.max(np.abs(A@np.diag(var)@A.T-S))),float(np.max(np.abs(A@a-mu))))
+    predictions=[]
+    for j in range(6):
+        bs=B.copy();aa=a.copy();bs[j]=0;aa[j]=2;predictions.append(np.linalg.solve(np.eye(6)-bs,aa))
+    models.append({'order':[names[j] for j in order],'B':B.tolist(),'a':a.tolist(),'variances':var.tolist(),'reconstruction_error':err,'predictions':np.array(predictions).tolist()})
+assert len(models)==2
+delta=np.abs(np.array(models[0]['predictions'])-np.array(models[1]['predictions']));np.fill_diagonal(delta,0);maxdiff=float(delta.max());idx=np.unravel_index(np.argmax(delta),delta.shape)
+json.dump(models,open(os.path.join(os.environ['WITNESS_OUT'],'passive_equivalent_models.json'),'w'),indent=2)
+print('WITNESS_RESULT',json.dumps({'reconstruction_errors':[m['reconstruction_error'] for m in models],'max_do_disagreement':maxdiff,'setting':names[idx[0]],'affected':names[idx[1]],'predictions':[m['predictions'] for m in models]}));print('WITNESS_ANSWER','yes' if max(m['reconstruction_error'] for m in models)<1e-8 and maxdiff>.5 else 'no')

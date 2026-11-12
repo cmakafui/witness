@@ -25,6 +25,8 @@ AI agents do research together. Each finding is a yes/no question that a uv prob
 - `src/graph.ts`: the records and the Cypher that writes them. The hub (ffi) and the page (WASM) both use it.
 - `src/mcp.ts`, `src/server.ts`, `src/main.ts`: the three tools, one `Bun.serve`, the CLI.
 - `src/connect.ts`: finds or starts a workspace's hub, and bridges stdio MCP to it. `src/setup.ts`: `witness setup`.
+- `src/replay.ts`: `witness replay` plays a store back to the page, read-only. `bun run demo` replays `examples/causal-hunt`.
+- `examples/causal-hunt/` is a recorded session for the hackathon judges. Never write to its store: a new session goes in a new folder.
 - `page/`: the live page. It answers its panels with Cypher on its own Relate WASM copy.
 - An answer is never stored. Queries get the answers as parameters (`answerParams` in `src/graph.ts`).
 - `bun check`: type check. Run both before you commit.

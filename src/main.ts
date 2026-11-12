@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { announce, bridge, running } from "./connect.ts";
 import { Hub } from "./hub.ts";
 import { serve } from "./server.ts";
+import { replay } from "./replay.ts";
 import { setup } from "./setup.ts";
 import { VERSION } from "./version.ts";
 
@@ -16,12 +17,14 @@ Usage:
   witness serve            run the hub in the foreground: the page, MCP over HTTP, the reruns
   witness status           where the workspace's hub serves
   witness stop             stop the workspace's hub
+  witness replay           play a recorded session back in the page, from the store alone (no agent, hub or uv)
 
 Options:
   --root DIR   the workspace (default: this folder). The store is DIR/.witness
   --port N     serve: the port (default 4747; 0 picks a free one)
   --host HOST  serve: the address to listen on (default 127.0.0.1)
-  --jobs N     serve: how many probes may run at once (default 4)`;
+  --jobs N     serve: how many probes may run at once (default 4)
+  --step-ms N  replay: milliseconds between records (default 600)`;
 
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
@@ -30,6 +33,7 @@ const { values, positionals } = parseArgs({
     port: { type: "string", default: "4747" },
     host: { type: "string", default: "127.0.0.1" },
     jobs: { type: "string", default: "4" },
+    "step-ms": { type: "string", default: "600" },
     help: { type: "boolean", short: "h" },
     version: { type: "boolean", short: "v" },
   },
@@ -70,6 +74,11 @@ switch (values.version ? "version" : values.help ? "help" : positionals[0]) {
         hub.close();
         process.exit(0);
       });
+    break;
+  }
+  case "replay": {
+    const server = replay(root, { port: values.port === "4747" ? 4748 : Number(values.port), hostname: values.host, stepMs: Number(values["step-ms"]) });
+    console.log(`Witness replay of ${root}\n  page: ${server.url.href}\n  each viewer gets the session from the start; reload to play it again`);
     break;
   }
   case "status": {

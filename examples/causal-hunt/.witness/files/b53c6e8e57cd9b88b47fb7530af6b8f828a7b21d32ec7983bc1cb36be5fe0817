@@ -1,0 +1,9 @@
+Resolved 12 packages in 7ms
+Installed 11 packages in 37ms
+/private/var/folders/rt/szjj30g56jx2b_l6q2lv0h380000gn/T/witness-run-RXw71t/work/probe.py:16: UserWarning: loadtxt: input contained no data: "data/exp7.csv"
+  x=np.loadtxt(f"data/exp{k}.csv",delimiter=",",skiprows=1);assert x.shape==(500,6) and np.isfinite(x).all()
+Traceback (most recent call last):
+  File "/private/var/folders/rt/szjj30g56jx2b_l6q2lv0h380000gn/T/witness-run-RXw71t/work/probe.py", line 16, in <module>
+    x=np.loadtxt(f"data/exp{k}.csv",delimiter=",",skiprows=1);assert x.shape==(500,6) and np.isfinite(x).all()
+                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

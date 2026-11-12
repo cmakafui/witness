@@ -1,0 +1,24 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["numpy==2.3.4", "scikit-learn==1.7.2", "matplotlib==3.10.7"]
+# ///
+import numpy as np,itertools,json,os
+from sklearn.model_selection import KFold
+import matplotlib;matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+assert open('q-c10680895529/correlation.png','rb').read(8)==b'\x89PNG\r\n\x1a\n'
+x=np.genfromtxt('observational.csv',delimiter=',',names=True);names=list(x.dtype.names);a=np.column_stack([x[n] for n in names]);assert a.shape==(2000,6)
+res=[];kf=KFold(5,shuffle=True,random_state=481)
+for i,j in itertools.permutations(range(6),2):
+ mse=[]
+ for degree in [1,3]:
+  phi=np.column_stack([a[:,i]**d for d in range(degree+1)]);pred=np.empty(2000)
+  for tr,te in kf.split(a):pred[te]=phi[te]@np.linalg.lstsq(phi[tr],a[tr,j],rcond=None)[0]
+  mse.append(float(np.mean((pred-a[:,j])**2)))
+ res.append({'predictor':names[i],'target':names[j],'linear_mse':mse[0],'cubic_mse':mse[1],'ratio':mse[1]/mse[0]})
+res.sort(key=lambda r:r['ratio']);out=os.environ['WITNESS_OUT'];json.dump(res,open(out+'/pairwise_nonlinearity.json','w'),indent=2)
+fig,axes=plt.subplots(2,3,figsize=(12,7))
+for ax,r in zip(axes.flat,res[:6]):
+ i=names.index(r['predictor']);j=names.index(r['target']);xx=np.linspace(*np.quantile(a[:,i],[.01,.99]),200);phi=np.column_stack([a[:,i]**d for d in range(4)]);coef=np.linalg.lstsq(phi,a[:,j],rcond=None)[0];ax.scatter(a[:,i],a[:,j],s=2,alpha=.2);ax.plot(xx,np.column_stack([xx**d for d in range(4)])@coef,color='red');ax.set(xlabel=names[i],ylabel=names[j],title=f'cubic / linear MSE={r["ratio"]:.3f}')
+fig.tight_layout();fig.savefig(out+'/nonlinear_pairs.png')
+print('WITNESS_RESULT',json.dumps({'top':res[:12]}));print('WITNESS_ANSWER','yes' if min(r['ratio'] for r in res)>.95 else 'no')

@@ -56,6 +56,36 @@ Witness never changes or deletes a record. The answer to a question is the answe
 3. The web page. It shows runs as they happen, and the chain of questions behind a result.
 4. A recorded session on the causal-hunt problem, the saved store, a replay for the judges, and this README.
 
+## See it in one command
+
+```bash
+git clone https://github.com/cmakafui/witness && cd witness
+bun install
+bun run demo        # http://127.0.0.1:4748
+```
+
+`bun run demo` plays back a recorded session from its store alone: no AI agent, no hub, no uv. Codex agents attacked the causal-hunt problem: find the hidden causes among six variables, the pair that an unmeasured influence moves, and predict interventions never run, with only 7 experiments. Each question appears as it was asked, runs, and takes the color of its answer. Click a question to see its rule, its inputs, what it rests on, its results and its saved files. The Query tab runs Cypher on the page's own Relate copy of the graph.
+
+The session asked 34 questions: 19 yes, 14 no, 1 failed. The agents never saw the lab's judge. The last question, asked by `judge`, runs it on the swarm's certified `model.py`:
+
+```
+directed edges:   exact
+confounded pair:  exact
+interventions:    p90 absolute error 0.029 (cap 0.3)
+experiments:      7 of 7
+ACCEPTED
+```
+
+Questions to try in the Query tab, with the judge's question (`q-fd9cba107e99`) selected:
+
+```cypher
+// The chain of evidence behind the accepted model
+MATCH (q:Question {id: $selected})-[:NEEDS*0..]->(u:Question) RETURN DISTINCT u.id, u.text
+
+// Every claim the agents tried to break, and what they found
+MATCH (d:Question)-[:DISPUTES]->(c:Question) RETURN c.text AS claim, d.text AS challenge, d.id IN $yes AS challenge_held
+```
+
 ## Install
 
 You need [Bun](https://bun.com) 1.4 and [uv](https://docs.astral.sh/uv/).
@@ -112,4 +142,8 @@ bun src/main.ts serve --root path/to/workspace
 
 ## Where the data lives
 
-`.witness/` in the workspace: `graph/` is the Relate store, and `files/` holds every probe, input, output, lock file and log by its SHA-256. The demo store for the judges comes with step 4.
+`.witness/` in the workspace: `graph/` is the Relate store (a directory store), and `files/` holds every probe, input, output, lock file and log by its SHA-256.
+
+The recorded session is in [`examples/causal-hunt/`](examples/causal-hunt): the lab (`AGENTS.md`, `observational.csv`, `experiment.py`), the seven experiments the agents ran (`data/`, `experiments.log`), the lab's judge (`judge/`, added after the run), and the store (`.witness/graph/`, `.witness/files/`). Open the store with Witness (`bun run demo`), with Relate's CLI (`relate --read-only --database examples/causal-hunt/.witness/graph "MATCH (q:Question) RETURN q.text"`), or from Bun (`src/relate.ts`).
+
+The lab comes from the author's autoresearch-experiments labs. In the Witness version, experiments are collected from the shell into `data/` and every analysis is a question with those files as inputs: Witness runs a question again when its inputs change, so a probe must never spend the experiment budget.

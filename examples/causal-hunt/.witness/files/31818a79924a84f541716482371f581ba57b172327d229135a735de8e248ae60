@@ -1,0 +1,13 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["numpy==2.3.4"]
+# ///
+import json,os,numpy as np
+a=np.loadtxt("observational.csv",delimiter=",",skiprows=1);b=np.loadtxt("data/exp1.csv",delimiter=",",skiprows=1)
+assert a.shape==(2000,6) and b.shape==(500,6) and np.allclose(b[:,0],2)
+m=a.mean(0);n=b.mean(0);se=np.sqrt(a.var(0,ddof=1)/len(a)+b.var(0,ddof=1)/len(b));delta=n-m
+d=json.load(open("q-e8d1dfed6a21/ambiguous_predictions.json"))
+r={"do":{"x1":2},"means":n.tolist(),"cov":np.cov(b,rowvar=False).tolist(),"se_shift":se.tolist(),"delta":delta.tolist(),"effects":(delta/(2-m[0])).tolist(),"descendants":[f"x{i+1}" for i in range(1,6) if abs(delta[i])>max(.15,4*se[i])],"candidate_errors":[float(np.max(np.abs(np.array(p)[1:]-n[1:]))) for p in d["predictions"]]}
+json.dump(r,open(os.environ["WITNESS_OUT"]+"/effects.json","w"))
+print("WITNESS_RESULT",json.dumps(r))
+print("WITNESS_ANSWER","yes" if np.all(np.abs(delta[1:])<=np.maximum(.15,4*se[1:])) else "no")

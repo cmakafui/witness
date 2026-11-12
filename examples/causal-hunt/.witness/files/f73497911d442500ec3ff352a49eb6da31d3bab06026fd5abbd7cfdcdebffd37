@@ -1,0 +1,26 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["numpy==2.3.4", "scipy==1.16.3", "networkx==3.5"]
+# ///
+import os,sys,json,importlib.util,itertools,numpy as np,networkx as nx
+assert os.path.getsize("q-9cbfb8055139/residual_graph.png")>100
+spec=importlib.util.spec_from_file_location("jf","q-c922af4201cf/joint_fit.py");jf=importlib.util.module_from_spec(spec);spec.loader.exec_module(jf)
+d=json.load(open("q-c922af4201cf/candidate_fits.json"))[0];edges=[tuple(e) for e in d["edges"]];pair=tuple(d["pair"]);assert len(edges)==8 and pair==(0,1)
+files=["observational.csv"]+[f"data/exp{i}.csv" for i in range(1,7)];fix=[{}, {0:2},{3:3},{2:-3},{1:3},{4:3},{5:-3}]
+regimes=[(np.loadtxt(f,delimiter=",",skiprows=1),s) for f,s in zip(files,fix)];assert all(x.shape[1]==6 and len(x)>=500 for x,s in regimes)
+base=jf.fit(regimes,edges,pair);trials=[]
+def run(kind,edge,ee):
+ G=nx.DiGraph();G.add_nodes_from(range(6));G.add_edges_from(ee)
+ if not nx.is_directed_acyclic_graph(G):return
+ r=jf.fit(regimes,ee,pair)
+ trials.append({"kind":kind,"edge":edge,"edges":ee,"bic":float(r["bic"]),"delta_bic":float(r["bic"]-base["bic"]),"success":bool(r["success"])})
+for e in edges:
+ run("delete",e,[z for z in edges if z!=e])
+ run("reverse",e,[z for z in edges if z!=e]+[tuple(reversed(e))])
+for e in itertools.permutations(range(6),2):
+ if e not in edges:run("add",e,edges+[e])
+assert len(trials)>=15 and all(np.isfinite(t["bic"]) for t in trials)
+trials.sort(key=lambda t:t["bic"]);json.dump(trials,open(os.environ["WITNESS_OUT"]+"/graph_neighbors.json","w"),indent=2)
+result={"n_neighbors":len(trials),"best_neighbor":trials[0],"minimum_deletion_penalty":min(t["delta_bic"] for t in trials if t["kind"]=="delete"),"base_bic":base["bic"]}
+print("WITNESS_RESULT",json.dumps(result))
+print("WITNESS_ANSWER","yes" if trials[0]["delta_bic"]<-.01 else "no")

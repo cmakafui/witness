@@ -1,0 +1,19 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["numpy==2.3.4", "matplotlib==3.10.7"]
+# ///
+import os,json,numpy as np,matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+x=np.loadtxt("observational.csv",delimiter=",",skiprows=1)
+assert x.shape==(2000,6) and np.isfinite(x).all()
+m=x.mean(0); c=np.cov(x,rowvar=False); r=np.corrcoef(x,rowvar=False)
+out=os.environ["WITNESS_OUT"]
+json.dump({"mean":m.tolist(),"cov":c.tolist(),"corr":r.tolist()},open(out+"/moments.json","w"))
+fig,ax=plt.subplots(figsize=(7,6)); im=ax.imshow(r,vmin=-1,vmax=1,cmap="RdBu_r")
+ax.set_xticks(range(6),[f"x{i+1}" for i in range(6)]);ax.set_yticks(range(6),[f"x{i+1}" for i in range(6)])
+for i in range(6):
+ for j in range(6): ax.text(j,i,f"{r[i,j]:.2f}",ha="center",va="center")
+fig.colorbar(im);fig.tight_layout();fig.savefig(out+"/correlations.png")
+print("WITNESS_RESULT",json.dumps({"n":len(x),"means":m.tolist(),"sd":np.sqrt(c.diagonal()).tolist(),"correlations":r.round(3).tolist()}))
+print("WITNESS_ANSWER","yes" if (c.diagonal()>0).all() and (np.abs(r[np.triu_indices(6,1)])>.3).sum()>=3 else "no")

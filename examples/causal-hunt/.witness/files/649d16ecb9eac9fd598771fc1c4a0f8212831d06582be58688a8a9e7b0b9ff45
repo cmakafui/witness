@@ -1,0 +1,17 @@
+# /// script
+# dependencies = ["numpy==2.3.4", "pillow==12.0.0"]
+# ///
+import numpy as np,json,os
+from PIL import Image
+im=Image.open('q-5134c4df2a6a/structural_residual_correlation.png');assert im.width>100
+info=json.load(open('q-7ff48a2acb33/total_effects.json'));B=np.array(info['B']);parents=[[1,2,3,5],[],[1],[2],[1],[4]];mask=np.zeros((6,6))
+for j,p in enumerate(parents):mask[j,p]=1
+B*=mask
+raw=np.genfromtxt('observational.csv',delimiter=',',names=True);names=list(raw.dtype.names);X=np.column_stack([raw[n] for n in names]);assert X.shape==(2000,6);R=X-X@B.T
+pairs=[(i,j) for i in range(6) for j in range(i)];other=[k for k,p in enumerate(pairs) if p!=(1,0)];target=pairs.index((1,0));rng=np.random.default_rng(2026);vals=[]
+for k in range(500):
+ r=R[rng.integers(0,len(R),len(R))];c=np.corrcoef(r,rowvar=False);vals.append([c[i,j] for i,j in pairs])
+vals=np.array(vals);assert vals.shape==(500,15) and np.isfinite(vals).all()
+result={'x1_x2_percentile_95':np.quantile(vals[:,target],[.025,.975]).tolist(),'largest_alternative_in_all_500':float(np.max(abs(vals[:,other]))),'alternative_pair_95_intervals':{names[i]+'-'+names[j]:np.quantile(vals[:,k],[.025,.975]).tolist() for k,(i,j) in enumerate(pairs) if k in other}}
+json.dump(result,open(os.path.join(os.environ['WITNESS_OUT'],'confounding_bootstrap.json'),'w'),indent=2)
+print('WITNESS_RESULT',json.dumps(result));print('WITNESS_ANSWER','yes' if np.max(abs(vals[:,other]))>=.2 else 'no')

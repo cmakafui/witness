@@ -7,6 +7,7 @@ import ForceGraph from "force-graph";
 import { answerParams, type GNode, type GRel, type State, type Status, statements } from "../src/graph.ts";
 
 type Msg =
+  | { type: "replay"; step: number; of: number }
   | { type: "graph"; nodes: GNode[]; rels: GRel[] }
   | { type: "states"; states: Status[] }
   | { type: "result"; question: string; run: string; data: unknown };
@@ -116,6 +117,12 @@ function redraw() {
 // Messages from the hub
 
 function apply(m: Msg) {
+  if (m.type === "replay") {
+    const link = document.getElementById("link")!;
+    link.textContent = m.step < m.of ? `replay ${m.step} of ${m.of}` : "replay: done";
+    link.className = "on";
+    return;
+  }
   if (m.type === "graph") {
     for (const s of statements(m.nodes, m.rels)) cypher(s.cypher, s.params);
     let changed = false;

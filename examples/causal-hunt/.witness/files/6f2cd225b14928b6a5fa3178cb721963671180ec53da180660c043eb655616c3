@@ -1,0 +1,17 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["numpy==2.3.4"]
+# ///
+import numpy as np,json,os
+x=np.genfromtxt('observational.csv',delimiter=',',names=True);names=list(x.dtype.names);a=np.column_stack([x[n] for n in names]);old=json.load(open('q-42243136a677/reverse_chain_fits.json'));assert a.shape==(2000,6) and old['edges']
+pa={2:[],3:[2],1:[2],4:[1],5:[4],0:[3,2,1,5]};b=np.zeros((6,6));alpha=np.zeros(6);res=np.zeros_like(a)
+for j,pars in pa.items():
+ z=np.column_stack([np.ones(2000),a[:,pars]]) if pars else np.ones((2000,1));coef=np.linalg.lstsq(z,a[:,j],rcond=None)[0];alpha[j]=coef[0];b[j,pars]=coef[1:];res[:,j]=a[:,j]-z@coef
+omega=np.diag(np.var(res,axis=0,ddof=1));g=np.linalg.inv(np.eye(6)-b);s=g@omega@g.T;models=[]
+for omit in [1,2]:
+ bb=b.copy();aa=alpha.copy();coef=b[0,omit];bb[0,omit]=0;bb[0]+=coef*b[omit];aa[0]+=coef*alpha[omit];transform=np.eye(6);transform[0,omit]=coef;oo=transform@omega@transform.T;gg=np.linalg.inv(np.eye(6)-bb);err=float(abs(gg@oo@gg.T-s).max());pred=[]
+ for j in range(6):
+  bc=bb.copy();ac=aa.copy();bc[j]=0;ac[j]=2;pred.append(np.linalg.solve(np.eye(6)-bc,ac).tolist())
+ models.append({'removed_edge':[names[omit],'x1'],'confounded':['x1',names[omit]],'B':bb.tolist(),'intercept':aa.tolist(),'noise_covariance':oo.tolist(),'covariance_error':err,'singleton_do2':pred})
+diff=abs(np.array(models[0]['singleton_do2'])-np.array(models[1]['singleton_do2']));np.fill_diagonal(diff,0);out=os.environ['WITNESS_OUT'];json.dump({'base_B':b.tolist(),'base_intercept':alpha.tolist(),'models':models},open(out+'/passive_confounding_candidates.json','w'),indent=2)
+print('WITNESS_RESULT',json.dumps({'base_B':b.tolist(),'base_intercept':alpha.tolist(),'candidates':models,'max_do_disagreement':float(diff.max())}));print('WITNESS_ANSWER','yes' if all(m['covariance_error']<=1e-10 for m in models) and diff.max()>.3 else 'no')

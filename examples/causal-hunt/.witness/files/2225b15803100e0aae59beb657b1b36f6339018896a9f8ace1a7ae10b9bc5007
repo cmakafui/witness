@@ -1,0 +1,41 @@
+import numpy as np
+from scipy.optimize import minimize
+
+def fit(regimes,edges,pair=None,start=None):
+    # rows are summarized, intervention coordinates excluded from likelihood
+    stats=[]
+    for x,fix in regimes:
+        n=len(x); z=np.column_stack([np.ones(n),x]);S=z.T@z/n;keep=[i for i in range(6) if i not in fix]
+        stats.append((n,S,keep))
+    E=len(edges);p=E+12+(pair is not None)
+    if start is None:
+        t=np.zeros(p)
+        for j in range(6):
+            pjs=[i for i,k in edges if k==j]; xs=np.concatenate([x for x,f in regimes if j not in f]);X=np.column_stack([np.ones(len(xs)),xs[:,pjs]])
+            b=np.linalg.lstsq(X,xs[:,j],rcond=None)[0];t[E+j]=b[0]
+            for i,k in edges:
+                if k==j:t[edges.index((i,k))]=b[pjs.index(i)+1]
+            t[E+6+j]=np.log(max(np.var(xs[:,j]-X@b),.1))
+    else:t=start.copy()
+    def fun(t):
+        B=np.zeros((6,6));a=t[E:E+6];v=np.exp(t[E+6:E+12]);O=np.diag(v)
+        for b,(i,j) in zip(t[:E],edges):B[j,i]=b
+        if pair is not None:
+            i,j=pair;rho=np.tanh(t[-1]);off=rho*np.sqrt(v[i]*v[j]);O[i,j]=O[j,i]=off
+        H=np.column_stack([-a,np.eye(6)-B]);DH=np.zeros((6,7));DO=np.zeros((6,6));loss=0.
+        for n,S,k in stats:
+            h=H[k];o=O[np.ix_(k,k)];inv=np.linalg.inv(o);rr=h@S@h.T;sg,ld=np.linalg.slogdet(o)
+            if sg<=0:return 1e99,np.zeros_like(t)
+            loss+=n*(ld+np.sum(inv*rr.T));DH[k]+=2*n*inv@h@S;DO[np.ix_(k,k)]+=n*(inv-inv@rr@inv)
+        g=np.zeros_like(t)
+        for z,(i,j) in enumerate(edges):g[z]=-DH[j,i+1]
+        g[E:E+6]=-DH[:,0];g[E+6:E+12]=DO.diagonal()*v
+        if pair is not None:
+            i,j=pair;g[E+6+i]+=DO[i,j]*off;g[E+6+j]+=DO[i,j]*off;g[-1]=2*DO[i,j]*(1-rho*rho)*np.sqrt(v[i]*v[j])
+        return loss,g
+    opt=minimize(fun,t,jac=True,method='L-BFGS-B',bounds=[(-5,5)]*E+[(-10,10)]*6+[(-6,5)]*6+([(-3,3)] if pair is not None else []),options={'maxiter':400,'ftol':1e-11,'gtol':1e-5})
+    B=np.zeros((6,6));a=opt.x[E:E+6];v=np.exp(opt.x[E+6:E+12]);O=np.diag(v)
+    for b,(i,j) in zip(opt.x[:E],edges):B[j,i]=b
+    if pair is not None:
+        i,j=pair;O[i,j]=O[j,i]=np.tanh(opt.x[-1])*np.sqrt(v[i]*v[j])
+    n=sum(len(x) for x,f in regimes);return {'B':B,'a':a,'O':O,'bic':opt.fun+p*np.log(n),'loss':opt.fun,'params':opt.x,'success':opt.success,'gradient':float(np.max(np.abs(opt.jac)))}

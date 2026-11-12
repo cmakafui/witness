@@ -1,0 +1,16 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["numpy==2.3.4"]
+# ///
+import numpy as np,itertools,json,os
+x=np.genfromtxt('observational.csv',delimiter=',',names=True);names=list(x.dtype.names);a=np.column_stack([x[n] for n in names]);tests=json.load(open('q-c10680895529/partial_tests.json'));assert a.shape==(2000,6) and len(tests)==240
+order=[3,2,1,4,5,0];R=np.empty_like(a);b=np.zeros((6,6));intercept=np.zeros(6);rows=[];edges=[]
+for k,j in enumerate(order):
+ cand=[];pa=order[:k]
+ for l in range(k+1):
+  for s in itertools.combinations(pa,l):
+   z=np.column_stack([np.ones(2000),a[:,s]]) if s else np.ones((2000,1));coef=np.linalg.lstsq(z,a[:,j],rcond=None)[0];e=a[:,j]-z@coef;sse=e@e;bic=2000*np.log(sse/2000)+(len(s)+1)*np.log(2000);cand.append((bic,s,coef,e))
+ bic,s,coef,e=min(cand,key=lambda v:v[0]);R[:,j]=e;intercept[j]=coef[0];b[j,list(s)]=coef[1:];edges.extend([[names[i],names[j]] for i in s]);rows.append({'target':names[j],'parents':[names[i] for i in s],'coef':coef.tolist(),'bic':float(bic),'sse':float(e@e)})
+c=np.corrcoef(R,rowvar=False);np.fill_diagonal(c,0);out=os.environ['WITNESS_OUT'];np.save(out+'/residuals.npy',R);json.dump({'order':[names[i] for i in order],'edges':edges,'fits':rows,'B':b.tolist(),'intercept':intercept.tolist(),'residual_covariance':np.cov(R,rowvar=False).tolist(),'residual_correlation':c.tolist()},open(out+'/reverse_chain_fits.json','w'),indent=2)
+expected={('x4','x3'),('x3','x2'),('x2','x5'),('x5','x6'),('x6','x1'),('x3','x1')}
+print('WITNESS_RESULT',json.dumps({'fits':rows,'edges':edges,'max_residual_correlation':float(abs(c).max()),'residual_correlation':c.tolist()}));print('WITNESS_ANSWER','yes' if set(map(tuple,edges))==expected and abs(c).max()<=.1 else 'no')

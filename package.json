@@ -12,7 +12,8 @@
     "page",
     "skill",
     "schema.cypher",
-    "README.md"
+    "README.md",
+    "examples"
   ],
   "engines": {
     "bun": ">=1.4.0"
@@ -22,6 +23,7 @@
     "url": "https://github.com/cmakafui/witness"
   },
   "scripts": {
+    "demo": "bun src/main.ts replay --root examples/causal-hunt",
     "test": "bun test",
     "check": "bun check"
   },

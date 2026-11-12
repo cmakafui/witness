@@ -1,0 +1,28 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["numpy==2.3.4", "scipy==1.16.3", "matplotlib==3.10.7"]
+# ///
+import numpy as np,itertools,json,os
+from scipy.stats import norm
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+x=np.genfromtxt('observational.csv',delimiter=',',names=True)
+names=list(x.dtype.names); a=np.column_stack([x[n] for n in names]); assert a.shape==(2000,6) and np.isfinite(a).all()
+res=[]; best=[]
+for i,j in itertools.combinations(range(6),2):
+ oth=[k for k in range(6) if k not in [i,j]]; rr=[]
+ for m in range(5):
+  for s in itertools.combinations(oth,m):
+   z=np.column_stack([np.ones(len(a)),a[:,s]]) if s else np.ones((len(a),1))
+   ri=a[:,i]-z@np.linalg.lstsq(z,a[:,i],rcond=None)[0]; rj=a[:,j]-z@np.linalg.lstsq(z,a[:,j],rcond=None)[0]
+   r=float(np.corrcoef(ri,rj)[0,1]); p=float(2*norm.sf(abs(np.arctanh(r))*np.sqrt(len(a)-len(s)-3)))
+   row={'pair':[names[i],names[j]],'given':[names[k] for k in s],'r':r,'p':p}; rr.append(row);res.append(row)
+ best.append(max(rr,key=lambda t:t['p']))
+out=os.environ['WITNESS_OUT'];json.dump(res,open(out+'/partial_tests.json','w'),indent=2);json.dump(best,open(out+'/best_separators.json','w'),indent=2)
+c=np.corrcoef(a,rowvar=False);np.save(out+'/correlation.npy',c)
+fig,ax=plt.subplots(figsize=(7,6));im=ax.imshow(c,vmin=-1,vmax=1,cmap='coolwarm');ax.set_xticks(range(6),names);ax.set_yticks(range(6),names)
+for i in range(6):
+ for j in range(6):ax.text(j,i,f'{c[i,j]:.2f}',ha='center',va='center')
+fig.colorbar(im);fig.tight_layout();fig.savefig(out+'/correlation.png')
+print('WITNESS_RESULT',json.dumps({'best_separators':best,'n_tests':len(res)}));print('WITNESS_ANSWER','yes' if any(t['p']>.1 for t in best) else 'no')

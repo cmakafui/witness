@@ -1,0 +1,15 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["numpy==2.3.4"]
+# ///
+import numpy as np,json,os
+names=['x1','x2','x3','x4','x5','x6']
+def read(p):
+ x=np.genfromtxt(p,delimiter=',',names=True);a=np.column_stack([x[n] for n in names]);assert len(a)>=100 and a.shape[1]==6;return a
+obs=read('observational.csv');models=json.load(open('q-5247cbc067a1/passive_confounding_candidates.json'))['models'];cases=[('data/exp3.csv',2,-3),('data/exp4.csv',1,3)];results=[];passes=[]
+for m in models:
+ ok=True
+ for path,j,value in cases:
+  a=read(path);b=np.array(m['B']);alpha=np.array(m['intercept']);b[j]=0;alpha[j]=value;pred=np.linalg.solve(np.eye(6)-b,alpha);error=abs(a.mean(0)-pred);threshold=np.maximum(.3,3*a.std(0,ddof=1)/np.sqrt(len(a)));mask=np.arange(6)!=j;ok=ok and bool((error[mask]<=threshold[mask]).all());results.append({'candidate_confounded':m['confounded'],'experiment':path,'predicted':pred.tolist(),'measured':a.mean(0).tolist(),'max_error_nonset':float(error[mask].max()),'passed':bool((error[mask]<=threshold[mask]).all())})
+ passes.append(ok)
+json.dump(results,open(os.environ['WITNESS_OUT']+'/candidate_rejection.json','w'),indent=2);print('WITNESS_RESULT',json.dumps(results));print('WITNESS_ANSWER','yes' if any(passes) else 'no')

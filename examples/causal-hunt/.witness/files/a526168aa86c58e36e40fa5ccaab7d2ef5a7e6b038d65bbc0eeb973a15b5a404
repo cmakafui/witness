@@ -1,0 +1,10 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+import json,os
+d=json.load(open("q-e8d1dfed6a21/ambiguous_predictions.json"));p=d["predictions"];assert len(p)==2 and all(len(x)==6 for x in p)
+gap=max(abs(a-b) for a,b in zip(p[0][1:],p[1][1:]))
+json.dump({"do":{"x1":2},"rows":10000,"reason":"Distinguish ancestor from sink; predicted gap >0.6","candidate_gap":gap},open(os.environ["WITNESS_OUT"]+"/design.json","w"))
+print("WITNESS_RESULT",json.dumps({"candidate_gap":gap}))
+print("WITNESS_ANSWER","yes" if gap>.6 else "no")

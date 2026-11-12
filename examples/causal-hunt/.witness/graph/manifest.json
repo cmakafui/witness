@@ -1,0 +1,2245 @@
+{
+  "format_version": 5,
+  "next_node_id": 273,
+  "next_rel_id": 610,
+  "checkpoint_lsn": 111,
+  "commit_ts": 111,
+  "node_parts": [
+    {
+      "path": "nodes/0-262144-85dbe9c98bd787d103439ab7bf9e2f66.parquet",
+      "id_lo": 0,
+      "id_hi": 262144,
+      "rows": 273,
+      "bytes": 50011
+    }
+  ],
+  "rel_parts": [
+    {
+      "path": "relationships/0-262144-7272068787fc86ed0cc29bb3be9fe71b.parquet",
+      "id_lo": 0,
+      "id_hi": 262144,
+      "rows": 610,
+      "bytes": 9432
+    }
+  ],
+  "bytes_per_node": 182.06117750237567,
+  "bytes_per_rel": 15.67249448364589,
+  "codec": "parquet",
+  "indexes": [
+    {
+      "name": "answer_id",
+      "label": "Answer",
+      "property": "id#RANGE#answer_id"
+    },
+    {
+      "name": "file_id",
+      "label": "File",
+      "property": "id#RANGE#file_id"
+    },
+    {
+      "name": "package_id",
+      "label": "Package",
+      "property": "id#RANGE#package_id"
+    },
+    {
+      "name": "question_id",
+      "label": "Question",
+      "property": "id#RANGE#question_id"
+    },
+    {
+      "name": "run_id",
+      "label": "Run",
+      "property": "id#RANGE#run_id"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "answer_id",
+      "relationship": false,
+      "label": "Answer",
+      "properties": [
+        "id"
+      ],
+      "kind": "unique",
+      "property_type": null
+    },
+    {
+      "name": "constraint_122e2424",
+      "relationship": false,
+      "label": "Package",
+      "properties": [
+        "version"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_1723d305",
+      "relationship": true,
+      "label": "PROBE",
+      "properties": [],
+      "kind": "sourceLabel",
+      "property_type": null,
+      "enforced_label": "Question"
+    },
+    {
+      "name": "constraint_17497d5c",
+      "relationship": false,
+      "label": "Answer",
+      "properties": [
+        "id"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_183efca2",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "id"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_24519071",
+      "relationship": true,
+      "label": "OF",
+      "properties": [],
+      "kind": "targetLabel",
+      "property_type": null,
+      "enforced_label": "Run"
+    },
+    {
+      "name": "constraint_258c9529",
+      "relationship": false,
+      "label": "Package",
+      "properties": [
+        "id"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_2dfe895e",
+      "relationship": true,
+      "label": "NEEDS",
+      "properties": [],
+      "kind": "targetLabel",
+      "property_type": null,
+      "enforced_label": "Question"
+    },
+    {
+      "name": "constraint_2f97683d",
+      "relationship": true,
+      "label": "ANSWERS",
+      "properties": [],
+      "kind": "sourceLabel",
+      "property_type": null,
+      "enforced_label": "Run"
+    },
+    {
+      "name": "constraint_3690a876",
+      "relationship": true,
+      "label": "ANSWERS",
+      "properties": [],
+      "kind": "targetLabel",
+      "property_type": null,
+      "enforced_label": "Question"
+    },
+    {
+      "name": "constraint_3bb897b1",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "id"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_3c315714",
+      "relationship": false,
+      "label": "Package",
+      "properties": [
+        "name"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_40f15396",
+      "relationship": false,
+      "label": "File",
+      "properties": [
+        "id"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_4491f070",
+      "relationship": false,
+      "label": "Answer",
+      "properties": [
+        "value"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_454bf7cb",
+      "relationship": true,
+      "label": "SAVED",
+      "properties": [],
+      "kind": "targetLabel",
+      "property_type": null,
+      "enforced_label": "File"
+    },
+    {
+      "name": "constraint_47db899",
+      "relationship": true,
+      "label": "NEEDS",
+      "properties": [],
+      "kind": "sourceLabel",
+      "property_type": null,
+      "enforced_label": "Question"
+    },
+    {
+      "name": "constraint_55635a9c",
+      "relationship": false,
+      "label": "Answer",
+      "properties": [
+        "value"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_5d7e41d7",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "timeout"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_623f2b51",
+      "relationship": false,
+      "label": "Run",
+      "properties": [
+        "id"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_66a09b1f",
+      "relationship": true,
+      "label": "LOG",
+      "properties": [],
+      "kind": "sourceLabel",
+      "property_type": null,
+      "enforced_label": "Answer"
+    },
+    {
+      "name": "constraint_6a519223",
+      "relationship": false,
+      "label": "Package",
+      "properties": [
+        "id"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_6db4f23",
+      "relationship": true,
+      "label": "OF",
+      "properties": [],
+      "kind": "sourceLabel",
+      "property_type": null,
+      "enforced_label": "Answer"
+    },
+    {
+      "name": "constraint_7ac34510",
+      "relationship": false,
+      "label": "Answer",
+      "properties": [
+        "id"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_7bce3bdb",
+      "relationship": true,
+      "label": "DISPUTES",
+      "properties": [],
+      "kind": "targetLabel",
+      "property_type": null,
+      "enforced_label": "Question"
+    },
+    {
+      "name": "constraint_80c0cccc",
+      "relationship": false,
+      "label": "Run",
+      "properties": [
+        "key"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_83ad8e14",
+      "relationship": false,
+      "label": "Package",
+      "properties": [
+        "name"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_8b4019c5",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "text"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_8bc3bcd6",
+      "relationship": true,
+      "label": "READ",
+      "properties": [
+        "role"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_8d7660ea",
+      "relationship": true,
+      "label": "USED",
+      "properties": [],
+      "kind": "sourceLabel",
+      "property_type": null,
+      "enforced_label": "Run"
+    },
+    {
+      "name": "constraint_8d9f9a37",
+      "relationship": false,
+      "label": "Answer",
+      "properties": [
+        "seq"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_8e90ec00",
+      "relationship": true,
+      "label": "USED",
+      "properties": [],
+      "kind": "targetLabel",
+      "property_type": null,
+      "enforced_label": "Package"
+    },
+    {
+      "name": "constraint_94758c17",
+      "relationship": false,
+      "label": "Package",
+      "properties": [
+        "version"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_9638076c",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "seq"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_9665d458",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "inputs"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_98516c6d",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "rule"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_a5a13648",
+      "relationship": true,
+      "label": "SAVED",
+      "properties": [],
+      "kind": "sourceLabel",
+      "property_type": null,
+      "enforced_label": "Run"
+    },
+    {
+      "name": "constraint_a6eea276",
+      "relationship": false,
+      "label": "Answer",
+      "properties": [
+        "seq"
+      ],
+      "kind": "propertyType",
+      "property_type": "INTEGER"
+    },
+    {
+      "name": "constraint_ab68adf4",
+      "relationship": false,
+      "label": "Answer",
+      "properties": [
+        "reason"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_ad507fd4",
+      "relationship": true,
+      "label": "READ",
+      "properties": [
+        "name"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_aef95411",
+      "relationship": true,
+      "label": "DISPUTES",
+      "properties": [],
+      "kind": "sourceLabel",
+      "property_type": null,
+      "enforced_label": "Question"
+    },
+    {
+      "name": "constraint_b1fcf313",
+      "relationship": true,
+      "label": "SAVED",
+      "properties": [
+        "name"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_bb6326b2",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "rule"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_c078ff8d",
+      "relationship": true,
+      "label": "READ",
+      "properties": [
+        "role"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_c13419b7",
+      "relationship": false,
+      "label": "File",
+      "properties": [
+        "id"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_c15fa705",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "text"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_c7656120",
+      "relationship": true,
+      "label": "READ",
+      "properties": [],
+      "kind": "sourceLabel",
+      "property_type": null,
+      "enforced_label": "Run"
+    },
+    {
+      "name": "constraint_cdf4d94f",
+      "relationship": false,
+      "label": "Answer",
+      "properties": [
+        "results"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_d0914a06",
+      "relationship": true,
+      "label": "READ",
+      "properties": [
+        "name"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_d17995d6",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "asker"
+      ],
+      "kind": "propertyType",
+      "property_type": "STRING"
+    },
+    {
+      "name": "constraint_d298b05b",
+      "relationship": false,
+      "label": "File",
+      "properties": [
+        "bytes"
+      ],
+      "kind": "propertyType",
+      "property_type": "INTEGER"
+    },
+    {
+      "name": "constraint_d933dd7f",
+      "relationship": false,
+      "label": "Run",
+      "properties": [
+        "key"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_d9e18176",
+      "relationship": false,
+      "label": "Run",
+      "properties": [
+        "seq"
+      ],
+      "kind": "propertyType",
+      "property_type": "INTEGER"
+    },
+    {
+      "name": "constraint_da9bc856",
+      "relationship": false,
+      "label": "Answer",
+      "properties": [
+        "results"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_de9e4964",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "timeout"
+      ],
+      "kind": "propertyType",
+      "property_type": "INTEGER"
+    },
+    {
+      "name": "constraint_df03eab6",
+      "relationship": false,
+      "label": "File",
+      "properties": [
+        "bytes"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_df5ec60a",
+      "relationship": false,
+      "label": "Run",
+      "properties": [
+        "seq"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_df88cce2",
+      "relationship": true,
+      "label": "SAVED",
+      "properties": [
+        "name"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_dfe93632",
+      "relationship": false,
+      "label": "Run",
+      "properties": [
+        "id"
+      ],
+      "kind": "exists",
+      "property_type": null
+    },
+    {
+      "name": "constraint_e4f6a18d",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "seq"
+      ],
+      "kind": "propertyType",
+      "property_type": "INTEGER"
+    },
+    {
+      "name": "constraint_eb2d1e0b",
+      "relationship": true,
+      "label": "LOG",
+      "properties": [],
+      "kind": "targetLabel",
+      "property_type": null,
+      "enforced_label": "File"
+    },
+    {
+      "name": "constraint_f268b55b",
+      "relationship": true,
+      "label": "PROBE",
+      "properties": [],
+      "kind": "targetLabel",
+      "property_type": null,
+      "enforced_label": "File"
+    },
+    {
+      "name": "constraint_f34ad40c",
+      "relationship": true,
+      "label": "READ",
+      "properties": [],
+      "kind": "targetLabel",
+      "property_type": null,
+      "enforced_label": "File"
+    },
+    {
+      "name": "constraint_f6670280",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "inputs"
+      ],
+      "kind": "propertyType",
+      "property_type": "LIST<STRING NOT NULL>"
+    },
+    {
+      "name": "file_id",
+      "relationship": false,
+      "label": "File",
+      "properties": [
+        "id"
+      ],
+      "kind": "unique",
+      "property_type": null
+    },
+    {
+      "name": "package_id",
+      "relationship": false,
+      "label": "Package",
+      "properties": [
+        "id"
+      ],
+      "kind": "unique",
+      "property_type": null
+    },
+    {
+      "name": "question_id",
+      "relationship": false,
+      "label": "Question",
+      "properties": [
+        "id"
+      ],
+      "kind": "unique",
+      "property_type": null
+    },
+    {
+      "name": "run_id",
+      "relationship": false,
+      "label": "Run",
+      "properties": [
+        "id"
+      ],
+      "kind": "unique",
+      "property_type": null
+    }
+  ],
+  "theater": {
+    "databases": {
+      "neo4j": [
+        25,
+        false
+      ],
+      "system": [
+        25,
+        false
+      ],
+      "system_ontologies": [
+        25,
+        false
+      ]
+    },
+    "index_details": {
+      "answer_id": {
+        "kind": "Range",
+        "relationship": false,
+        "labels": [
+          "Answer"
+        ],
+        "properties": [
+          "id"
+        ],
+        "with_properties": []
+      },
+      "file_id": {
+        "kind": "Range",
+        "relationship": false,
+        "labels": [
+          "File"
+        ],
+        "properties": [
+          "id"
+        ],
+        "with_properties": []
+      },
+      "package_id": {
+        "kind": "Range",
+        "relationship": false,
+        "labels": [
+          "Package"
+        ],
+        "properties": [
+          "id"
+        ],
+        "with_properties": []
+      },
+      "question_id": {
+        "kind": "Range",
+        "relationship": false,
+        "labels": [
+          "Question"
+        ],
+        "properties": [
+          "id"
+        ],
+        "with_properties": []
+      },
+      "run_id": {
+        "kind": "Range",
+        "relationship": false,
+        "labels": [
+          "Run"
+        ],
+        "properties": [
+          "id"
+        ],
+        "with_properties": []
+      }
+    },
+    "index_options": {
+      "answer_id": {},
+      "file_id": {},
+      "package_id": {},
+      "question_id": {},
+      "run_id": {}
+    },
+    "graph_types": {
+      "witness": {
+        "node_types": [
+          {
+            "alias": "q",
+            "identifying_label": "Question",
+            "implied_labels": [],
+            "properties": [
+              {
+                "name": "id",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "text",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "rule",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "inputs",
+                "value_type": {
+                  "List": {
+                    "element": {
+                      "Predefined": {
+                        "kind": "String",
+                        "not_null": true
+                      }
+                    },
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "timeout",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "Integer",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "asker",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": false
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "seq",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "Integer",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              }
+            ]
+          },
+          {
+            "alias": "r",
+            "identifying_label": "Run",
+            "implied_labels": [],
+            "properties": [
+              {
+                "name": "id",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "key",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "seq",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "Integer",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              }
+            ]
+          },
+          {
+            "alias": "a",
+            "identifying_label": "Answer",
+            "implied_labels": [],
+            "properties": [
+              {
+                "name": "id",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "value",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "reason",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": false
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "results",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "seq",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "Integer",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              }
+            ]
+          },
+          {
+            "alias": "f",
+            "identifying_label": "File",
+            "implied_labels": [],
+            "properties": [
+              {
+                "name": "id",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "bytes",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "Integer",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              }
+            ]
+          },
+          {
+            "alias": "p",
+            "identifying_label": "Package",
+            "implied_labels": [],
+            "properties": [
+              {
+                "name": "id",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "name",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "version",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              }
+            ]
+          }
+        ],
+        "edge_types": [
+          {
+            "alias": null,
+            "identifying_label": "PROBE",
+            "properties": [],
+            "source": {
+              "AliasRef": "q"
+            },
+            "target": {
+              "AliasRef": "f"
+            }
+          },
+          {
+            "alias": null,
+            "identifying_label": "NEEDS",
+            "properties": [],
+            "source": {
+              "AliasRef": "q"
+            },
+            "target": {
+              "AliasRef": "q"
+            }
+          },
+          {
+            "alias": null,
+            "identifying_label": "DISPUTES",
+            "properties": [],
+            "source": {
+              "AliasRef": "q"
+            },
+            "target": {
+              "AliasRef": "q"
+            }
+          },
+          {
+            "alias": null,
+            "identifying_label": "ANSWERS",
+            "properties": [],
+            "source": {
+              "AliasRef": "r"
+            },
+            "target": {
+              "AliasRef": "q"
+            }
+          },
+          {
+            "alias": null,
+            "identifying_label": "READ",
+            "properties": [
+              {
+                "name": "role",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              },
+              {
+                "name": "name",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              }
+            ],
+            "source": {
+              "AliasRef": "r"
+            },
+            "target": {
+              "AliasRef": "f"
+            }
+          },
+          {
+            "alias": null,
+            "identifying_label": "SAVED",
+            "properties": [
+              {
+                "name": "name",
+                "value_type": {
+                  "Predefined": {
+                    "kind": "String",
+                    "not_null": true
+                  }
+                },
+                "default_value": null,
+                "inline_constraint": null
+              }
+            ],
+            "source": {
+              "AliasRef": "r"
+            },
+            "target": {
+              "AliasRef": "f"
+            }
+          },
+          {
+            "alias": null,
+            "identifying_label": "USED",
+            "properties": [],
+            "source": {
+              "AliasRef": "r"
+            },
+            "target": {
+              "AliasRef": "p"
+            }
+          },
+          {
+            "alias": null,
+            "identifying_label": "OF",
+            "properties": [],
+            "source": {
+              "AliasRef": "a"
+            },
+            "target": {
+              "AliasRef": "r"
+            }
+          },
+          {
+            "alias": null,
+            "identifying_label": "LOG",
+            "properties": [],
+            "source": {
+              "AliasRef": "a"
+            },
+            "target": {
+              "AliasRef": "f"
+            }
+          }
+        ],
+        "constraints": [],
+        "drop_constraint_names": []
+      }
+    },
+    "current_graph_type": {
+      "node_types": [
+        {
+          "alias": "q",
+          "identifying_label": "Question",
+          "implied_labels": [],
+          "properties": [
+            {
+              "name": "id",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "text",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "rule",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "inputs",
+              "value_type": {
+                "List": {
+                  "element": {
+                    "Predefined": {
+                      "kind": "String",
+                      "not_null": true
+                    }
+                  },
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "timeout",
+              "value_type": {
+                "Predefined": {
+                  "kind": "Integer",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "asker",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": false
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "seq",
+              "value_type": {
+                "Predefined": {
+                  "kind": "Integer",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            }
+          ]
+        },
+        {
+          "alias": "r",
+          "identifying_label": "Run",
+          "implied_labels": [],
+          "properties": [
+            {
+              "name": "id",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "key",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "seq",
+              "value_type": {
+                "Predefined": {
+                  "kind": "Integer",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            }
+          ]
+        },
+        {
+          "alias": "a",
+          "identifying_label": "Answer",
+          "implied_labels": [],
+          "properties": [
+            {
+              "name": "id",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "value",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "reason",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": false
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "results",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "seq",
+              "value_type": {
+                "Predefined": {
+                  "kind": "Integer",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            }
+          ]
+        },
+        {
+          "alias": "f",
+          "identifying_label": "File",
+          "implied_labels": [],
+          "properties": [
+            {
+              "name": "id",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "bytes",
+              "value_type": {
+                "Predefined": {
+                  "kind": "Integer",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            }
+          ]
+        },
+        {
+          "alias": "p",
+          "identifying_label": "Package",
+          "implied_labels": [],
+          "properties": [
+            {
+              "name": "id",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "name",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "version",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            }
+          ]
+        }
+      ],
+      "edge_types": [
+        {
+          "alias": null,
+          "identifying_label": "PROBE",
+          "properties": [],
+          "source": {
+            "AliasRef": "q"
+          },
+          "target": {
+            "AliasRef": "f"
+          }
+        },
+        {
+          "alias": null,
+          "identifying_label": "NEEDS",
+          "properties": [],
+          "source": {
+            "AliasRef": "q"
+          },
+          "target": {
+            "AliasRef": "q"
+          }
+        },
+        {
+          "alias": null,
+          "identifying_label": "DISPUTES",
+          "properties": [],
+          "source": {
+            "AliasRef": "q"
+          },
+          "target": {
+            "AliasRef": "q"
+          }
+        },
+        {
+          "alias": null,
+          "identifying_label": "ANSWERS",
+          "properties": [],
+          "source": {
+            "AliasRef": "r"
+          },
+          "target": {
+            "AliasRef": "q"
+          }
+        },
+        {
+          "alias": null,
+          "identifying_label": "READ",
+          "properties": [
+            {
+              "name": "role",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            },
+            {
+              "name": "name",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            }
+          ],
+          "source": {
+            "AliasRef": "r"
+          },
+          "target": {
+            "AliasRef": "f"
+          }
+        },
+        {
+          "alias": null,
+          "identifying_label": "SAVED",
+          "properties": [
+            {
+              "name": "name",
+              "value_type": {
+                "Predefined": {
+                  "kind": "String",
+                  "not_null": true
+                }
+              },
+              "default_value": null,
+              "inline_constraint": null
+            }
+          ],
+          "source": {
+            "AliasRef": "r"
+          },
+          "target": {
+            "AliasRef": "f"
+          }
+        },
+        {
+          "alias": null,
+          "identifying_label": "USED",
+          "properties": [],
+          "source": {
+            "AliasRef": "r"
+          },
+          "target": {
+            "AliasRef": "p"
+          }
+        },
+        {
+          "alias": null,
+          "identifying_label": "OF",
+          "properties": [],
+          "source": {
+            "AliasRef": "a"
+          },
+          "target": {
+            "AliasRef": "r"
+          }
+        },
+        {
+          "alias": null,
+          "identifying_label": "LOG",
+          "properties": [],
+          "source": {
+            "AliasRef": "a"
+          },
+          "target": {
+            "AliasRef": "f"
+          }
+        }
+      ],
+      "constraints": [],
+      "drop_constraint_names": []
+    },
+    "derived_constraints": {
+      "constraint_122e2424": {
+        "name": "constraint_122e2424",
+        "label": "Package",
+        "properties": [
+          "version"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_1723d305": {
+        "name": "constraint_1723d305",
+        "label": "PROBE",
+        "properties": [],
+        "type": "sourceLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Question"
+      },
+      "constraint_17497d5c": {
+        "name": "constraint_17497d5c",
+        "label": "Answer",
+        "properties": [
+          "id"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_183efca2": {
+        "name": "constraint_183efca2",
+        "label": "Question",
+        "properties": [
+          "id"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_24519071": {
+        "name": "constraint_24519071",
+        "label": "OF",
+        "properties": [],
+        "type": "targetLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Run"
+      },
+      "constraint_258c9529": {
+        "name": "constraint_258c9529",
+        "label": "Package",
+        "properties": [
+          "id"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_2dfe895e": {
+        "name": "constraint_2dfe895e",
+        "label": "NEEDS",
+        "properties": [],
+        "type": "targetLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Question"
+      },
+      "constraint_2f97683d": {
+        "name": "constraint_2f97683d",
+        "label": "ANSWERS",
+        "properties": [],
+        "type": "sourceLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Run"
+      },
+      "constraint_3690a876": {
+        "name": "constraint_3690a876",
+        "label": "ANSWERS",
+        "properties": [],
+        "type": "targetLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Question"
+      },
+      "constraint_3bb897b1": {
+        "name": "constraint_3bb897b1",
+        "label": "Question",
+        "properties": [
+          "id"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_3c315714": {
+        "name": "constraint_3c315714",
+        "label": "Package",
+        "properties": [
+          "name"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_40f15396": {
+        "name": "constraint_40f15396",
+        "label": "File",
+        "properties": [
+          "id"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_4491f070": {
+        "name": "constraint_4491f070",
+        "label": "Answer",
+        "properties": [
+          "value"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_454bf7cb": {
+        "name": "constraint_454bf7cb",
+        "label": "SAVED",
+        "properties": [],
+        "type": "targetLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "File"
+      },
+      "constraint_47db899": {
+        "name": "constraint_47db899",
+        "label": "NEEDS",
+        "properties": [],
+        "type": "sourceLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Question"
+      },
+      "constraint_55635a9c": {
+        "name": "constraint_55635a9c",
+        "label": "Answer",
+        "properties": [
+          "value"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_5d7e41d7": {
+        "name": "constraint_5d7e41d7",
+        "label": "Question",
+        "properties": [
+          "timeout"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_623f2b51": {
+        "name": "constraint_623f2b51",
+        "label": "Run",
+        "properties": [
+          "id"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_66a09b1f": {
+        "name": "constraint_66a09b1f",
+        "label": "LOG",
+        "properties": [],
+        "type": "sourceLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Answer"
+      },
+      "constraint_6a519223": {
+        "name": "constraint_6a519223",
+        "label": "Package",
+        "properties": [
+          "id"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_6db4f23": {
+        "name": "constraint_6db4f23",
+        "label": "OF",
+        "properties": [],
+        "type": "sourceLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Answer"
+      },
+      "constraint_7ac34510": {
+        "name": "constraint_7ac34510",
+        "label": "Answer",
+        "properties": [
+          "id"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_7bce3bdb": {
+        "name": "constraint_7bce3bdb",
+        "label": "DISPUTES",
+        "properties": [],
+        "type": "targetLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Question"
+      },
+      "constraint_80c0cccc": {
+        "name": "constraint_80c0cccc",
+        "label": "Run",
+        "properties": [
+          "key"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_83ad8e14": {
+        "name": "constraint_83ad8e14",
+        "label": "Package",
+        "properties": [
+          "name"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_8b4019c5": {
+        "name": "constraint_8b4019c5",
+        "label": "Question",
+        "properties": [
+          "text"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_8bc3bcd6": {
+        "name": "constraint_8bc3bcd6",
+        "label": "READ",
+        "properties": [
+          "role"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": null
+      },
+      "constraint_8d7660ea": {
+        "name": "constraint_8d7660ea",
+        "label": "USED",
+        "properties": [],
+        "type": "sourceLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Run"
+      },
+      "constraint_8d9f9a37": {
+        "name": "constraint_8d9f9a37",
+        "label": "Answer",
+        "properties": [
+          "seq"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_8e90ec00": {
+        "name": "constraint_8e90ec00",
+        "label": "USED",
+        "properties": [],
+        "type": "targetLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Package"
+      },
+      "constraint_94758c17": {
+        "name": "constraint_94758c17",
+        "label": "Package",
+        "properties": [
+          "version"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_9638076c": {
+        "name": "constraint_9638076c",
+        "label": "Question",
+        "properties": [
+          "seq"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_9665d458": {
+        "name": "constraint_9665d458",
+        "label": "Question",
+        "properties": [
+          "inputs"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_98516c6d": {
+        "name": "constraint_98516c6d",
+        "label": "Question",
+        "properties": [
+          "rule"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_a5a13648": {
+        "name": "constraint_a5a13648",
+        "label": "SAVED",
+        "properties": [],
+        "type": "sourceLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Run"
+      },
+      "constraint_a6eea276": {
+        "name": "constraint_a6eea276",
+        "label": "Answer",
+        "properties": [
+          "seq"
+        ],
+        "type": "propertyType",
+        "property_type": "INTEGER",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_ab68adf4": {
+        "name": "constraint_ab68adf4",
+        "label": "Answer",
+        "properties": [
+          "reason"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_ad507fd4": {
+        "name": "constraint_ad507fd4",
+        "label": "READ",
+        "properties": [
+          "name"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": null
+      },
+      "constraint_aef95411": {
+        "name": "constraint_aef95411",
+        "label": "DISPUTES",
+        "properties": [],
+        "type": "sourceLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Question"
+      },
+      "constraint_b1fcf313": {
+        "name": "constraint_b1fcf313",
+        "label": "SAVED",
+        "properties": [
+          "name"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": null
+      },
+      "constraint_bb6326b2": {
+        "name": "constraint_bb6326b2",
+        "label": "Question",
+        "properties": [
+          "rule"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_c078ff8d": {
+        "name": "constraint_c078ff8d",
+        "label": "READ",
+        "properties": [
+          "role"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": null
+      },
+      "constraint_c13419b7": {
+        "name": "constraint_c13419b7",
+        "label": "File",
+        "properties": [
+          "id"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_c15fa705": {
+        "name": "constraint_c15fa705",
+        "label": "Question",
+        "properties": [
+          "text"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_c7656120": {
+        "name": "constraint_c7656120",
+        "label": "READ",
+        "properties": [],
+        "type": "sourceLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "Run"
+      },
+      "constraint_cdf4d94f": {
+        "name": "constraint_cdf4d94f",
+        "label": "Answer",
+        "properties": [
+          "results"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_d0914a06": {
+        "name": "constraint_d0914a06",
+        "label": "READ",
+        "properties": [
+          "name"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": null
+      },
+      "constraint_d17995d6": {
+        "name": "constraint_d17995d6",
+        "label": "Question",
+        "properties": [
+          "asker"
+        ],
+        "type": "propertyType",
+        "property_type": "STRING",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_d298b05b": {
+        "name": "constraint_d298b05b",
+        "label": "File",
+        "properties": [
+          "bytes"
+        ],
+        "type": "propertyType",
+        "property_type": "INTEGER",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_d933dd7f": {
+        "name": "constraint_d933dd7f",
+        "label": "Run",
+        "properties": [
+          "key"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_d9e18176": {
+        "name": "constraint_d9e18176",
+        "label": "Run",
+        "properties": [
+          "seq"
+        ],
+        "type": "propertyType",
+        "property_type": "INTEGER",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_da9bc856": {
+        "name": "constraint_da9bc856",
+        "label": "Answer",
+        "properties": [
+          "results"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_de9e4964": {
+        "name": "constraint_de9e4964",
+        "label": "Question",
+        "properties": [
+          "timeout"
+        ],
+        "type": "propertyType",
+        "property_type": "INTEGER",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_df03eab6": {
+        "name": "constraint_df03eab6",
+        "label": "File",
+        "properties": [
+          "bytes"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_df5ec60a": {
+        "name": "constraint_df5ec60a",
+        "label": "Run",
+        "properties": [
+          "seq"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_df88cce2": {
+        "name": "constraint_df88cce2",
+        "label": "SAVED",
+        "properties": [
+          "name"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": null
+      },
+      "constraint_dfe93632": {
+        "name": "constraint_dfe93632",
+        "label": "Run",
+        "properties": [
+          "id"
+        ],
+        "type": "exists",
+        "property_type": null,
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_e4f6a18d": {
+        "name": "constraint_e4f6a18d",
+        "label": "Question",
+        "properties": [
+          "seq"
+        ],
+        "type": "propertyType",
+        "property_type": "INTEGER",
+        "entity_type": "NODE",
+        "enforced_label": null
+      },
+      "constraint_eb2d1e0b": {
+        "name": "constraint_eb2d1e0b",
+        "label": "LOG",
+        "properties": [],
+        "type": "targetLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "File"
+      },
+      "constraint_f268b55b": {
+        "name": "constraint_f268b55b",
+        "label": "PROBE",
+        "properties": [],
+        "type": "targetLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "File"
+      },
+      "constraint_f34ad40c": {
+        "name": "constraint_f34ad40c",
+        "label": "READ",
+        "properties": [],
+        "type": "targetLabel",
+        "property_type": null,
+        "entity_type": "RELATIONSHIP",
+        "enforced_label": "File"
+      },
+      "constraint_f6670280": {
+        "name": "constraint_f6670280",
+        "label": "Question",
+        "properties": [
+          "inputs"
+        ],
+        "type": "propertyType",
+        "property_type": "LIST<STRING NOT NULL>",
+        "entity_type": "NODE",
+        "enforced_label": null
+      }
+    }
+  },
+  "query_engine": "in-memory",
+  "write_engine": "local"
+}

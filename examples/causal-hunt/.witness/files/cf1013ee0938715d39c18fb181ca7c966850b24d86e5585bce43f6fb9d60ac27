@@ -1,0 +1,12 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+import os,json
+d=json.load(open("q-ebcc3cc1a5a3/certificate.json"));assert os.path.getsize("q-ebcc3cc1a5a3/validation.png")>0
+h=d["heldout"];bounds={}
+for i in range(6):
+ k=f"x{i+1}"
+ if k not in h["do"]:bounds[k]=abs(h["predicted"][k]-h["measured"][i])+1.96*h["sample_mean_SE"][i]
+r={"max_measured_error":d["max_error"],"heldout_conservative_95pct_error_bounds":bounds,"limit":"Not every measured cell is within0.15; heldout x1 finite-sample uncertainty prevents an all-cell0.3 guarantee. Pooled measured p90 criterion remains passed."}
+json.dump(r,open(os.environ["WITNESS_OUT"]+"/scope_boundary.json","w"));print("WITNESS_RESULT",json.dumps(r));print("WITNESS_ANSWER","yes" if d["max_error"]<=.15 and max(bounds.values())<=.3 else "no")

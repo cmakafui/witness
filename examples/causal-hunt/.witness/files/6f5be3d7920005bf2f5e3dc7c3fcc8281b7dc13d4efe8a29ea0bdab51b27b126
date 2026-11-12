@@ -1,0 +1,12 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+"""The lab's own judge, from its vault, run on the swarm's certified model.py and the lab's experiment log."""
+import json, subprocess
+r = subprocess.run(["uv", "run", "--script", "judge/check.py", ".", "q-ebcc3cc1a5a3/model.py"], capture_output=True, text=True)
+report = [l for l in r.stdout.splitlines() if l.strip()]
+print("WITNESS_RESULT", json.dumps({"exit": r.returncode, "report": report}))
+if r.returncode not in (0, 1):
+    raise SystemExit("the judge could not decide: " + r.stderr[-500:])
+print("WITNESS_ANSWER", "yes" if r.returncode == 0 else "no")

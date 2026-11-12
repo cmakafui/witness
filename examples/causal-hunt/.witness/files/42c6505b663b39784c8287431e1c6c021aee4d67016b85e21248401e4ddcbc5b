@@ -1,0 +1,11 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+import os,json
+assert os.path.getsize("q-35acc82bfcb7/effects.png")>0
+r=json.load(open("q-35acc82bfcb7/regimes.json"));m=json.load(open("q-21c8ae2c8fd4/moments.json"))
+ok=abs(m["corr"][2][3])>.5 and "x3" not in r[1]["descendants"]
+json.dump({"do":{"x3":-3},"rows":500,"reason":"Reverse the x3-x4 association and test the candidate root and its two branches"},open(os.environ["WITNESS_OUT"]+"/design.json","w"))
+print("WITNESS_RESULT",json.dumps({"corr_x3_x4":m["corr"][2][3],"x4_descendants":r[1]["descendants"]}))
+print("WITNESS_ANSWER","yes" if ok else "no")

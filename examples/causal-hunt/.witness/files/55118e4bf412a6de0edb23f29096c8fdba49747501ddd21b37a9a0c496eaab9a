@@ -1,0 +1,19 @@
+# /// script
+# dependencies = ["numpy==2.3.4", "scipy==1.16.3", "scikit-learn==1.7.2", "pillow==12.0.0"]
+# ///
+import numpy as np,json,os
+from sklearn.preprocessing import PolynomialFeatures,StandardScaler
+from sklearn.linear_model import LinearRegression,Ridge
+from sklearn.ensemble import GradientBoostingRegressor
+from scipy.stats import normaltest,skew,kurtosis
+from PIL import Image
+im=Image.open('q-8e2b7a524327/linear_residuals.png'); assert im.size[0]>100
+x=np.genfromtxt('observational.csv',delimiter=',',names=True); names=list(x.dtype.names);X=np.column_stack([x[n] for n in names]);assert X.shape==(2000,6)
+rows=[]
+for j in range(6):
+ ids=[i for i in range(6) if i!=j]; a=X[:,ids];y=X[:,j];lin=LinearRegression().fit(a[:1500],y[:1500]);ml=float(np.mean((y[1500:]-lin.predict(a[1500:]))**2))
+ scaler=StandardScaler().fit(a[:1500]);z=PolynomialFeatures(2).fit_transform(scaler.transform(a));p=Ridge(alpha=.1).fit(z[:1500],y[:1500]);mp=float(np.mean((y[1500:]-p.predict(z[1500:]))**2))
+ b=GradientBoostingRegressor(n_estimators=150,max_depth=3,learning_rate=.04,random_state=8).fit(a[:1500],y[:1500]);mb=float(np.mean((y[1500:]-b.predict(a[1500:]))**2))
+ e=y[1500:]-lin.predict(a[1500:]); rows.append({'target':names[j],'linear_mse':ml,'quadratic_mse':mp,'boosted_mse':mb,'best_ratio':min(mp,mb)/ml,'normaltest_p':float(normaltest(e).pvalue),'skew':float(skew(e)),'excess_kurtosis':float(kurtosis(e))})
+json.dump(rows,open(os.path.join(os.environ['WITNESS_OUT'],'nonlinearity.json'),'w'),indent=2)
+print('WITNESS_RESULT',json.dumps(rows)); print('WITNESS_ANSWER','yes' if min(r['best_ratio'] for r in rows)<.9 else 'no')
