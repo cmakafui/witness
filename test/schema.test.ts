@@ -10,7 +10,7 @@ beforeEach(async () => {
   await applySchema(db);
 });
 
-const question = "CREATE (:Question {id: $id, text: 't', rule: 'r', inputs: ['data.csv'], seq: 1})";
+const question = "CREATE (:Question {id: $id, text: 't', rule: 'r', inputs: ['data.csv'], timeout: 600, seq: 1})";
 
 test("a well-formed question and run are accepted", () => {
   db.query(question, { id: "q-1" });
@@ -19,11 +19,11 @@ test("a well-formed question and run are accepted", () => {
 });
 
 test("a question without its text is rejected", () => {
-  expect(() => db.query("CREATE (:Question {id: 'q-1', rule: 'r', inputs: [], seq: 1})")).toThrow(/requires properties/);
+  expect(() => db.query("CREATE (:Question {id: 'q-1', rule: 'r', inputs: [], timeout: 600, seq: 1})")).toThrow(/requires properties/);
 });
 
 test("a property of the wrong type is rejected", () => {
-  expect(() => db.query("CREATE (:Question {id: 'q-1', text: 't', rule: 'r', inputs: [], seq: 'one'})")).toThrow(/property type/);
+  expect(() => db.query("CREATE (:Question {id: 'q-1', text: 't', rule: 'r', inputs: [], timeout: 600, seq: 'one'})")).toThrow(/property type/);
 });
 
 test("two questions with one id are rejected", () => {

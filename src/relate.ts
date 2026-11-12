@@ -20,6 +20,9 @@ const { symbols: c } = dlopen(libraryPath(), {
   relate_database_close: { args: [p], returns: i32 },
   relate_connect_namespace: { args: [p, p, p, p], returns: i32 },
   relate_disconnect: { args: [p], returns: i32 },
+  relate_conn_begin: { args: [p, p], returns: i32 },
+  relate_conn_commit: { args: [p, p, p], returns: i32 },
+  relate_conn_rollback: { args: [p, p], returns: i32 },
   relate_query_params: { args: [p, p, p, p, p], returns: i32 },
   relate_destroy_result: { args: [p], returns: none },
   relate_result_is_error: { args: [p], returns: u8 },
@@ -43,9 +46,11 @@ const { symbols: c } = dlopen(libraryPath(), {
   relate_params_free: { args: [p], returns: none },
   relate_params_put_string: { args: [p, p, p, i64, p], returns: i32 },
   relate_params_put_int: { args: [p, p, i64, p], returns: i32 },
+  relate_params_put_float: { args: [p, p, f64, p], returns: i32 },
   relate_params_put_bool: { args: [p, p, u8, p], returns: i32 },
   relate_params_put_null: { args: [p, p, p], returns: i32 },
   relate_params_put_list: { args: [p, p, p, p], returns: i32 },
+  relate_params_put_map: { args: [p, p, p, p], returns: i32 },
 });
 
 if (c.relate_abi_version() !== 2) throw new Error(`librelate_ffi ABI ${c.relate_abi_version()}, expected 2`);
@@ -54,17 +59,18 @@ const OK = 0;
 const V = { NULL: 0, BOOL: 1, INT: 2, FLOAT: 3, STRING: 4, NODE: 5, RELATIONSHIP: 6, PATH: 7, LIST: 8, MAP: 9 } as const;
 
 export class RelateError extends Error {
-  constructor(readonly detail: { code?: string; message?: string; kind?: string; [k: string]: unknown }) {
+  constructor(readonly detail: { code?: string; message?: string; [k: string]: unknown }) {
     super(detail.message ?? JSON.stringify(detail));
   }
 }
 
-const text = (s: string) => Buffer.from(`${s}\0`);
-const slot = () => new BigUint64Array(1);
 /** A pointer as bun:ffi returns it: a number, or a bigint for an address above 2^53. */
 type Ptr = Pointer | bigint;
 
+const text = (s: string) => Buffer.from(`${s}\0`);
+const slot = () => new BigUint64Array(1);
 const at = (s: BigUint64Array) => Number(s[0]) as Pointer;
+const str = (q: Ptr | null) => (q ? String(new CString(q as Pointer)) : null);
 
 /** Reads and frees a caller-owned error string, then throws it. */
 function fail(err: BigUint64Array, what: string): never {
@@ -75,10 +81,7 @@ function fail(err: BigUint64Array, what: string): never {
   throw new RelateError(JSON.parse(json));
 }
 
-const str = (q: Ptr | null) => (q ? String(new CString(q as Pointer)) : null);
-
-export type Value = null | boolean | number | bigint | string | Value[] | { [k: string]: Value } | Entity;
-export type Entity = { elementId: string; properties: { [k: string]: Value }; labels?: string[] };
+export type Value = null | boolean | number | bigint | string | Value[] | { [k: string]: Value };
 
 function decode(v: Ptr | null): Value {
   if (!v) return null;
@@ -105,76 +108,54 @@ function decode(v: Ptr | null): Value {
     case V.STRING:
       return str(c.relate_value_string(v, null));
     case V.LIST:
-    case V.PATH: {
-      const n = Number(c.relate_value_list_len(v));
-      return Array.from({ length: n }, (_, i) => decode(c.relate_value_list_get(v, i)));
-    }
+    case V.PATH:
+      return Array.from({ length: Number(c.relate_value_list_len(v)) }, (_, i) => decode(c.relate_value_list_get(v, i)));
     case V.MAP:
-      return entries(v);
-    case V.NODE: {
-      // A node's list view is its labels; its map view is its properties.
-      const n = Number(c.relate_value_list_len(v));
-      const labels = Array.from({ length: n }, (_, i) => decode(c.relate_value_list_get(v, i)) as string);
-      return { elementId: str(c.relate_value_element_id(v))!, labels, properties: entries(v) };
+    case V.NODE: // a node or relationship reads as its properties; queries return the fields they need
+    case V.RELATIONSHIP: {
+      const out: { [k: string]: Value } = {};
+      const n = Number(c.relate_value_map_len(v));
+      for (let i = 0; i < n; i++) {
+        const key = str(c.relate_value_map_key(v, i, null))!;
+        out[key] = decode(c.relate_value_map_get(v, ptr(text(key))));
+      }
+      return out;
     }
-    case V.RELATIONSHIP:
-      return { elementId: str(c.relate_value_element_id(v))!, properties: entries(v) };
     default:
-      throw new Error(`Relate value kind ${kind} is not handled yet`);
+      throw new Error(`Relate value kind ${kind} is not handled`);
   }
 }
 
-function entries(v: Ptr): { [k: string]: Value } {
-  const out: { [k: string]: Value } = {};
-  const n = Number(c.relate_value_map_len(v));
-  for (let i = 0; i < n; i++) {
-    const key = str(c.relate_value_map_key(v, i, null))!;
-    out[key] = decode(c.relate_value_map_get(v, ptr(text(key))));
-  }
-  return out;
-}
+export type Param = null | boolean | number | string | Param[] | { [k: string]: Param };
 
-export type Param = string | number | boolean | null | string[];
-
-function params(values: Record<string, Param>): Ptr {
-  const root = c.relate_params_new()!;
-  const err = slot();
-  for (const [name, v] of Object.entries(values)) {
-    const key = ptr(text(name));
-    let status: number;
-    if (v === null) status = c.relate_params_put_null(root, key, ptr(err));
-    else if (typeof v === "string") {
-      const bytes = Buffer.from(v);
-      status = c.relate_params_put_string(root, key, bytes.length ? ptr(bytes) : null, bytes.length, ptr(err));
-    } else if (typeof v === "boolean") status = c.relate_params_put_bool(root, key, v ? 1 : 0, ptr(err));
-    else if (typeof v === "number") {
-      if (!Number.isSafeInteger(v)) throw new Error(`parameter ${name}: only integers are handled yet`);
-      status = c.relate_params_put_int(root, key, v, ptr(err));
-    } else {
-      const child = slot();
-      status = c.relate_params_put_list(root, key, ptr(child), ptr(err));
-      if (status === OK)
-        for (const s of v) {
-          const bytes = Buffer.from(s);
-          // A list child takes its items with a null name.
-          status = c.relate_params_put_string(at(child), null, bytes.length ? ptr(bytes) : null, bytes.length, ptr(err));
-          if (status !== OK) break;
-        }
-    }
-    if (status !== OK) {
-      c.relate_params_free(root);
-      fail(err, `parameter ${name}`);
-    }
+/** Puts one value into a builder. A map takes a name; a list takes null and appends. */
+function put(builder: Ptr, name: string | null, v: Param, err: BigUint64Array): number {
+  const key = name === null ? null : ptr(text(name));
+  if (v === null || v === undefined) return c.relate_params_put_null(builder, key, ptr(err));
+  if (typeof v === "boolean") return c.relate_params_put_bool(builder, key, v ? 1 : 0, ptr(err));
+  if (typeof v === "number")
+    return Number.isSafeInteger(v) ? c.relate_params_put_int(builder, key, v, ptr(err)) : c.relate_params_put_float(builder, key, v, ptr(err));
+  if (typeof v === "string") {
+    const bytes = Buffer.from(v);
+    return c.relate_params_put_string(builder, key, bytes.length ? ptr(bytes) : null, bytes.length, ptr(err));
   }
-  return root;
+  const child = slot();
+  const list = Array.isArray(v);
+  const status = (list ? c.relate_params_put_list : c.relate_params_put_map)(builder, key, ptr(child), ptr(err));
+  if (status !== OK) return status;
+  for (const [k, item] of list ? v.map((x) => [null, x] as const) : Object.entries(v)) {
+    const s = put(at(child), k, item, err);
+    if (s !== OK) return s;
+  }
+  return OK;
 }
 
 export type Row = Record<string, Value>;
 
 export class Relate {
   private constructor(
-    private db: Pointer,
-    private conn: Pointer,
+    private db: Ptr,
+    private conn: Ptr,
   ) {}
 
   /** Opens a store: ":memory:", a directory, or a .rl file. Read-only opens never write. */
@@ -194,9 +175,17 @@ export class Relate {
 
   /** Runs one statement and returns its rows. A rejected statement throws RelateError. */
   query(cypher: string, values: Record<string, Param> = {}): Row[] {
-    const bound = Object.keys(values).length ? params(values) : null;
-    const out = slot();
     const err = slot();
+    let bound: Ptr | null = null;
+    if (Object.keys(values).length) {
+      bound = c.relate_params_new()!;
+      for (const [k, v] of Object.entries(values))
+        if (put(bound, k, v, err) !== OK) {
+          c.relate_params_free(bound);
+          fail(err, `parameter ${k}`);
+        }
+    }
+    const out = slot();
     try {
       if (c.relate_query_params(this.conn, ptr(text(cypher)), bound, ptr(out), ptr(err)) !== OK) fail(err, "query");
     } finally {
@@ -206,10 +195,27 @@ export class Relate {
     try {
       if (c.relate_result_is_error(r)) throw new RelateError(JSON.parse(str(c.relate_result_error_json(r))!));
       const cols = Array.from({ length: Number(c.relate_column_count(r)) }, (_, i) => str(c.relate_column_name(r, i))!);
-      const rows = Number(c.relate_row_count(r));
-      return Array.from({ length: rows }, (_, row) => Object.fromEntries(cols.map((name, col) => [name, decode(c.relate_value_at(r, row, col))])));
+      return Array.from({ length: Number(c.relate_row_count(r)) }, (_, row) =>
+        Object.fromEntries(cols.map((name, col) => [name, decode(c.relate_value_at(r, row, col))])),
+      );
     } finally {
       c.relate_destroy_result(r);
+    }
+  }
+
+  /** Runs fn in one transaction: all of its statements commit, or none do. */
+  transaction<T>(fn: () => T): T {
+    const err = slot();
+    if (c.relate_conn_begin(this.conn, ptr(err)) !== OK) fail(err, "begin");
+    try {
+      const result = fn();
+      const bookmark = slot();
+      if (c.relate_conn_commit(this.conn, ptr(bookmark), ptr(err)) !== OK) fail(err, "commit");
+      if (at(bookmark)) c.relate_free_string(at(bookmark));
+      return result;
+    } catch (e) {
+      c.relate_conn_rollback(this.conn, null);
+      throw e;
     }
   }
 

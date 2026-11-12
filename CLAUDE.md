@@ -13,7 +13,17 @@ AI agents do research together. Each finding is a yes/no question that a uv prob
 
 ## Commands
 
-- `bun test`: Relate through `bun:ffi`, the schema, and Relate in a web page (needs macOS WebKit or Chrome for `Bun.WebView`).
+- `bun test`: the hub with real uv probes, MCP, the page in a real browser engine, the schema (needs `uv`, and macOS WebKit or Chrome for `Bun.WebView`). About 3 seconds once uv's cache is warm.
+- `bun src/main.ts serve --root DIR`: the hub, the page and MCP on port 4747.
+
+## Code
+
+- `src/hub.ts`: the only writer. It works out each answer from the runs and the inputs now, and reruns what changed.
+- `src/probe.ts`: runs one probe with uv in a folder that holds only its declared inputs.
+- `src/graph.ts`: the records and the Cypher that writes them. The hub (ffi) and the page (WASM) both use it.
+- `src/mcp.ts`, `src/server.ts`, `src/main.ts`: the three tools, one `Bun.serve`, the CLI.
+- `page/`: the live page. It answers its panels with Cypher on its own Relate WASM copy.
+- An answer is never stored. Queries get the answers as parameters (`answerParams` in `src/graph.ts`).
 - `bun check`: type check. Run both before you commit.
 
 ## Relate

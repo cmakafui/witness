@@ -38,9 +38,10 @@ Witness never changes or deletes a record. The answer to a question is the answe
 
 ## How it uses Relate
 
-- Mode: directory (to confirm when the store runs)
-- Why this mode:
+- Mode: directory, in `.witness/graph/` of the workspace.
+- Why this mode: the hub writes the graph through `bun:ffi` while it runs. A directory store keeps every write on disk as it happens, and other processes can open it read-only beside the hub. Relate lets only one process write a store, so the hub is the only writer.
 - What the graph models: the questions, the runs that answered them, and the files and packages that each answer depends on.
+- The web page keeps its own copy of the graph in Relate's WASM build. The hub sends each new record, and the page writes it with the same Cypher as the hub (`src/graph.ts`). The panels and the query box run Cypher in the page.
 
 ## Parts
 
@@ -61,12 +62,38 @@ You need [Bun](https://bun.com) 1.4 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 bun install
-bun test     # Relate through bun:ffi, the schema, and Relate in a web page
+bun src/main.ts serve --root path/to/workspace     # the hub: the page at http://127.0.0.1:4747
+claude mcp add --transport http witness http://127.0.0.1:4747/mcp
+```
+
+Agents get three tools:
+
+| Tool | What it does |
+|---|---|
+| `ask` | Asks a yes/no question with a rule, a probe and its inputs. Witness runs the probe and returns the answer. |
+| `query` | Runs read-only Cypher on the graph. `$yes`, `$no`, `$failed`, `$running`, `$pending` and `$waiting` are lists of question ids. `$current` lists the runs that give the current answers. |
+| `look` | Shows a file that a run saved. Images come back as images. |
+
+A probe is a Python script that uv runs. It prints `WITNESS_RESULT {json}` for each measurement and `WITNESS_ANSWER yes` or `WITNESS_ANSWER no` exactly once:
+
+```python
+# /// script
+# dependencies = ["numpy"]
+# ///
+import json, numpy as np
+x = np.loadtxt("data.txt")
+assert x.size, "no data: the measurement did not happen"
+print("WITNESS_RESULT", json.dumps({"mean": float(x.mean())}))
+print("WITNESS_ANSWER", "yes" if x.mean() > 10 else "no")
+```
+
+The probe runs in a new folder that holds only the probe and its declared inputs. It saves files for other questions in `$WITNESS_OUT`. Another question reads such a file as the input `q-…/name`. A crash, a timeout, or a missing answer is "failed", never "no".
+
+```bash
+bun test     # the hub with real uv probes, MCP, the page in a real browser engine, the schema
 bun check    # type check
 ```
 
-The rest is to come.
-
 ## Where the data lives
 
-To come.
+`.witness/` in the workspace: `graph/` is the Relate store, and `files/` holds every probe, input, output, lock file and log by its SHA-256. The demo store for the judges comes with step 4.
