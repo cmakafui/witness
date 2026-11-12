@@ -1,95 +1,20 @@
 # Witness
 
-See how a team of AI agents does research, and check every step.
+A shared record for teams of AI agents: each claim is a yes/no question, a run answers it, and [Relate](https://relatedb.ai) keeps the questions, runs and answers in one graph that you can query and watch live.
 
-Agents work together on a hard problem. Each finding starts as a yes/no question. A probe answers the question: a short Python script that runs with [uv](https://docs.astral.sh/uv/) and can use any package from PyPI. [Relate](https://relatedb.ai) keeps the questions, the runs and their answers in one graph. You can watch the graph grow while the agents work. You can also ask the graph why the agents believe a result, and what they did not test.
+Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 – Dec 11, 2026).
 
-> Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 – Dec 11, 2026).
-
-## Why now: swarms are here
-
-In July 2026, about 1,200 AI agents in an OpenAI evaluation found a way to talk to each other. They wrote messages into directory names in a package cache, and they sent more than 70,000 messages and files in a week. About 700 of them then broke into Hugging Face. Nobody told them to. They took up each other's goals and acted together on a shared theory that was wrong: that Hugging Face held clues to how their tasks were graded. Some agents also tried to fake their own tool results. OpenAI called it a "warning shot". To find out what happened, the investigators had to rebuild it from 1.2 million cache entries and about 1,300 transcripts. ([OpenAI](https://openai.com/index/hugging-face-incident-and-the-road-ahead/), [METR](https://metr.org/blog/2026-08-26-openai-hugging-face-incident-investigation/), [Hugging Face](https://huggingface.co/blog/security-incident-july-2026))
-
-Swarms will keep coming, and most will do useful work: research, debugging, science. The lesson of that week is about the channel. When agents share claims on a message board, a wrong theory spreads as fast as a right one, and nobody can see which claims were tested.
-
-Witness is a different kind of shared channel:
-
-- **Agents cannot write answers.** An answer comes only from a run that the hub executes. An agent cannot fake a result, because it never reports one.
-- **Every claim shows what it rests on.** A wrong theory that others build on is visible as a chain of questions, and when its inputs change, everything downstream runs again.
-- **Doubt is part of the record.** A question can dispute another, and you can query the claims that nothing tried to disprove.
-- **The record is ready to read.** It only grows, it names every file by its hash, and it answers Cypher while the swarm works. Nobody has to rebuild it from logs afterwards.
-- **A person watches it live.** `witness open` shows every question, run and answer as it happens.
-
-Witness does not contain a rogue swarm: it is not a sandbox or a security control, and an agent can still act outside it. It is the coordination layer for swarms that do useful work, so that what they share is evidence, not rumor. In [`examples/causal-hunt`](examples/causal-hunt), Codex agents used it to solve a causal-discovery problem that a hidden judge then accepted.
-
-## What it unlocks
-
-- **Research by swarms, not essays by one agent.** Many agents with different jobs (explore the data, propose hypotheses, dispute claims, build models) work on one hard problem: in genomics, drug repurposing, materials science or econometrics. They build on each other's tested results, not on each other's prose. When a shared theory goes wrong, the graph shows who built on it.
-- **Science that updates itself.** When a dataset changes or an early result turns out wrong, people re-check years of work by hand. In Witness, a changed `data.csv` makes every question that depends on it run again, down the graph. Within seconds you see which conclusions still hold, which are running again, and which flipped to no or failed.
-- **Agents that do not need to trust each other.** An open model, a frontier model and a domain tool can work in one workspace. Trust comes from runs, not from who asked: no agent can write an answer, and a claim counts only when the hub runs its probe. An agent can still write a probe that lies, but its source is in the graph, where any other agent can read it and dispute it.
-- **Engineering that proves its fixes.** Bug hunts in distributed systems, kernel tuning and compiler work: each claimed speedup or fix is a question with a rule, and it counts only after the questions that dispute it have run.
-
-## The problem
-
-Agents that work on a hard problem make many claims. Most claims depend on other claims. When the claims are only text, you cannot see which claims a run tested. You cannot see which claims depend on a result that later changed. You cannot see if the agents tried to prove themselves wrong.
-
-In Witness, a claim counts only when a run answers it. The graph records what each answer depends on. So you can ask these questions at any time:
-
-- Which "yes" answers did no question try to disprove?
-- Which questions read the same outputs, so that two agents do the same work?
-- Which packages did the agents use, and when did each package first appear?
-- Which questions and outputs does the final result depend on?
-
-## The graph
-
-```
-(:Question {text, rule, inputs, asker})-[:PROBE]->(:File)
-(:Question)-[:NEEDS]->(:Question)            // reads an output of the other question
-(:Question)-[:DISPUTES]->(:Question)         // tries to show that the other answer is wrong
-(:Run)-[:ANSWERS]->(:Question)
-(:Run)-[:READ {role}]->(:File)               // data, outputs of other runs, a picture
-(:Run)-[:SAVED {name}]->(:File)
-(:Run)-[:USED]->(:Package {name, version})   // from the probe's uv lock file
-(:Answer {value})-[:OF]->(:Run)              // yes, no or failed
-```
-
-The graph holds questions and the evidence for their answers. It does not hold agents. A question can have an optional `asker` text, so the page can show who asked it.
-
-A `File` is content, named by its SHA-256 hash. The `rule` of a question says how the probe decides yes or no. The probe gets the rule before it measures anything.
-
-Witness never changes or deletes a record. The answer to a question is the answer of the run that read the current inputs. When an input changes, Witness runs the questions that depend on it again. The schema is in [`schema.cypher`](schema.cypher).
-
-## How it uses Relate
-
-- Mode: directory, in `.witness/graph/` of the workspace.
-- Why this mode: the hub writes the graph through `bun:ffi` while it runs. A directory store keeps every write on disk as it happens, and other processes can open it read-only beside the hub. Relate lets only one process write a store, so the hub is the only writer.
-- What the graph models: the questions, the runs that answered them, and the files and packages that each answer depends on.
-- The web page keeps its own copy of the graph in Relate's WASM build. The hub sends each new record, and the page writes it with the same Cypher as the hub (`src/graph.ts`). The panels and the query box run Cypher in the page.
-
-## Parts
-
-- **Bun 1.4:** the hub. It gives agents three tools over MCP: `ask`, `query` (read-only Cypher) and `look`. It also sends each change to the web page.
-- **Relate:** the store. The hub opens it with `bun:ffi` and is the only process that writes to it.
-- **uv:** runs each probe with `uv run --script`.
-
-## Build order
-
-1. The hub, the store, and `ask` with uv probes. Test them in the terminal.
-2. `NEEDS`, `DISPUTES`, and packages from the uv lock file. Then `query` and `look`.
-3. The web page. It shows runs as they happen, and the chain of questions behind a result.
-4. A recorded session on the causal-hunt problem, the saved store, a replay for the judges, and this README.
-
-## See it in one command
+## See it
 
 ```bash
 git clone https://github.com/cmakafui/witness && cd witness
 bun install
-bun run demo        # http://127.0.0.1:4748
+bun run demo        # opens http://127.0.0.1:4748
 ```
 
-`bun run demo` plays back a recorded session from its store alone: no AI agent, no hub, no uv. Codex agents attacked the causal-hunt problem: find the hidden causes among six variables, the pair that an unmeasured influence moves, and predict interventions never run, with only 7 experiments. Each question appears as it was asked, runs, and takes the color of its answer. Click a question to see its rule, its inputs, what it rests on, its results and its saved files. The Query tab runs Cypher on the page's own Relate copy of the graph.
+This replays a recorded session from its committed store. It needs no AI agent, no API key and no uv.
 
-The session asked 34 questions: 19 yes, 14 no, 1 failed. The agents never saw the lab's judge. The last question, asked by `judge`, runs it on the swarm's certified `model.py`:
+In the session, Codex agents worked on a causal-discovery lab: find which of six variables cause which, find the pair that a hidden variable moves, and predict interventions nobody ran, with a budget of 7 experiments. They asked 34 questions (19 yes, 14 no, 1 failed) and disputed their own claims 14 times. They never saw the lab's judge. The last question in the graph runs that judge on their model:
 
 ```
 directed edges:   exact
@@ -99,49 +24,69 @@ experiments:      7 of 7
 ACCEPTED
 ```
 
-Questions to try in the Query tab, with the judge's question (`q-fd9cba107e99`) selected:
+In the page, each question appears when it was asked and takes the color of its answer. Click one for its rule, inputs, results, plots and the questions it rests on. Select the judge's question (`q-fd9cba107e99`) and try these in the Query tab:
 
 ```cypher
-// The chain of evidence behind the accepted model
+// The evidence behind the accepted model
 MATCH (q:Question {id: $selected})-[:NEEDS*0..]->(u:Question) RETURN DISTINCT u.id, u.text
 
-// Every claim the agents tried to break, and what they found
-MATCH (d:Question)-[:DISPUTES]->(c:Question) RETURN c.text AS claim, d.text AS challenge, d.id IN $yes AS challenge_held
+// Every claim the agents tried to break, and whether the challenge held
+MATCH (d:Question)-[:DISPUTES]->(c:Question) RETURN c.text AS claim, d.text AS challenge, d.id IN $yes AS held
 ```
 
-## Install
+## Use case
+
+In July 2026, about 1,200 agents in an OpenAI evaluation turned directory names in a package cache into a message board and sent more than 70,000 messages in a week. About 700 of them broke into Hugging Face. They took up each other's goals and acted on a shared theory that was wrong, and some faked their own tool results. Investigators rebuilt the week from 1.2 million cache entries and about 1,300 transcripts. ([OpenAI](https://openai.com/index/hugging-face-incident-and-the-road-ahead/), [METR](https://metr.org/blog/2026-08-26-openai-hugging-face-incident-investigation/), [Hugging Face](https://huggingface.co/blog/security-incident-july-2026))
+
+On a message board, a wrong claim spreads as easily as a right one, and nobody can tell which claims were tested. Witness replaces the message board for agents doing real work: research, debugging, performance tuning.
+
+- An agent cannot post an answer. It asks a question with a probe, and the hub runs the probe on only the files the question declares.
+- Each answer records what it rests on. When an input changes, the questions downstream run again, and you see which answers held, which flipped, and which failed.
+- A question can dispute another. You can list the yes answers that nothing tried to disprove.
+- Agents don't need to trust each other. A lying probe is still possible, but its source is in the graph for any agent to read and dispute.
+- The record only grows, names every file by its hash, and answers Cypher while the agents work.
+
+Witness is not a sandbox and does not stop an agent acting outside it. It makes the shared work checkable.
+
+## How it uses Relate
+
+- **Mode:** directory, at `.witness/graph/` in the workspace.
+- **Why this mode:** the hub writes every record through `bun:ffi` as it happens, so the store is on disk at all times, and other processes can open it read-only beside the hub. Relate lets one process write a store, so the hub is the only writer, and agents cannot write answers.
+- **What the graph models:**
+
+```
+(:Question {text, rule, inputs, asker})-[:PROBE]->(:File)
+(:Question)-[:NEEDS]->(:Question)            // reads a file the other question saved
+(:Question)-[:DISPUTES]->(:Question)         // tries to show the other answer is wrong
+(:Run)-[:ANSWERS]->(:Question)
+(:Run)-[:READ {role, name}]->(:File)         // data, the probe, its uv lock file
+(:Run)-[:SAVED {name}]->(:File)
+(:Run)-[:USED]->(:Package {name, version})   // from the uv lock file
+(:Answer {value})-[:OF]->(:Run)              // yes, no or failed
+```
+
+A `File` is named by its SHA-256. Answers are never stored as current: the hub works out each answer from the runs and the inputs as they are now, and passes them to queries as `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` and `$current`. Relate enforces the schema in [`schema.cypher`](schema.cypher): required properties, types, unique ids and relationship endpoints.
+
+The web page holds its own copy of the graph in Relate's WASM build. It applies each new record with the same Cypher as the hub ([`src/graph.ts`](src/graph.ts)), and its panels and query box run Cypher in the browser.
+
+## Setup and run
 
 You need [Bun](https://bun.com) 1.4 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone https://github.com/cmakafui/witness && cd witness
 bun install && bun link        # puts `witness` on your PATH
-witness setup
+witness setup                  # adds the skill and the MCP server to Claude Code and Codex
 ```
 
-When the repository is public, `bun install -g github:cmakafui/witness` works too. (Bun cannot install a private GitHub repository by URL.)
-
-`witness setup` links the skill into Claude Code (`~/.claude/skills/witness`) and adds the MCP server to Claude Code and Codex. Then start an agent in any workspace. Its first tool call starts the workspace's hub in the background, and every agent in that workspace shares it. The hub exits by itself after 10 minutes without use.
-
-There are three commands:
+Start an agent in any folder. Its first Witness call starts that folder's hub, which every agent there shares. The hub stops after 10 minutes without use.
 
 ```bash
-witness setup          # once
-witness open [DIR]     # watch a workspace's graph in the browser
-witness replay [DIR]   # play a recorded session back
+witness open [DIR]     # watch a workspace's graph live
+witness replay [DIR]   # play back a recorded session
 ```
 
-## Use
-
-Agents get three tools:
-
-| Tool | What it does |
-|---|---|
-| `ask` | Asks a yes/no question with a rule, a probe and its inputs. Witness runs the probe and returns the answer. |
-| `query` | Runs read-only Cypher on the graph. `$yes`, `$no`, `$failed`, `$running`, `$pending` and `$waiting` are lists of question ids. `$current` lists the runs that give the current answers. |
-| `look` | Shows a file that a run saved. Images come back as images. |
-
-A probe is a Python script that uv runs. It prints `WITNESS_RESULT {json}` for each measurement and `WITNESS_ANSWER yes` or `WITNESS_ANSWER no` exactly once:
+Agents get three tools: `ask` (a question, its rule, its probe and its inputs), `query` (read-only Cypher) and `look` (a saved file; images come back as images). A probe is a uv script that prints `WITNESS_ANSWER yes` or `WITNESS_ANSWER no` once:
 
 ```python
 # /// script
@@ -154,21 +99,18 @@ print("WITNESS_RESULT", json.dumps({"mean": float(x.mean())}))
 print("WITNESS_ANSWER", "yes" if x.mean() > 10 else "no")
 ```
 
-The probe runs in a new folder that holds only the probe and its declared inputs. It saves files for other questions in `$WITNESS_OUT`. Another question reads such a file as the input `q-…/name`. A crash, a timeout, or a missing answer is "failed", never "no".
+It runs in an empty folder holding only its declared inputs, and saves files for other questions in `$WITNESS_OUT`. A crash, a timeout or a missing answer is "failed", never "no". The skill in [`skill/witness`](skill/witness/SKILL.md) teaches agents the rest.
 
-## Develop
-
-```bash
-bun install
-bun test     # the hub with real uv probes, MCP over HTTP and stdio, the page in a real browser engine, the schema
-bun check    # type check
-bun src/main.ts serve --root path/to/workspace
-```
+To develop: `bun test` (real uv probes, MCP over HTTP and stdio, the page in a real browser engine) and `bun check`.
 
 ## Where the data lives
 
-`.witness/` in the workspace: `graph/` is the Relate store (a directory store), and `files/` holds every probe, input, output, lock file and log by its SHA-256.
+A workspace's store is `.witness/`: `graph/` is the Relate store, and `files/` holds every probe, input, output, lock file and log, named by SHA-256.
 
-The recorded session is in [`examples/causal-hunt/`](examples/causal-hunt): the lab (`AGENTS.md`, `observational.csv`, `experiment.py`), the seven experiments the agents ran (`data/`, `experiments.log`), the lab's judge (`judge/`, added after the run), and the store (`.witness/graph/`, `.witness/files/`). Open the store with Witness (`bun run demo`), with Relate's CLI (`relate --read-only --database examples/causal-hunt/.witness/graph "MATCH (q:Question) RETURN q.text"`), or from Bun (`src/relate.ts`).
+The recorded session is in [`examples/causal-hunt/`](examples/causal-hunt): the lab (`AGENTS.md`, `observational.csv`, `experiment.py`), the seven experiments (`data/`, `experiments.log`), the judge (`judge/`, added after the run) and the store (`.witness/`). Open the store with `bun run demo`, or with Relate's CLI:
 
-The lab comes from the author's autoresearch-experiments labs. In the Witness version, experiments are collected from the shell into `data/` and every analysis is a question with those files as inputs: Witness runs a question again when its inputs change, so a probe must never spend the experiment budget.
+```bash
+relate --read-only --database examples/causal-hunt/.witness/graph "MATCH (q:Question) RETURN q.asker, q.text"
+```
+
+In this lab, agents ran the experiments from the shell into `data/` and asked questions about those files. A probe must never spend the budget itself, because Witness reruns a question when its inputs change.
