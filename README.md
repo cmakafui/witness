@@ -6,7 +6,10 @@ Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 â€
 
 ## See it
 
+The demo needs only [Bun](https://bun.com) 1.4 or later:
+
 ```bash
+curl -fsSL https://bun.com/install | bash      # Bun, if you don't have it
 git clone https://github.com/cmakafui/witness && cd witness
 bun install
 bun run demo        # opens http://127.0.0.1:4748
@@ -71,9 +74,11 @@ The web page holds its own copy of the graph in Relate's WASM build. It applies 
 
 ## Setup and run
 
-You need [Bun](https://bun.com) 1.4 and [uv](https://docs.astral.sh/uv/).
+To run agents, you need [Bun](https://bun.com) 1.4 or later and [uv](https://docs.astral.sh/uv/), which runs the probes:
 
 ```bash
+curl -fsSL https://bun.com/install | bash      # Bun
+curl -LsSf https://astral.sh/uv/install.sh | sh  # uv
 git clone https://github.com/cmakafui/witness && cd witness
 bun install && bun link        # puts `witness` on your PATH
 witness setup                  # adds the skill and the MCP server to Claude Code and Codex
