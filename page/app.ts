@@ -19,11 +19,13 @@ type Row = Record<string, unknown>;
 await init({ module_or_path: wasmUrl });
 const db = new RelateDb();
 
-function cypher(query: string, params: Record<string, unknown> = {}): Row[] {
+/** Runs Cypher on the page's copy. The columns come in the order the query returns them. */
+function result(query: string, params: Record<string, unknown> = {}): { columns: string[]; rows: Row[] } {
   const r = JSON.parse(db.execute(query, JSON.stringify(params)));
   if (r.error) throw new Error(r.error.message ?? JSON.stringify(r.error));
-  return r.rows;
+  return { columns: r.columns, rows: r.rows };
 }
+const cypher = (query: string, params: Record<string, unknown> = {}) => result(query, params).rows;
 
 // ---------------------------------------------------------------------------------------------------------------
 // State
@@ -201,28 +203,36 @@ function counts() {
 
 function showQuestion(qid: string) {
   const box = document.getElementById("question")!;
-  const [q] = cypher("MATCH (q:Question {id: $id}) RETURN q.text AS text, q.rule AS rule, q.inputs AS inputs, q.asker AS asker", { id: qid });
+  const used: [string, string][] = [];
+  const run = (label: string, query: string, params: Record<string, unknown>) => {
+    const text = query.replace(/\n\s+/g, "\n");
+    used.push([label, text]);
+    return cypher(text, params);
+  };
+  const [q] = run("The question", "MATCH (q:Question {id: $selected}) RETURN q.text AS text, q.rule AS rule, q.inputs AS inputs, q.asker AS asker", { selected: qid });
   if (!q) return;
   const s = statuses.get(qid);
-  const [l] = cypher(
-    `MATCH (q:Question {id: $id})
+  const [l] = run(
+    "What it rests on, and what disputes it",
+    `MATCH (q:Question {id: $selected})
      OPTIONAL MATCH (q)-[:NEEDS]->(n:Question) WITH q, collect(DISTINCT n.id) AS needs
      OPTIONAL MATCH (m:Question)-[:NEEDS]->(q) WITH q, needs, collect(DISTINCT m.id) AS neededBy
      OPTIONAL MATCH (q)-[:DISPUTES]->(d:Question) WITH q, needs, neededBy, collect(DISTINCT d.id) AS disputes
      OPTIONAL MATCH (e:Question)-[:DISPUTES]->(q)
      RETURN needs, neededBy, disputes, collect(DISTINCT e.id) AS disputedBy`,
-    { id: qid },
+    { selected: qid },
   );
-  const runs = cypher(
-    `MATCH (r:Run)-[:ANSWERS]->(:Question {id: $id}) OPTIONAL MATCH (a:Answer)-[:OF]->(r)
+  const runs = run(
+    "Its runs and their answers",
+    `MATCH (r:Run)-[:ANSWERS]->(:Question {id: $selected}) OPTIONAL MATCH (a:Answer)-[:OF]->(r)
      RETURN r.id AS run, r.seq AS seq, a.value AS value, a.reason AS reason, a.results AS results ORDER BY r.seq DESC`,
-    { id: qid },
+    { selected: qid },
   );
   const current = s?.run ?? null;
   const shown = runs.find((r) => r.run === current) ?? runs[0];
   const results = shown ? (shown.value ? JSON.parse(String(shown.results)) : (live.get(String(shown.run)) ?? [])) : [];
-  const saved = shown ? cypher("MATCH (:Run {id: $run})-[s:SAVED]->(f:File) RETURN s.name AS name, f.id AS file ORDER BY name", { run: shown.run }) : [];
-  const packages = shown ? cypher("MATCH (:Run {id: $run})-[:USED]->(p:Package) RETURN p.id AS id ORDER BY id", { run: shown.run }) : [];
+  const saved = shown ? run("What the run saved", "MATCH (:Run {id: $run})-[s:SAVED]->(f:File) RETURN s.name AS name, f.id AS file ORDER BY name", { run: shown.run }) : [];
+  const packages = shown ? run("The packages the run used", "MATCH (:Run {id: $run})-[:USED]->(p:Package) RETURN p.id AS id ORDER BY id", { run: shown.run }) : [];
   const list = (title: string, ids: unknown) =>
     Array.isArray(ids) && ids.length ? [h("h3", {}, title), h("ul", {}, ...ids.map((x) => h("li", {}, ref(String(x)))))] : [];
 
@@ -257,8 +267,27 @@ function showQuestion(qid: string) {
         ),
       ),
     ),
+    cypherPanel(used),
   ];
   box.replaceChildren(...parts.filter((x) => x !== null));
+}
+
+/** The Cypher behind the panel, each query ready to run in the Query tab. */
+let showCypher = false;
+function cypherPanel(used: [string, string][]) {
+  const box = h("details", { class: "cypher" }, h("summary", {}, "Cypher behind this panel"));
+  (box as HTMLDetailsElement).open = showCypher;
+  box.addEventListener("toggle", () => (showCypher = (box as HTMLDetailsElement).open));
+  for (const [label, query] of used) {
+    const open = h("button", { class: "link" }, "Run in Query tab");
+    open.onclick = () => {
+      text.value = query;
+      tab("query");
+      runQuery();
+    };
+    box.append(h("h3", {}, label), h("pre", {}, query), open);
+  }
+  return box;
 }
 
 function select(qid: string) {
@@ -271,26 +300,43 @@ function select(qid: string) {
 // Queries
 
 const PRESETS: [string, string][] = [
-  ["Yes answers that nothing disputes", "MATCH (q:Question)\nWHERE q.id IN $yes AND NOT EXISTS { (:Question)-[:DISPUTES]->(q) }\nRETURN q.id AS id, q.text AS text ORDER BY q.seq"],
-  ["Questions that build on the same output", "MATCH (a:Question)-[:NEEDS]->(u:Question)<-[:NEEDS]-(b:Question)\nWHERE a.seq < b.seq\nRETURN u.id AS output_of, a.id AS a, b.id AS b"],
-  ["Packages, by first use", "MATCH (r:Run)-[:USED]->(p:Package)\nWITH p, min(r.seq) AS first, count(DISTINCT r) AS runs\nRETURN p.name AS package, p.version AS version, first, runs ORDER BY first"],
-  ["What the selected question rests on", "MATCH (q:Question {id: $selected})-[:NEEDS*0..]->(u:Question)\nRETURN DISTINCT u.id AS id, u.text AS text, u.seq AS seq ORDER BY seq"],
-  ["Failed runs, and why", "MATCH (a:Answer {value: 'failed'})-[:OF]->(r:Run)-[:ANSWERS]->(q:Question)\nRETURN q.id AS id, a.reason AS reason, r.seq AS seq ORDER BY seq DESC"],
+  ["What does the selected question rest on?", "MATCH (q:Question {id: $selected})-[:NEEDS*0..]->(u:Question)\nRETURN DISTINCT u.id AS id, u.text AS text, u.seq AS seq ORDER BY seq"],
+  ["Which yes answers did nothing dispute?", "MATCH (q:Question)\nWHERE q.id IN $yes AND NOT EXISTS { (:Question)-[:DISPUTES]->(q) }\nRETURN q.id AS id, q.text AS text ORDER BY q.seq"],
+  ["Which claims were disputed, and did the challenge hold?", "MATCH (d:Question)-[:DISPUTES]->(c:Question)\nRETURN c.id AS claim, d.id AS challenge, d.id IN $yes AS held, d.text AS text ORDER BY d.seq"],
+  ["Which questions read each input file?", "MATCH (q:Question)<-[:ANSWERS]-(r:Run)-[x:READ {role: 'input'}]->(:File)\nWHERE r.id IN $current AND NOT x.name STARTS WITH 'q-'\nRETURN x.name AS input, count(DISTINCT q) AS read_by, collect(DISTINCT q.id) AS questions ORDER BY input"],
+  ["Which questions build on the same output?", "MATCH (a:Question)-[:NEEDS]->(u:Question)<-[:NEEDS]-(b:Question)\nWHERE a.seq < b.seq\nRETURN u.id AS output_of, a.id AS a, b.id AS b"],
+  ["Which runs failed, and why?", "MATCH (a:Answer {value: 'failed'})-[:OF]->(r:Run)-[:ANSWERS]->(q:Question)\nRETURN q.id AS id, a.reason AS reason, r.seq AS seq ORDER BY seq DESC"],
+  ["Which packages answered the most questions?", "MATCH (q:Question)<-[:ANSWERS]-(r:Run)-[:USED]->(p:Package)\nRETURN p.name AS package, count(DISTINCT q) AS questions, collect(DISTINCT p.version) AS versions\nORDER BY questions DESC, package"],
+  ["Who asked what?", "MATCH (q:Question)\nRETURN q.asker AS asker, count(*) AS questions,\n  sum(CASE WHEN q.id IN $yes THEN 1 ELSE 0 END) AS yes,\n  sum(CASE WHEN q.id IN $no THEN 1 ELSE 0 END) AS no\nORDER BY questions DESC"],
 ];
 
 const preset = document.getElementById("preset") as HTMLSelectElement;
 const text = document.getElementById("cypher") as HTMLTextAreaElement;
 preset.replaceChildren(...PRESETS.map(([name], i) => h("option", { value: String(i) }, name)));
-preset.onchange = () => (text.value = PRESETS[Number(preset.value)]![1]);
+preset.onchange = () => {
+  text.value = PRESETS[Number(preset.value)]![1];
+  runQuery();
+};
 text.value = PRESETS[0]![1];
 
-document.getElementById("run")!.onclick = () => {
+/** Question ids in a value: the value itself, or the items of a list. */
+const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.flatMap(idsIn) : typeof v === "string" && nodes.has(v) ? [v] : []);
+
+function runQuery() {
   const out = document.getElementById("rows")!;
+  if (text.value.includes("$selected") && !selected) {
+    out.replaceChildren(h("p", { class: "hint" }, "Click a question in the graph first: this query uses $selected."));
+    return;
+  }
   try {
-    const rows = cypher(text.value, { ...answerParams([...statuses.values()]), selected });
-    marked = new Set(rows.flatMap((r) => Object.values(r).filter((v): v is string => typeof v === "string" && nodes.has(v))));
-    const cols = rows[0] ? Object.keys(rows[0]) : [];
-    const cell = (v: unknown) => (typeof v === "string" && nodes.has(v) ? ref(v) : typeof v === "string" ? v : JSON.stringify(v));
+    const { columns: cols, rows } = result(text.value, { ...answerParams([...statuses.values()]), selected, run: (selected && statuses.get(selected)?.run) ?? null });
+    marked = new Set(rows.flatMap((r) => Object.values(r).flatMap(idsIn)));
+    const cell = (v: unknown): Node | string => {
+      const ids = idsIn(v);
+      if (ids.length && (typeof v === "string" || (Array.isArray(v) && ids.length === v.length)))
+        return h("span", { class: "ids" }, ...ids.flatMap((x, i) => (i ? [" ", ref(x)] : [ref(x)])));
+      return typeof v === "string" ? v : JSON.stringify(v);
+    };
     out.replaceChildren(
       rows.length
         ? h("table", {}, h("tr", {}, ...cols.map((c) => h("th", {}, c))), ...rows.map((r) => h("tr", {}, ...cols.map((c) => h("td", {}, cell(r[c]))))))
@@ -300,7 +346,8 @@ document.getElementById("run")!.onclick = () => {
     marked = new Set();
     out.replaceChildren(h("p", { class: "error" }, (e as Error).message));
   }
-};
+}
+document.getElementById("run")!.onclick = runQuery;
 
 function tab(name: string) {
   for (const b of document.querySelectorAll<HTMLButtonElement>("nav button")) b.classList.toggle("on", b.dataset.tab === name);
