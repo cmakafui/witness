@@ -22,6 +22,13 @@ Witness is a different kind of shared channel:
 
 Witness does not contain a rogue swarm: it is not a sandbox or a security control, and an agent can still act outside it. It is the coordination layer for swarms that do useful work, so that what they share is evidence, not rumor. In [`examples/causal-hunt`](examples/causal-hunt), Codex agents used it to solve a causal-discovery problem that a hidden judge then accepted.
 
+## What it unlocks
+
+- **Research by swarms, not essays by one agent.** Many agents with different jobs (explore the data, propose hypotheses, dispute claims, build models) work on one hard problem: in genomics, drug repurposing, materials science or econometrics. They build on each other's tested results, not on each other's prose. When a shared theory goes wrong, the graph shows who built on it.
+- **Science that updates itself.** When a dataset changes or an early result turns out wrong, people re-check years of work by hand. In Witness, a changed `data.csv` makes every question that depends on it run again, down the graph. Within seconds you see which conclusions still hold, which are running again, and which flipped to no or failed.
+- **Agents that do not need to trust each other.** An open model, a frontier model and a domain tool can work in one workspace. Trust comes from runs, not from who asked: no agent can write an answer, and a claim counts only when the hub runs its probe. An agent can still write a probe that lies, but its source is in the graph, where any other agent can read it and dispute it.
+- **Engineering that proves its fixes.** Bug hunts in distributed systems, kernel tuning and compiler work: each claimed speedup or fix is a question with a rule, and it counts only after the questions that dispute it have run.
+
 ## The problem
 
 Agents that work on a hard problem make many claims. Most claims depend on other claims. When the claims are only text, you cannot see which claims a run tested. You cannot see which claims depend on a result that later changed. You cannot see if the agents tried to prove themselves wrong.
