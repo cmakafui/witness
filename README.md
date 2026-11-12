@@ -61,9 +61,12 @@ Witness never changes or deletes a record. The answer to a question is the answe
 You need [Bun](https://bun.com) 1.4 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-bun install -g github:cmakafui/witness
+git clone https://github.com/cmakafui/witness && cd witness
+bun install && bun link        # puts `witness` on your PATH
 witness setup
 ```
+
+When the repository is public, `bun install -g github:cmakafui/witness` works too. (Bun cannot install a private GitHub repository by URL.)
 
 `witness setup` links the skill into Claude Code (`~/.claude/skills/witness`) and adds the MCP server to Claude Code and Codex. Then start an agent in any workspace. Its first tool call starts the workspace's hub in the background, and every agent in that workspace shares it.
 
