@@ -1,13 +1,15 @@
 # Witness
 
-Agents prove things to each other: yes/no questions answered by uv probes, held in a Relate graph, watched live. The README has the pitch, the model and the build order.
+AI agents do research together. Each finding is a yes/no question that a uv probe answers. A Relate graph keeps the questions, the runs and the answers. You can watch the graph and query it. The README has the goal, the graph and the build order.
 
 ## Rules
 
-- Nothing writes an answer. A verdict comes only from a run.
-- Nothing is ever updated or deleted: the hub only creates. A question's answer is derived from its runs and the inputs as they are now.
-- The hub is Relate's only writer. Probes never touch the store.
-- Keep it small. It's a hackathon: build the next step of the build order, nothing beside it.
+- Nothing writes an answer. An answer comes only from a run.
+- The graph holds questions and their evidence. It does not hold agents.
+- The hub never changes or deletes a record. It only creates records. The answer to a question comes from its runs and from the inputs as they are now.
+- The hub is the only process that writes to Relate. Probes never touch the store.
+- Keep it small. Build the next step of the build order and nothing more.
+- Write plain English: short sentences, active voice, no jargon.
 
 # Bun
 
