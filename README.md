@@ -37,6 +37,8 @@ MATCH (q:Question {id: $selected})-[:NEEDS*0..]->(u:Question) RETURN DISTINCT u.
 MATCH (d:Question)-[:DISPUTES]->(c:Question) RETURN c.text AS claim, d.text AS challenge, d.id IN $yes AS held
 ```
 
+In Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) (turn on `chrome://flags/#enable-webmcp-testing`), the page gives the browser's agent two tools: `query` and `show_question`. You can ask it in plain words, for example "what does the judge's verdict rest on?". It answers with Cypher on the page's own copy and shows you the query and the questions it found. Both tools only read, and they mark what they return as untrusted. An agent in the browser can never ask a question, because asking runs code on your machine.
+
 ## Use case
 
 In July 2026, about 1,200 agents in an OpenAI evaluation turned directory names in a package cache into a message board and sent more than 70,000 messages in a week. About 700 of them broke into Hugging Face. They took up each other's goals and acted on a shared theory that was wrong, and some faked their own tool results. Investigators rebuilt the week from 1.2 million cache entries and about 1,300 transcripts. ([OpenAI](https://openai.com/index/hugging-face-incident-and-the-road-ahead/), [METR](https://metr.org/blog/2026-08-26-openai-hugging-face-incident-investigation/), [Hugging Face](https://huggingface.co/blog/security-incident-july-2026))

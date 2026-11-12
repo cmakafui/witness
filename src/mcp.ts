@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
+import { SCHEMA } from "./graph.ts";
 import { type Hub, Refusal } from "./hub.ts";
 import type { Param } from "./relate.ts";
 import { VERSION } from "./version.ts";
@@ -18,17 +19,6 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 - Write the rule before anything runs. Check that the measurement happened before you answer: crash if it did not.
 - To test a claim, ask a question that tries to show it is wrong, and give the claim's id in disputes.
 - query: read the graph with Cypher. look: see a file that a run saved.`;
-
-const SCHEMA = `The graph:
-(:Question {id, text, rule, inputs, asker, seq})-[:PROBE]->(:File {id, bytes})
-(:Question)-[:NEEDS]->(:Question)      reads a file the other question saved
-(:Question)-[:DISPUTES]->(:Question)   tries to show the other answer is wrong
-(:Run {id, key, seq})-[:ANSWERS]->(:Question)
-(:Run)-[:READ {role, name}]->(:File)   role: probe, input or lock
-(:Run)-[:SAVED {name}]->(:File)
-(:Run)-[:USED]->(:Package {id, name, version})
-(:Answer {id, value, reason, results, seq})-[:OF]->(:Run)   value: yes, no or failed
-Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. An Answer node is the answer of one run, not always the current answer.`;
 
 const text = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
 

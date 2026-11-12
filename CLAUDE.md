@@ -29,6 +29,8 @@ AI agents do research together. Each finding is a yes/no question that a uv prob
 - `src/replay.ts`: `witness replay` plays a store back to the page, read-only. `bun run demo` replays `examples/causal-hunt`.
 - `examples/causal-hunt/` is a recorded session for the hackathon judges. Never write to its store: a new session goes in a new folder.
 - `page/`: the live page. It answers its panels with Cypher on its own Relate WASM copy.
+- `page/tools.ts`: the page's WebMCP tools for a browser agent, `query` and `show_question`. They only read: a query whose plan has any operator outside `READS` is refused. `ask` never goes in the page.
+- `SCHEMA` in `src/graph.ts` describes the graph to agents. The MCP `query` tool and the page's `query` tool both use it.
 - An answer is never stored. Queries get the answers as parameters (`answerParams` in `src/graph.ts`).
 - `bun check`: type check. Run both before you commit.
 

@@ -5,6 +5,7 @@ import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
 import ForceGraph from "force-graph";
 import { answerParams, type GNode, type GRel, type State, type Status, statements } from "../src/graph.ts";
+import { register, webTools } from "./tools.ts";
 
 type Msg =
   | { type: "replay"; step: number; of: number }
@@ -19,11 +20,18 @@ type Row = Record<string, unknown>;
 await init({ module_or_path: wasmUrl });
 const db = new RelateDb();
 
+/** Runs one statement on the page's copy and returns Relate's envelope. An engine error throws. */
+function execute(query: string, params: Record<string, unknown> = {}) {
+  const r = JSON.parse(db.execute(query, JSON.stringify(params)));
+  if (r.error) throw new Error(typeof r.error === "string" ? r.error : (r.error.message ?? JSON.stringify(r.error)));
+  return r as { columns: string[]; rows: Row[]; plan: Plan | null };
+}
+type Plan = { root: { operator: string; children: Plan["root"][] } };
+
 /** Runs Cypher on the page's copy. The columns come in the order the query returns them. */
 function result(query: string, params: Record<string, unknown> = {}): { columns: string[]; rows: Row[] } {
-  const r = JSON.parse(db.execute(query, JSON.stringify(params)));
-  if (r.error) throw new Error(r.error.message ?? JSON.stringify(r.error));
-  return { columns: r.columns, rows: r.rows };
+  const { columns, rows } = execute(query, params);
+  return { columns, rows };
 }
 const cypher = (query: string, params: Record<string, unknown> = {}) => result(query, params).rows;
 
@@ -184,8 +192,7 @@ function ref(q: string) {
   return a;
 }
 
-function fileLink(name: string, file: string) {
-  const url = `/files/${file}?name=${encodeURIComponent(name)}`;
+function fileLink(name: string, url: string) {
   if (/\.(png|jpe?g|gif|svg|webp)$/i.test(name)) return h("div", {}, h("a", { href: url, target: "_blank" }, name), h("img", { class: "out", src: url, alt: name }));
   return h("a", { href: url, target: "_blank" }, name);
 }
@@ -201,8 +208,8 @@ function counts() {
   );
 }
 
-function showQuestion(qid: string) {
-  const box = document.getElementById("question")!;
+/** What the panel shows about a question, and the Cypher behind it. A browser agent gets the same (page/tools.ts). */
+function details(qid: string) {
   const used: [string, string][] = [];
   const run = (label: string, query: string, params: Record<string, unknown>) => {
     const text = query.replace(/\n\s+/g, "\n");
@@ -210,7 +217,7 @@ function showQuestion(qid: string) {
     return cypher(text, params);
   };
   const [q] = run("The question", "MATCH (q:Question {id: $selected}) RETURN q.text AS text, q.rule AS rule, q.inputs AS inputs, q.asker AS asker", { selected: qid });
-  if (!q) return;
+  if (!q) return null;
   const s = statuses.get(qid);
   const [l] = run(
     "What it rests on, and what disputes it",
@@ -230,46 +237,69 @@ function showQuestion(qid: string) {
   );
   const current = s?.run ?? null;
   const shown = runs.find((r) => r.run === current) ?? runs[0];
-  const results = shown ? (shown.value ? JSON.parse(String(shown.results)) : (live.get(String(shown.run)) ?? [])) : [];
+  const results: unknown[] = shown ? (shown.value ? JSON.parse(String(shown.results)) : (live.get(String(shown.run)) ?? [])) : [];
   const saved = shown ? run("What the run saved", "MATCH (:Run {id: $run})-[s:SAVED]->(f:File) RETURN s.name AS name, f.id AS file ORDER BY name", { run: shown.run }) : [];
   const packages = shown ? run("The packages the run used", "MATCH (:Run {id: $run})-[:USED]->(p:Package) RETURN p.id AS id ORDER BY id", { run: shown.run }) : [];
-  const list = (title: string, ids: unknown) =>
-    Array.isArray(ids) && ids.length ? [h("h3", {}, title), h("ul", {}, ...ids.map((x) => h("li", {}, ref(String(x)))))] : [];
+  const ids = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
+  return {
+    id: qid,
+    text: String(q.text),
+    rule: String(q.rule),
+    inputs: ids(q.inputs),
+    asker: (q.asker as string | null) ?? null,
+    status: s,
+    restsOn: ids(l?.needs),
+    usedBy: ids(l?.neededBy),
+    disputes: ids(l?.disputes),
+    disputedBy: ids(l?.disputedBy),
+    final: Boolean(shown?.value),
+    results,
+    saved: saved.map((f) => ({ name: String(f.name), url: `/files/${f.file}?name=${encodeURIComponent(String(f.name))}` })),
+    packages: packages.map((p) => String(p.id)),
+    runs: runs.map((r) => ({ run: String(r.run), seq: Number(r.seq), answer: (r.value as string | null) ?? null, reason: (r.reason as string | null) ?? null, current: r.run === current })),
+    used,
+  };
+}
 
+function showQuestion(qid: string) {
+  const d = details(qid);
+  if (!d) return;
+  const s = d.status;
+  const list = (title: string, ids: string[]) => (ids.length ? [h("h3", {}, title), h("ul", {}, ...ids.map((x) => h("li", {}, ref(x))))] : []);
   const parts: (HTMLElement | null)[] = [
-    h("div", { class: "run" }, badge(s), h("span", { class: "id hint" }, qid), q.asker ? h("span", { class: "hint" }, `asked by ${q.asker}`) : null),
-    h("h2", {}, String(q.text)),
-    h("p", { class: "rule" }, `Rule: ${q.rule}`),
+    h("div", { class: "run" }, badge(s), h("span", { class: "id hint" }, qid), d.asker ? h("span", { class: "hint" }, `asked by ${d.asker}`) : null),
+    h("h2", {}, d.text),
+    h("p", { class: "rule" }, `Rule: ${d.rule}`),
     s?.reason ? h("p", { class: "error" }, s.reason) : null,
-    ...(Array.isArray(q.inputs) && q.inputs.length ? [h("h3", {}, "Inputs"), h("ul", {}, ...q.inputs.map((i) => h("li", { class: "id" }, String(i))))] : []),
-    ...list("Rests on", l?.needs),
-    ...list("Used by", l?.neededBy),
-    ...list("Disputes", l?.disputes),
-    ...list("Disputed by", l?.disputedBy),
-    results.length ? h("h3", {}, shown?.value ? "Results" : "Results so far") : null,
-    results.length ? h("pre", {}, results.map((x: unknown) => JSON.stringify(x)).join("\n")) : null,
-    saved.length ? h("h3", {}, "Saved") : null,
-    saved.length ? h("ul", {}, ...saved.map((f) => h("li", {}, fileLink(String(f.name), String(f.file))))) : null,
-    packages.length ? h("h3", {}, "Packages") : null,
-    packages.length ? h("p", { class: "id hint" }, packages.map((p) => p.id).join("  ")) : null,
-    runs.length ? h("h3", {}, "Runs") : null,
+    ...(d.inputs.length ? [h("h3", {}, "Inputs"), h("ul", {}, ...d.inputs.map((i) => h("li", { class: "id" }, i)))] : []),
+    ...list("Rests on", d.restsOn),
+    ...list("Used by", d.usedBy),
+    ...list("Disputes", d.disputes),
+    ...list("Disputed by", d.disputedBy),
+    d.results.length ? h("h3", {}, d.final ? "Results" : "Results so far") : null,
+    d.results.length ? h("pre", {}, d.results.map((x) => JSON.stringify(x)).join("\n")) : null,
+    d.saved.length ? h("h3", {}, "Saved") : null,
+    d.saved.length ? h("ul", {}, ...d.saved.map((f) => h("li", {}, fileLink(f.name, f.url)))) : null,
+    d.packages.length ? h("h3", {}, "Packages") : null,
+    d.packages.length ? h("p", { class: "id hint" }, d.packages.join("  ")) : null,
+    d.runs.length ? h("h3", {}, "Runs") : null,
     h(
       "ul",
       {},
-      ...runs.map((r) =>
+      ...d.runs.map((r) =>
         h(
           "li",
           { class: "run" },
           h("span", { class: "id hint" }, `#${r.seq}`),
-          r.value ? h("span", { class: "badge", style: `--c: var(--${r.value})` }, String(r.value)) : h("span", { class: "hint" }, "running"),
-          r.run === current ? h("span", { class: "hint" }, "current") : null,
-          r.reason ? h("span", { class: "reason" }, String(r.reason).split("\n")[0]!) : null,
+          r.answer ? h("span", { class: "badge", style: `--c: var(--${r.answer})` }, r.answer) : h("span", { class: "hint" }, "running"),
+          r.current ? h("span", { class: "hint" }, "current") : null,
+          r.reason ? h("span", { class: "reason" }, r.reason.split("\n")[0]!) : null,
         ),
       ),
     ),
-    cypherPanel(used),
+    cypherPanel(d.used),
   ];
-  box.replaceChildren(...parts.filter((x) => x !== null));
+  document.getElementById("question")!.replaceChildren(...parts.filter((x) => x !== null));
 }
 
 /** The Cypher behind the panel, each query ready to run in the Query tab. */
@@ -280,11 +310,7 @@ function cypherPanel(used: [string, string][]) {
   box.addEventListener("toggle", () => (showCypher = (box as HTMLDetailsElement).open));
   for (const [label, query] of used) {
     const open = h("button", { class: "link" }, "Run in Query tab");
-    open.onclick = () => {
-      text.value = query;
-      tab("query");
-      runQuery();
-    };
+    open.onclick = () => showQuery(query);
     box.append(h("h3", {}, label), h("pre", {}, query), open);
   }
   return box;
@@ -322,15 +348,19 @@ text.value = PRESETS[0]![1];
 /** Question ids in a value: the value itself, or the items of a list. */
 const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.flatMap(idsIn) : typeof v === "string" && nodes.has(v) ? [v] : []);
 
-function runQuery() {
+/** The parameters every query in the page gets: the answers now, and the selected question and its current run. */
+const params = () => ({ ...answerParams([...statuses.values()]), selected, run: (selected && statuses.get(selected)?.run) ?? null });
+
+/** Runs the Query tab's Cypher, shows the rows, and marks the questions they name. Returns the rows, or the error. */
+function runQuery(): { columns: string[]; rows: Row[] } | Error {
   const out = document.getElementById("rows")!;
   if (text.value.includes("$selected") && !selected) {
-    out.replaceChildren(h("p", { class: "hint" }, "Click a question in the graph first: this query uses $selected."));
-    return;
+    out.replaceChildren(h("p", { class: "hint" }, "Select a question in the graph first: this query uses $selected."));
+    return new Error("No question is selected, and this query uses $selected. Select one first.");
   }
   try {
-    const { columns: cols, rows } = result(text.value, { ...answerParams([...statuses.values()]), selected, run: (selected && statuses.get(selected)?.run) ?? null });
-    marked = new Set(rows.flatMap((r) => Object.values(r).flatMap(idsIn)));
+    const r = result(text.value, params());
+    marked = new Set(r.rows.flatMap((row) => Object.values(row).flatMap(idsIn)));
     const cell = (v: unknown): Node | string => {
       const ids = idsIn(v);
       if (ids.length && (typeof v === "string" || (Array.isArray(v) && ids.length === v.length)))
@@ -338,16 +368,26 @@ function runQuery() {
       return typeof v === "string" ? v : JSON.stringify(v);
     };
     out.replaceChildren(
-      rows.length
-        ? h("table", {}, h("tr", {}, ...cols.map((c) => h("th", {}, c))), ...rows.map((r) => h("tr", {}, ...cols.map((c) => h("td", {}, cell(r[c]))))))
+      r.rows.length
+        ? h("table", {}, h("tr", {}, ...r.columns.map((c) => h("th", {}, c))), ...r.rows.map((row) => h("tr", {}, ...r.columns.map((c) => h("td", {}, cell(row[c]))))))
         : h("p", { class: "hint" }, "No rows."),
     );
+    return r;
   } catch (e) {
     marked = new Set();
     out.replaceChildren(h("p", { class: "error" }, (e as Error).message));
+    return e as Error;
   }
 }
-document.getElementById("run")!.onclick = runQuery;
+document.getElementById("run")!.onclick = () => runQuery();
+
+/** Puts a query in the Query tab and runs it there. The menu names it when it is a preset, and shows nothing else. */
+function showQuery(query: string) {
+  text.value = query;
+  preset.selectedIndex = PRESETS.findIndex(([, q]) => q === query);
+  tab("query");
+  return runQuery();
+}
 
 function tab(name: string) {
   for (const b of document.querySelectorAll<HTMLButtonElement>("nav button")) b.classList.toggle("on", b.dataset.tab === name);
@@ -357,5 +397,22 @@ for (const b of document.querySelectorAll<HTMLButtonElement>("nav button")) b.on
 
 connect();
 
-// For tests and the browser console: read the page's copy of the graph.
-Object.assign(window, { witness: { cypher, select, state: (q: string) => statuses.get(q)?.state ?? null, questions: () => nodes.size } });
+// The page's tools for a browser agent (WebMCP), on the page's own functions.
+const tools = webTools({
+  operators(query) {
+    const { plan } = execute(`EXPLAIN ${query}`, params());
+    if (!plan) throw new Error("Relate gave no plan for this query, so the page cannot tell that it only reads.");
+    const walk = (n: Plan["root"]): string[] => [n.operator, ...n.children.flatMap(walk)];
+    return walk(plan.root);
+  },
+  query: showQuery,
+  question(qid) {
+    if (!nodes.has(qid)) return null;
+    select(qid);
+    return details(qid);
+  },
+});
+register(tools);
+
+// For tests and the browser console: read the page's copy of the graph, and call the page's tools.
+Object.assign(window, { witness: { cypher, select, tools, state: (q: string) => statuses.get(q)?.state ?? null, questions: () => nodes.size } });

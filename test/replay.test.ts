@@ -60,6 +60,28 @@ test("the page plays the session back into its own Relate copy", async () => {
     expect(got).toBe("no");
     const disputes = await view.evaluate(`window.witness.cypher("MATCH (:Question)-[:DISPUTES]->(q:Question) RETURN q.id AS id")`);
     expect(disputes).toEqual([{ id: ids.a }]);
+
+    // The page's WebMCP tools: they read the page's copy, show the person what they found, and refuse to write.
+    // A refusal is a reply the agent can read and fix, as on /mcp.
+    const call = (name: string, args: object) =>
+      view.evaluate(`window.witness.tools.find((t) => t.name === ${JSON.stringify(name)}).execute(${JSON.stringify(args)}).then(JSON.parse)`);
+    expect(await view.evaluate("window.witness.tools.map((t) => [t.name, t.annotations.readOnlyHint, t.annotations.untrustedContentHint])")).toEqual([
+      ["query", true, true],
+      ["show_question", true, true],
+    ]);
+    const yes = "MATCH (q:Question) WHERE q.id IN $yes RETURN q.id AS id";
+    expect(await call("query", { cypher: yes })).toEqual({ columns: ["id"], rows: [{ id: ids.a }], truncated: false });
+    expect(await view.evaluate("[document.getElementById('cypher').value, document.getElementById('query').hidden]")).toEqual([yes, false]);
+
+    for (const cypher of ["MATCH (q:Question) SET q.text = 'forged'", "CREATE (:Question {id: 'q-000000000000'})", "MATCH (q) CALL { CREATE (:Run) } RETURN q"])
+      expect(((await call("query", { cypher })) as { refused: string }).refused).toStartWith("Only reads run here");
+    const forged = "MATCH (n) WHERE n.text = 'forged' OR n.id = 'q-000000000000' OR (n:Run AND n.id IS NULL) RETURN count(n) AS n";
+    expect(await view.evaluate(`window.witness.cypher(${JSON.stringify(forged)})`)).toEqual([{ n: 0 }]);
+
+    const shown = (await call("show_question", { id: ids.b })) as Record<string, unknown>;
+    expect(shown).toMatchObject({ id: ids.b, answer: "no", restsOn: [ids.a], disputes: [ids.a] });
+    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the total above 100?");
+    expect(await call("show_question", { id: "q-ffffffffffff" })).toEqual({ refused: `There is no question q-ffffffffffff. Call query to list the questions.` });
   } finally {
     server.stop(true);
   }

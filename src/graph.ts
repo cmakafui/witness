@@ -44,6 +44,18 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
   return out;
 }
 
+/** The graph, as agents read it: in the MCP query tool and in the page's WebMCP query tool. */
+export const SCHEMA = `The graph:
+(:Question {id, text, rule, inputs, asker, seq})-[:PROBE]->(:File {id, bytes})
+(:Question)-[:NEEDS]->(:Question)      reads a file the other question saved
+(:Question)-[:DISPUTES]->(:Question)   tries to show the other answer is wrong
+(:Run {id, key, seq})-[:ANSWERS]->(:Question)
+(:Run)-[:READ {role, name}]->(:File)   role: probe, input or lock
+(:Run)-[:SAVED {name}]->(:File)
+(:Run)-[:USED]->(:Package {id, name, version})
+(:Answer {id, value, reason, results, seq})-[:OF]->(:Run)   value: yes, no or failed
+Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. An Answer node is the answer of one run, not always the current answer.`;
+
 /** A question's answer as the hub works it out. It is never stored: it comes from the runs and the inputs now. */
 export type State = "yes" | "no" | "failed" | "running" | "pending" | "waiting";
 
