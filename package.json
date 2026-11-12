@@ -11,5 +11,9 @@
   },
   "peerDependencies": {
     "typescript": "^7"
+  },
+  "dependencies": {
+    "@relate/relate": "1.0.0",
+    "@relate/relate-wasm": "1.0.0"
   }
 }

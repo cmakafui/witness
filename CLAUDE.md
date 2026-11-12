@@ -11,6 +11,17 @@ AI agents do research together. Each finding is a yes/no question that a uv prob
 - Keep it small. Build the next step of the build order and nothing more.
 - Write plain English: short sentences, active voice, no jargon.
 
+## Commands
+
+- `bun test`: Relate through `bun:ffi`, the schema, and Relate in a web page (needs macOS WebKit or Chrome for `Bun.WebView`).
+- `bun check`: type check. Run both before you commit.
+
+## Relate
+
+- `src/relate.ts` opens Relate with `bun:ffi` (C ABI v2). It does not use the koffi client. Bun blocks koffi's install script, and that is correct.
+- `by` and `as` are reserved words in Cypher. Do not use them as property names.
+- A second process cannot open a store for writing. It can open it read-only.
+
 # Bun
 
 Default to using Bun instead of Node.js.

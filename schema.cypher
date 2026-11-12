@@ -1,10 +1,11 @@
-// Witness: the graph type. Not yet run against Relate. Check that it parses and what the engine enforces.
+// Witness: the graph type. test/schema.test.ts checks that Relate parses it and enforces it.
+// Relate enforces required properties, types, unique ids and edge endpoints. It accepts other labels and SET.
 // The graph holds questions and the evidence for their answers. It does not hold agents.
 // The hub is the only writer. It only creates. It gives every write a number (seq), in order.
 
 CREATE GRAPH TYPE witness AS {
   (q:Question => {id :: STRING NOT NULL, text :: STRING NOT NULL, rule :: STRING NOT NULL,
-                  inputs :: LIST<STRING NOT NULL> NOT NULL, by :: STRING, seq :: INTEGER NOT NULL}),
+                  inputs :: LIST<STRING NOT NULL> NOT NULL, asker :: STRING, seq :: INTEGER NOT NULL}),
   (r:Run => {id :: STRING NOT NULL, key :: STRING NOT NULL, seq :: INTEGER NOT NULL}),
   (a:Answer => {value :: STRING NOT NULL, results :: STRING NOT NULL, seq :: INTEGER NOT NULL}),
   (f:File => {sha :: STRING NOT NULL, bytes :: INTEGER NOT NULL}),
@@ -14,7 +15,7 @@ CREATE GRAPH TYPE witness AS {
   (q)-[:NEEDS]->(q),
   (q)-[:DISPUTES]->(q),
   (r)-[:ANSWERS]->(q),
-  (r)-[:READ => {as :: STRING NOT NULL}]->(f),
+  (r)-[:READ => {role :: STRING NOT NULL}]->(f),
   (r)-[:SAVED => {name :: STRING NOT NULL}]->(f),
   (r)-[:USED]->(p),
   (a)-[:OF]->(r)

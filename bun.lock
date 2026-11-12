@@ -4,6 +4,10 @@
   "workspaces": {
     "": {
       "name": "witness",
+      "dependencies": {
+        "@relate/relate": "1.0.0",
+        "@relate/relate-wasm": "1.0.0",
+      },
       "devDependencies": {
         "@types/bun": "latest",
       },
@@ -13,6 +17,20 @@
     },
   },
   "packages": {
+    "@relate/relate": ["@relate/relate@1.0.0", "", { "dependencies": { "koffi": "^2.9.0" }, "optionalDependencies": { "@relate/relate-darwin-arm64": "1.0.0", "@relate/relate-darwin-x64": "1.0.0", "@relate/relate-linux-arm64": "1.0.0", "@relate/relate-linux-x64": "1.0.0", "@relate/relate-win32-x64": "1.0.0" } }, "sha512-VhgYZU4hliBD7CYyFCh1CuKr0hm0Im+CkrpebCumosVOocMlHAt7iZzCeo9s4XwREHu0iC2norCSYlwHK+hx6A=="],
+
+    "@relate/relate-darwin-arm64": ["@relate/relate-darwin-arm64@1.0.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-KGdhtRYQ84kbk4JMKIq1k8rIJEp5sGvkpy0J09huO50uTMAFJuAcfDuRVCRIJvT0vYYmah0NLGsPYK9yQi/kbQ=="],
+
+    "@relate/relate-darwin-x64": ["@relate/relate-darwin-x64@1.0.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-u31+nslJxcnWsKXqWo6Gujc1vKwIbZA2B1Zd0KAKhqH+C4snJ5CEfiNLGMcI6/Tp3j7onh76Iq7wagje689HoA=="],
+
+    "@relate/relate-linux-arm64": ["@relate/relate-linux-arm64@1.0.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-RHKC1R9TIS7hLDXAg66+Z41xz8IwtqDyn2rpNARCaRqzzm3iBGLrwpS7oK64T0FB8WGmM1waCcTrFtIMAFPWZQ=="],
+
+    "@relate/relate-linux-x64": ["@relate/relate-linux-x64@1.0.0", "", { "os": "linux", "cpu": "x64" }, "sha512-eksb0bsYwDsEnhzE+Svlzw1Twc9ZK3qN9HTo2V1cd0+bpiXAUPZNhsxgO5ucOtJIvrCd49rPigLz1KN+liBB6w=="],
+
+    "@relate/relate-wasm": ["@relate/relate-wasm@1.0.0", "", {}, "sha512-BLd8i8tAKgxvKu63gnCHpQzuZ/LHxKQOoeRPCdnsGGd59xEt24KECDS68ykAkg3CU4BDydshvQEmvQSkdUcX1Q=="],
+
+    "@relate/relate-win32-x64": ["@relate/relate-win32-x64@1.0.0", "", { "os": "win32", "cpu": "x64" }, "sha512-4m17nQ0wqO4eCb5yFHL8KOAG/6zUa2O3k4x+HdLgWLzxsdkeyMOZZMyQ4K7WGzv0ILiyVpVpgqvFsyayi3gOkA=="],
+
     "@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 
     "@types/node": ["@types/node@26.6.6", "", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog=="],
@@ -58,6 +76,8 @@
     "@typescript/typescript-win32-x64": ["@typescript/typescript-win32-x64@7.0.2", "", { "os": "win32", "cpu": "x64" }, "sha512-0BQ3HkAHHlKLSp1qRvf3SUhGpGsDuhB/jgFw75guyqbxJqEaS0Cw/VFO8i2nHglJUzQCRtMMR/IBAKE3ETMC4g=="],
 
     "bun-types": ["bun-types@1.4.4", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ=="],
+
+    "koffi": ["koffi@2.16.3", "", { "hasInstallScript": true }, "sha512-E9y1AsgYGlaxMhcZzHr8y96QF2U5XzA12GGVAfbWqIubTwPNMXQarfBzePNXHe0xtIEtNd6ifAv3GAKYGUeBAQ=="],
 
     "typescript": ["typescript@7.0.2", "", { "optionalDependencies": { "@typescript/typescript-aix-ppc64": "7.0.2", "@typescript/typescript-darwin-arm64": "7.0.2", "@typescript/typescript-darwin-x64": "7.0.2", "@typescript/typescript-freebsd-arm64": "7.0.2", "@typescript/typescript-freebsd-x64": "7.0.2", "@typescript/typescript-linux-arm": "7.0.2", "@typescript/typescript-linux-arm64": "7.0.2", "@typescript/typescript-linux-loong64": "7.0.2", "@typescript/typescript-linux-mips64el": "7.0.2", "@typescript/typescript-linux-ppc64": "7.0.2", "@typescript/typescript-linux-riscv64": "7.0.2", "@typescript/typescript-linux-s390x": "7.0.2", "@typescript/typescript-linux-x64": "7.0.2", "@typescript/typescript-netbsd-arm64": "7.0.2", "@typescript/typescript-netbsd-x64": "7.0.2", "@typescript/typescript-openbsd-arm64": "7.0.2", "@typescript/typescript-openbsd-x64": "7.0.2", "@typescript/typescript-sunos-x64": "7.0.2", "@typescript/typescript-win32-arm64": "7.0.2", "@typescript/typescript-win32-x64": "7.0.2" }, "bin": { "tsc": "bin/tsc" } }, "sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA=="],
 

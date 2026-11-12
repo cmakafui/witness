@@ -20,17 +20,17 @@ In Witness, a claim counts only when a run answers it. The graph records what ea
 ## The graph
 
 ```
-(:Question {text, rule, inputs, by})-[:PROBE]->(:File)
+(:Question {text, rule, inputs, asker})-[:PROBE]->(:File)
 (:Question)-[:NEEDS]->(:Question)            // reads an output of the other question
 (:Question)-[:DISPUTES]->(:Question)         // tries to show that the other answer is wrong
 (:Run)-[:ANSWERS]->(:Question)
-(:Run)-[:READ {as}]->(:File)                 // data, outputs of other runs, a picture
+(:Run)-[:READ {role}]->(:File)               // data, outputs of other runs, a picture
 (:Run)-[:SAVED {name}]->(:File)
 (:Run)-[:USED]->(:Package {name, version})   // from the probe's uv lock file
 (:Answer {value})-[:OF]->(:Run)              // yes, no or failed
 ```
 
-The graph holds questions and the evidence for their answers. It does not hold agents. A question can have an optional `by` text, so the page can show who asked it.
+The graph holds questions and the evidence for their answers. It does not hold agents. A question can have an optional `asker` text, so the page can show who asked it.
 
 A `File` is content, named by its SHA-256 hash. The `rule` of a question says how the probe decides yes or no. The probe gets the rule before it measures anything.
 
@@ -57,7 +57,15 @@ Witness never changes or deletes a record. The answer to a question is the answe
 
 ## Setup and run
 
-To come.
+You need [Bun](https://bun.com) 1.4 and [uv](https://docs.astral.sh/uv/).
+
+```bash
+bun install
+bun test     # Relate through bun:ffi, the schema, and Relate in a web page
+bun check    # type check
+```
+
+The rest is to come.
 
 ## Where the data lives
 
