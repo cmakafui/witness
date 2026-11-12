@@ -30,6 +30,7 @@ Witness keeps the tested answers of every agent in this workspace in one graph. 
 - **Earn the "no".** Before you answer, check that the measurement happened: the file was read, the list is not empty. Crash if it did not. A crash is `failed`, never `no`.
 - **A search that found nothing proves nothing**, unless it was complete. Ask "Within N cases, does X find Z?"
 - **Judge against a reference** when there is one: run the same input through a trusted tool and answer by whether the two agree.
+- **A probe measures. It never acts.** Witness runs a question again whenever its inputs change, so a probe that sends a message, writes outside `$WITNESS_OUT`, deploys, or spends a budget does it again on every rerun. Do the action yourself, save what it returned to a file, and ask about that file.
 - **Save what others can use** to `$WITNESS_OUT`: tables, candidates, models, plots. Another question reads it as `q-…/name`. When that question's answer changes, every question that reads its output runs again.
 
 ## The probe
@@ -92,4 +93,4 @@ q-c02e5bd1a7a8 failed   playwright could not start: see query for its reason
 look q-3f9a1c0b7e2d/residuals.png   the error is all in the top-right corner
 ```
 
-The person running the workspace watches the graph live. `witness status` in the workspace prints the page's address.
+The person running the workspace watches the graph live with `witness open`.

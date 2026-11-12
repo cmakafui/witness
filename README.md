@@ -98,12 +98,14 @@ witness setup
 
 When the repository is public, `bun install -g github:cmakafui/witness` works too. (Bun cannot install a private GitHub repository by URL.)
 
-`witness setup` links the skill into Claude Code (`~/.claude/skills/witness`) and adds the MCP server to Claude Code and Codex. Then start an agent in any workspace. Its first tool call starts the workspace's hub in the background, and every agent in that workspace shares it.
+`witness setup` links the skill into Claude Code (`~/.claude/skills/witness`) and adds the MCP server to Claude Code and Codex. Then start an agent in any workspace. Its first tool call starts the workspace's hub in the background, and every agent in that workspace shares it. The hub exits by itself after 10 minutes without use.
+
+There are three commands:
 
 ```bash
-witness status     # where the hub serves the page
-witness serve      # or run the hub in the foreground, at http://127.0.0.1:4747
-witness stop
+witness setup          # once
+witness open [DIR]     # watch a workspace's graph in the browser
+witness replay [DIR]   # play a recorded session back
 ```
 
 ## Use

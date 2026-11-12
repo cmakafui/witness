@@ -402,6 +402,11 @@ export class Hub {
     return { nodes, rels: rels.map(({ role, name, ...r }) => ({ ...r, ...(role ? { role } : {}), ...(name ? { name } : {}) })) };
   }
 
+  /** Whether a probe runs now. */
+  busy(): boolean {
+    return this.running.size > 0;
+  }
+
   /** Waits until no probe runs. For tests and a clean shutdown. */
   async idle() {
     while (this.running.size) await new Promise<void>((resolve) => this.wakers.add(resolve));

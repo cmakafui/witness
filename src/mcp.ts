@@ -14,6 +14,7 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 - An input is a workspace path, or q-…/name for a file that another question saved. The probe finds each input at that relative path. It finds nothing else.
 - When an input changes, Witness runs the question again. A question that reads the output of another question runs again when that output changes. When the inputs change back, the old answer comes back.
 - A crash, a timeout, or a missing answer is "failed". A failed run is never a "no".
+- A probe measures. It never acts: Witness runs it again whenever its inputs change, so a probe that sends, deploys, writes outside $WITNESS_OUT or spends a budget does it again on every rerun. Act yourself, save the result to a file, and ask about the file.
 - Write the rule before anything runs. Check that the measurement happened before you answer: crash if it did not.
 - To test a claim, ask a question that tries to show it is wrong, and give the claim's id in disputes.
 - query: read the graph with Cypher. look: see a file that a run saved.`;

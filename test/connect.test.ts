@@ -45,3 +45,14 @@ test("agents in one workspace share one hub that `witness mcp` starts", async ()
   await a.close();
   await b.close();
 }, 60_000);
+
+test("when the hub goes away, an agent's next call starts a new one and gets its answer", async () => {
+  const a = await agent("a");
+  const before = (await running(root))!;
+  process.kill(before.pid, "SIGTERM");
+  for (let i = 0; i < 40 && (await running(root)); i++) await Bun.sleep(100);
+  const seen = await a.callTool({ name: "query", arguments: { cypher: "MATCH (q:Question) WHERE q.id IN $yes RETURN count(q) AS n" } });
+  expect(JSON.parse((seen.content as { text: string }[])[0]!.text).rows).toEqual([{ n: 1 }]);
+  expect((await running(root))?.pid).not.toBe(before.pid);
+  await a.close();
+}, 60_000);

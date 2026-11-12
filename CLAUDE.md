@@ -14,8 +14,9 @@ AI agents do research together. Each finding is a yes/no question that a uv prob
 ## Commands
 
 - `bun test`: the hub with real uv probes, MCP, the page in a real browser engine, the schema (needs `uv`, and macOS WebKit or Chrome for `Bun.WebView`). About 3 seconds once uv's cache is warm.
-- `bun src/main.ts serve --root DIR`: the hub, the page and MCP on port 4747.
-- `bun src/main.ts mcp`: MCP over stdio for one agent. It finds the workspace's hub (`.witness/hub.json`) or starts one in the background.
+- People get three commands: `setup`, `open [DIR]`, `replay [DIR]`. Keep it at three. `mcp` and `serve` are plumbing.
+- `bun src/main.ts mcp`: MCP over stdio for one agent. It finds the workspace's hub (`.witness/hub.json`) or starts one in the background with `--idle 600`, keeps it alive with a heartbeat, and starts a new one if it goes away.
+- `bun src/main.ts serve --root DIR`: a hub in the foreground. `--idle 0` (the default here) never exits.
 - The skill is `skill/witness/`. `witness setup` links it into `~/.claude/skills`. Change the skill when a tool or the probe format changes.
 
 ## Code
