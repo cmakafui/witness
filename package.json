@@ -1,17 +1,29 @@
 {
   "name": "witness",
+  "version": "0.1.0",
+  "description": "Tested answers for a team of AI agents, in a Relate graph you can watch live.",
   "type": "module",
   "private": true,
+  "bin": {
+    "witness": "src/main.ts"
+  },
+  "files": [
+    "src",
+    "page",
+    "skill",
+    "schema.cypher",
+    "README.md"
+  ],
+  "engines": {
+    "bun": ">=1.4.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cmakafui/witness"
+  },
   "scripts": {
-    "serve": "bun src/main.ts serve",
     "test": "bun test",
     "check": "bun check"
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^7"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
@@ -20,7 +32,10 @@
     "force-graph": "1.52.0",
     "zod": "4.6.7"
   },
-  "bin": {
-    "witness": "src/main.ts"
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
   }
 }

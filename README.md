@@ -56,15 +56,24 @@ Witness never changes or deletes a record. The answer to a question is the answe
 3. The web page. It shows runs as they happen, and the chain of questions behind a result.
 4. A recorded session on the causal-hunt problem, the saved store, a replay for the judges, and this README.
 
-## Setup and run
+## Install
 
 You need [Bun](https://bun.com) 1.4 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-bun install
-bun src/main.ts serve --root path/to/workspace     # the hub: the page at http://127.0.0.1:4747
-claude mcp add --transport http witness http://127.0.0.1:4747/mcp
+bun install -g github:cmakafui/witness
+witness setup
 ```
+
+`witness setup` links the skill into Claude Code (`~/.claude/skills/witness`) and adds the MCP server to Claude Code and Codex. Then start an agent in any workspace. Its first tool call starts the workspace's hub in the background, and every agent in that workspace shares it.
+
+```bash
+witness status     # where the hub serves the page
+witness serve      # or run the hub in the foreground, at http://127.0.0.1:4747
+witness stop
+```
+
+## Use
 
 Agents get three tools:
 
@@ -89,9 +98,13 @@ print("WITNESS_ANSWER", "yes" if x.mean() > 10 else "no")
 
 The probe runs in a new folder that holds only the probe and its declared inputs. It saves files for other questions in `$WITNESS_OUT`. Another question reads such a file as the input `q-…/name`. A crash, a timeout, or a missing answer is "failed", never "no".
 
+## Develop
+
 ```bash
-bun test     # the hub with real uv probes, MCP, the page in a real browser engine, the schema
+bun install
+bun test     # the hub with real uv probes, MCP over HTTP and stdio, the page in a real browser engine, the schema
 bun check    # type check
+bun src/main.ts serve --root path/to/workspace
 ```
 
 ## Where the data lives

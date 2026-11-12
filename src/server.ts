@@ -20,6 +20,7 @@ export function serve(hub: Hub, { port = 4747, hostname = "127.0.0.1" } = {}) {
         const name = new URL(req.url).searchParams.get("name") ?? id;
         return new Response(Bun.file(path), { headers: { "Content-Type": Bun.file(name).type, "X-Content-Type-Options": "nosniff" } });
       },
+      "/health": () => Response.json({ root: hub.root, pid: process.pid }),
       "/events": (req, srv) => (srv.upgrade(req) ? undefined : new Response("Expected a WebSocket", { status: 400 })),
     },
     websocket: {
