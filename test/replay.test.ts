@@ -86,21 +86,11 @@ test("the page plays the session back into its own Relate copy", async () => {
     expect(await call("show_question", { id: "q-ffffffffffff" })).toEqual({ refused: `There is no question q-ffffffffffff. Call query to list the questions.` });
 
     const neighborhood = (relation: string, id?: string, depth?: number) => call("navigate", { relation, ...(id ? { id } : {}), ...(depth === undefined ? {} : { depth }) });
-    // Keep an open panel and the lanes at fixed widths throughout navigation.
-    await view.evaluate(`(() => { window.walkStages = []; new MutationObserver(() => {
-      window.walkStages.push([document.querySelector('main').dataset.walkthroughStage, document.getElementById('sidebar-toggle').getAttribute('aria-expanded')]);
-    }).observe(document.querySelector('main'), {attributes: true, attributeFilter: ['data-walkthrough-stage']});
-      window.walkWidths = []; window.sampleWalk = true;
-      const sample = () => {
-        window.walkWidths.push([document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]);
-        if (window.sampleWalk) requestAnimationFrame(sample);
-      }; sample();
-    })()`);
+    // Navigation immediately shows evidence without changing an open panel's width.
+    const openWidths = await view.evaluate("[document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]");
     const dependencies = await neighborhood("dependencies", ids.b, 2) as { questions: { id: string; text: string; answer: string }[]; links: object[] };
-    expect(await view.evaluate("window.walkStages")).toEqual([["camera", "true"], ["paths", "true"], ["evidence", "true"], ["complete", "true"]]);
-    expect(await view.evaluate("(() => { window.sampleWalk = false; return new Set(window.walkWidths.map(JSON.stringify)).size; })()")).toBe(1);
-    expect(await view.evaluate("window.walkWidths[0][1]")).toBe(440);
-    expect(await view.evaluate("document.querySelector('main').classList.contains('walking')")).toBe(false);
+    expect(await view.evaluate("[document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]")).toEqual(openWidths);
+    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the total above 100?");
     expect(dependencies.questions).toEqual([{ id: ids.b!, text: "Is the total above 100?", answer: "no" }, { id: ids.a!, text: "Does data.txt hold numbers?", answer: "yes" }]);
     expect(dependencies.links).toEqual([{ from: ids.b, to: ids.a, type: "NEEDS" }]);
     expect(await view.evaluate("document.getElementById('navigation-summary').textContent")).toBe("Dependencies: 2 questions, 1 link, depth 2");
@@ -113,37 +103,16 @@ test("the page plays the session back into its own Relate copy", async () => {
     expect(await view.evaluate("[document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]")).toEqual([lanesWidth, 440]);
     expect(await view.evaluate("document.getElementById('sidebar-toggle').getAttribute('aria-expanded')")).toBe("true");
 
-    // An interrupt resolves the old tool call, and cannot reopen a stale panel later.
-    expect(await view.evaluate(`(async () => {
-      const navigate = window.witness.tools.find(t => t.name === 'navigate');
-      const first = navigate.execute({relation:'dependencies', id:${JSON.stringify(ids.a)}});
-      await navigate.execute({relation:'overview'});
-      return JSON.parse(await first);
-    })()`)).toEqual({ id: ids.a, cancelled: true });
-    expect(await view.evaluate("document.getElementById('sidebar-toggle').getAttribute('aria-expanded')")).toBe("true");
+    // A later navigation wins immediately; there is no delayed panel to reopen.
+    await neighborhood("dependencies", ids.a);
+    await neighborhood("overview");
+    expect(await view.evaluate("document.getElementById('navigation').hidden")).toBe(true);
 
-    // Pause freezes the active Motion stage, then resumes that same question.
+    // Pause stops the reading timer and resumes on the same question.
     await view.evaluate("document.getElementById('tour-play').click()");
-    await Bun.sleep(100);
     await view.evaluate("document.getElementById('tour-play').click()");
     expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Paused at 1 of 4");
-    await Bun.sleep(1200);
-    expect(await view.evaluate("document.querySelector('main').dataset.walkthroughStage")).toBe("camera");
-    await view.evaluate("document.getElementById('tour-play').click()");
-    for (let i = 0; i < 50; i++) {
-      if (await view.evaluate("document.querySelector('main').dataset.walkthroughStage === 'complete'")) break;
-      await Bun.sleep(100);
-    }
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
-    await view.evaluate("document.getElementById('tour-play').click()");
-
-    // Exercise the same traversal with reduced motion: no tween or delayed evidence reveal.
-    await view.evaluate(`(() => { window.originalMatchMedia = window.matchMedia.bind(window);
-      window.matchMedia = query => {
-        const media = window.originalMatchMedia(query);
-        if (query === '(prefers-reduced-motion: reduce)') Object.defineProperty(media, 'matches', {value:true});
-        return media;
-      }; })()`);
     expect(await neighborhood("dependencies", ids.d, 1)).toMatchObject({ questions: [{ id: ids.d }, { id: ids.b }] });
     expect(await neighborhood("dependencies", ids.d, 2)).toMatchObject({ questions: [{ id: ids.d }, { id: ids.b }, { id: ids.a }] });
     // A missing id uses the current selection. Reverse traversal reaches the consumer.

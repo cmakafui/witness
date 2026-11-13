@@ -88,10 +88,9 @@ main {
   grid-template-columns: minmax(0, 1fr) var(--panel-width);
   min-height: 0;
   overflow: hidden;
-  transition: grid-template-columns 240ms ease;
 }
 main.sidebar-collapsed { grid-template-columns: minmax(0, 1fr) 0px; }
-main.sidebar-collapsed aside { visibility: hidden; transition: visibility 0s 240ms; }
+main.sidebar-collapsed aside { visibility: hidden; }
 
 /* The lanes: one row per direction of work, questions in the order they were asked. */
 #graph-stage { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
@@ -106,7 +105,6 @@ main.sidebar-collapsed aside { visibility: hidden; transition: visibility 0s 240
 }
 #navigation[hidden] { display: none; }
 #navigation-summary { font-weight: 600; }
-#walkthrough-status { color: var(--muted); margin-left: 12px; }
 
 /* The walkthrough bar floats over the lanes' top margin, so the lanes never move when it appears. */
 #graph-stage { position: relative; }
@@ -130,7 +128,7 @@ main.sidebar-collapsed aside { visibility: hidden; transition: visibility 0s 240
   white-space: nowrap;
 }
 .lanes { min-width: 0; overflow-x: auto; overflow-y: hidden; }
-.lanes svg { display: block; --p: 1; }
+.lanes svg { display: block; }
 .lanes .caption { display: flex; gap: 20px; padding: 4px 16px 16px; margin: 0; color: var(--muted); font-size: 13px; }
 .lanes .caption span { display: inline-flex; align-items: center; gap: 8px; }
 .rail { stroke: var(--line); stroke-width: 1; }
@@ -138,13 +136,13 @@ main.sidebar-collapsed aside { visibility: hidden; transition: visibility 0s 240
 .link { fill: none; stroke-width: 1.5; }
 .link.needs { stroke: var(--muted); opacity: 0.55; }
 .link.disputes { stroke: var(--no); stroke-dasharray: 4 4; opacity: 0.85; }
-.link.dim { opacity: calc(0.6 - 0.48 * var(--p)); }
-.link.lit { opacity: 1; stroke: var(--ink); stroke-width: 2.5; stroke-dasharray: 1; stroke-dashoffset: calc(1 - var(--p)); }
+.link.dim { opacity: 0.12; }
+.link.lit { opacity: 1; stroke: var(--ink); stroke-width: 2.5; }
 .link.lit.disputes { stroke: var(--no); }
 
 .q { cursor: pointer; outline: none; }
 .q .hit { fill: transparent; }
-.q.dim { opacity: calc(1 - 0.78 * var(--p)); }
+.q.dim { opacity: 0.22; }
 .q:focus-visible .hit { stroke: var(--accent); stroke-width: 2; }
 .ring { fill: none; stroke-width: 2; }
 .ring.selected { stroke: var(--ink); }
@@ -156,9 +154,6 @@ main.sidebar-collapsed aside { visibility: hidden; transition: visibility 0s 240
 .glyph.hollow { fill: var(--surface); stroke: var(--c); stroke-width: 2; }
 .glyph.pending, .glyph.waiting { stroke-dasharray: 3 2.5; }
 .slash { stroke: var(--c); stroke-width: 2; stroke-linecap: round; }
-.pulse { fill: none; stroke: var(--running); stroke-width: 2; transform-origin: center; transform-box: fill-box; animation: pulse 1.4s ease-out infinite; }
-@keyframes pulse { from { opacity: 0.9; transform: scale(1); } to { opacity: 0; transform: scale(2.2); } }
-
 /* The tour bar sits under the lanes, never over them. */
 #tour {
   display: grid;
@@ -302,8 +297,3 @@ th { color: var(--muted); font-weight: 600; }
   section { overflow: visible; }
   #tour { grid-template-columns: minmax(0, 1fr); grid-template-areas: "controls" "copy" "seek"; }
 }
-@media (prefers-reduced-motion: reduce) {
-  main, main aside { transition: none; }
-  .pulse { animation: none; opacity: 0; }
-}
-main.walking, main.walking aside { transition: none; }

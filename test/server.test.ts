@@ -82,5 +82,46 @@ test("the page shows a new question and its answer live, from its own Relate cop
   const a = json(await client.callTool({ name: "ask", arguments: { text: "Is the total at most 100?", rule: "$total <= 100", probe: PROBE, inputs: ["data.txt"] } }));
   await until(`window.witness.state(${JSON.stringify(a.id)})`, "yes");
   await until(`window.witness.cypher("MATCH (:Run)-[:OF]->(q:Question {id: '${a.id}'}) RETURN count(*) AS n")[0].n`, 1);
+
+  // Unrelated work must not replace a reader's open evidence or its expanded probe.
+  await read(`(() => {
+    window.witness.select(${JSON.stringify(a.id)});
+    window.keptProbe = document.querySelector('#question details');
+    window.keptProbe.open = true;
+    window.keptPanel = document.querySelector('#question h2');
+  })()`);
+  const unrelated = json(await client.callTool({ name: "ask", arguments: {
+    text: "Does unrelated work measure a total above 20?", rule: "$total > 20", probe: PROBE, inputs: ["data.txt"],
+  } }));
+  await until(`window.witness.state(${JSON.stringify(unrelated.id)})`, "no");
+  await read("new Promise(requestAnimationFrame)");
+  expect(await read("window.keptProbe === document.querySelector('#question details') && window.keptProbe.open && window.keptPanel === document.querySelector('#question h2')")).toBe(true);
+
+  // A burst can rebuild the lane SVG at most once per frame.
+  await read(`(() => {
+    window.displayFrame = 0; window.svgUpdates = {}; window.sampleDisplay = true;
+    const tick = () => { window.displayFrame++; if (window.sampleDisplay) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    window.svgObserver = new MutationObserver(records => {
+      window.svgUpdates[window.displayFrame] = (window.svgUpdates[window.displayFrame] || 0) + records.length;
+    });
+    window.svgObserver.observe(document.querySelector('.lanes svg'), {childList:true});
+  })()`);
+  for (let i = 0; i < 32; i++) server.publish("feed", JSON.stringify({ type: "graph", nodes: [], rels: [] }));
+  await until("Object.keys(window.svgUpdates).length > 0", true);
+  await read("new Promise(requestAnimationFrame)");
+  expect(await read("Math.max(...Object.values(window.svgUpdates))")).toBe(1);
+  expect(await read("window.keptProbe === document.querySelector('#question details')")).toBe(true);
+  await read("(() => { window.sampleDisplay = false; window.svgObserver.disconnect(); })()");
+
+  // Linked work changes the selected panel even though its own answer is unchanged.
+  const dispute = json(await client.callTool({ name: "ask", arguments: {
+    text: "Does the linked dispute measure a total above 10?", rule: "$total > 10", probe: PROBE,
+    inputs: ["data.txt"], disputes: [a.id],
+  } }));
+  await until(`window.witness.state(${JSON.stringify(dispute.id)})`, "yes");
+  await until("document.querySelector('#question .reason.refuted')?.textContent", "Refuted by a dispute.");
+  expect(await read("window.keptPanel === document.querySelector('#question h2')")).toBe(false);
+  expect(await read("document.querySelector('#question h2').textContent")).toBe("Is the total at most 100?");
   await client.close();
 }, 60_000);

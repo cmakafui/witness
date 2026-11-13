@@ -17,7 +17,7 @@ OPTIONAL MATCH (d:Question)-[:DISPUTES]->(q)
 RETURN q.text, q.rule, count(d) AS disputes ORDER BY disputes DESC
 ```
 
-Press **Play** below the graph for a guided tour of every question, in the order asked. Each stop moves the camera, highlights dependencies or challenges, and opens the evidence. You get five seconds to read each result. **Pause**, **Previous**, **Next** and the question timeline let you move by hand.
+Press **Play** below the graph for a guided tour of every question, in the order asked. Each stop selects a question, highlights dependencies or disputes, and shows the evidence. You get five seconds to read each result. **Pause**, **Previous**, **Next** and the question timeline let you move by hand.
 
 Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the browser's agent three tools: `query`, `show_question` and `navigate`. Turn it on at `chrome://flags/#enable-webmcp-testing`. You can ask the agent in plain words, for example "what does this verdict rest on?". It answers with Cypher on the page's copy of the graph. It shows you the query and the questions it found. These tools only read, and they mark what they return as untrusted. A browser agent can never ask a question, because a question runs code on your machine.
 

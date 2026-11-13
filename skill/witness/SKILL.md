@@ -77,10 +77,24 @@ To test a claim, ask a question where yes means that the claim is wrong. Put the
 
 `query` runs read-only Cypher. The query tool description shows the graph. Witness does not store the current answers. It gives them as parameters: `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` and `$refuted` (question ids), and `$current` (the runs that give the current answers). Each run has `started` (milliseconds since 1970) and `ms` (how long it took).
 
+Relate query basics:
+
+- Use the labels, relationships and properties in the tool description.
+- Pass values through `params`: `$id` needs `{"id": "q-…"}`. Missing parameters are errors, not nulls.
+- `WITH` carries variables to the next clause. Keep each variable you still need.
+- Bound traversals (`*0..5`) and returned rows (`LIMIT 50`).
+- Use `$current` for current runs. A stored `r.answer` can describe an old run.
+- Do not assume Neo4j procedures or APOC functions are available.
+
 ```cypher
-MATCH (q:Question {id: $id})-[:NEEDS*0..]->(u:Question) RETURN DISTINCT u.id, u.text
-MATCH (r:Run {answer: 'failed'})-[:OF]->(q:Question) RETURN q.id, r.reason
+MATCH (q:Question {id: $id})-[:NEEDS*0..5]->(u:Question)
+RETURN DISTINCT u.id, u.text LIMIT 50
+
+MATCH (r:Run)-[:OF]->(q:Question) WHERE r.id IN $current
+RETURN q.id, q.text, r.answer, r.ms ORDER BY r.ms DESC LIMIT 50
 ```
+
+For more syntax, see [Relate's Cypher guide](https://github.com/relatedb/relate/blob/main/surfaces/relate-cli/src/skill/bundle/SKILL.md#cypher). It tracks upstream; check newer features against Witness's pinned Relate version.
 
 `look` shows a saved file. Images come back as images.
 

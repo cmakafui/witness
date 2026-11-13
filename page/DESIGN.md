@@ -170,7 +170,7 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 
 - Do show a measurement next to the clause that uses it.
 - Do encode every answer by shape as well as colour.
-- Do keep motion to the tour and to responses to a person's action, and drop it under reduced motion.
+- Show navigation and evidence immediately. Playback pauses five seconds at each answered question.
 - Don't use cards, shadows or gradients.
 - Don't add labels that repeat what the content already says.
 - Don't explain the page in sentences. Labels are one to three words. A legend draws the mark it names.

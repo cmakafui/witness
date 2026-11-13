@@ -8,7 +8,7 @@ export type Navigation = { id?: string; relation: "dependencies" | "dependents" 
 
 /** What the tools need from the page. */
 export type Page = {
-  /** Moves the camera and highlights the evidence being followed. */
+  /** Shows the question neighborhood and its evidence. */
   navigate(args: Navigation): unknown;
   /** The operators of a query's plan. */
   operators(cypher: string): string[];
@@ -86,7 +86,7 @@ export function webTools(page: Page): Tool[] {
     },
     {
       name: "navigate",
-      description: "Play an evidence walkthrough: scroll the lanes to a question's neighborhood, highlight its links, then show its evidence panel. Waits until the sequence finishes. A new navigation or manual interaction cancels the previous sequence. Respects reduced motion. dependencies follows NEEDS toward inputs; dependents follows NEEDS backward toward consumers; disputes follows DISPUTES in both directions. Depth is the number of links to follow, default 1, at most 10. Omit id to start from the selected question. overview cancels the sequence, clears the focus and shows every question. Returns focused questions with current answers and links; cancelled is true if interrupted. Only questions already present in the replay can be visited.",
+      description: "Show a question's neighborhood and evidence immediately. dependencies follows NEEDS toward inputs; dependents follows NEEDS backward toward consumers; disputes follows DISPUTES in both directions. Depth is the number of links to follow, default 1, at most 10. Omit id to start from the selected question. overview clears the focus and scrolls to the start. Returns focused questions with current answers and links. Only questions already present in the replay can be visited.",
       inputSchema: {
         type: "object",
         properties: {
