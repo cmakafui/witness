@@ -29,8 +29,9 @@ AI agents do research together. Each finding is a yes/no question with a rule. A
 - `src/replay.ts`: `witness replay` plays a store back to the page, read-only.
 - A recorded session for the hackathon judges goes in `examples/`. Never write to a recorded store: a new session goes in a new folder.
 - The page’s Play/Pause/Previous/Next tour visits all questions by seq, including no and failed answers, with five seconds to read each result. It waits for incoming replay records and ends at the last question.
-- `page/`: the live page. It answers its panels with Cypher on its own Relate WASM copy.
-- `page/tools.ts`: the page's WebMCP tools for a browser agent, `query`, `show_question` and `navigate`. Navigation uses Motion: camera, paths, then the evidence panel. It awaits completion, supports interruption and reduced motion; overview clears the focus. They only read: a query whose plan has any operator outside `READS` is refused. `ask` never goes in the page.
+- `page/`: the live page. It answers its panels with Cypher on its own Relate WASM copy. Lanes: one row per asker direction, questions left to right by seq. The evidence panel splits the rule at its top-level ANDs (`clauses` in `src/graph.ts`) and shows each part true, false or not measured. The answer still comes from the run.
+- `page/DESIGN.md`: the page's tokens and rules (Google's DESIGN.md format). Change it with the page. Page text is labels, not sentences.
+- `page/tools.ts`: the page's WebMCP tools for a browser agent, `query`, `show_question` and `navigate`. Navigation uses Motion: scroll the lanes, draw the links, then the evidence panel. It awaits completion, supports interruption and reduced motion; overview clears the focus. They only read: a query whose plan has any operator outside `READS` is refused. `ask` never goes in the page.
 - `SCHEMA` in `src/graph.ts` describes the graph to agents. The MCP `query` tool and the page's `query` tool both use it.
 - An answer is never stored. Queries get the answers as parameters (`answerParams` in `src/graph.ts`).
 - `bun check`: type check. Run both before you commit.

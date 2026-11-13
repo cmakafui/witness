@@ -9,42 +9,40 @@
   <body>
     <header>
       <h1>Witness</h1>
-      <div id="counts"></div>
-      <div id="link" class="off">connecting</div>
-      <button id="sidebar-toggle" aria-controls="sidebar" aria-expanded="true">Hide sidebar</button>
+      <div id="counts" aria-live="polite"></div>
+      <div id="link" class="off">Connecting</div>
+      <button id="sidebar-toggle" class="button" aria-controls="sidebar" aria-expanded="true">Hide evidence</button>
     </header>
     <main>
       <div id="graph-stage">
-        <div id="graph"></div>
-        <div id="navigation" hidden><div><span id="navigation-summary"></span><span id="walkthrough-status" role="status" aria-live="polite"></span></div><button id="overview">Overview</button></div>
-        <div id="tour" aria-label="Investigation playback">
-          <div class="tour-copy"><span id="tour-progress" role="status" aria-live="polite">Ready to explore</span><div id="tour-title">Walk through the investigation, one question at a time.</div></div>
-          <div class="tour-controls">
-            <button id="tour-previous" aria-label="Previous question" disabled>Previous</button>
-            <button id="tour-play" aria-label="Play investigation" disabled>Play</button>
-            <button id="tour-next" aria-label="Next question" disabled>Next</button>
-          </div>
-          <div class="tour-timeline">
-            <input id="tour-seek" type="range" min="0" max="0" step="1" value="0" aria-label="Investigation timeline" disabled />
-            <div id="tour-marks" aria-hidden="true"></div>
-            <div class="timeline-labels"><span>First question</span><span>Latest question</span></div>
-          </div>
+        <div id="navigation" hidden>
+          <div><span id="navigation-summary"></span><span id="walkthrough-status" role="status" aria-live="polite"></span></div>
+          <button id="overview" class="button">Show all</button>
         </div>
-        <button id="tour-peek" hidden aria-label="Show playback controls">Show playback controls</button>
+        <div id="graph"></div>
+        <div id="tour" aria-label="Investigation playback">
+          <div class="tour-controls">
+            <button id="tour-previous" class="button" aria-label="Previous question" disabled>Previous</button>
+            <button id="tour-play" class="button primary" aria-label="Play investigation" disabled>Play</button>
+            <button id="tour-next" class="button" aria-label="Next question" disabled>Next</button>
+          </div>
+          <div class="tour-copy">
+            <span id="tour-progress" role="status" aria-live="polite">No questions yet</span>
+            <span id="tour-title"></span>
+          </div>
+          <input id="tour-seek" type="range" min="0" max="0" step="1" value="0" aria-label="Investigation timeline" disabled />
+        </div>
       </div>
       <aside id="sidebar">
         <nav>
-          <button data-tab="question" class="on">Question</button>
+          <button data-tab="question" class="on">Evidence</button>
           <button data-tab="query">Query</button>
         </nav>
-        <section id="question"><p class="hint">Click a question in the graph.</p></section>
+        <section id="question"><p class="hint">Select a question.</p></section>
         <section id="query" hidden>
-          <select id="preset"></select>
-          <textarea id="cypher" spellcheck="false" rows="6"></textarea>
-          <div class="row">
-            <button id="run">Run</button>
-            <span class="hint">Runs in this page, on its copy of the graph. $yes, $no, $failed, $running, $pending, $waiting, $current and $selected are set for you.</span>
-          </div>
+          <select id="preset" aria-label="Example queries"></select>
+          <textarea id="cypher" spellcheck="false" rows="6" aria-label="Cypher query"></textarea>
+          <button id="run" class="button primary">Run query</button>
           <div id="rows"></div>
         </section>
       </aside>

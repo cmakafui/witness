@@ -101,6 +101,42 @@ export function ruleProblem(rule: string): string | null {
 /** The statement that evaluates a rule. Each measurement is a parameter: $name, and $results for all of them. */
 export const ruleStatement = (rule: string) => `RETURN (${rule}) AS answer`;
 
+/**
+ * A rule's parts at its top-level ANDs, so the page can show which part held. A rule with a top-level OR or XOR is
+ * one part: its parts alone do not say why it holds.
+ */
+export function clauses(rule: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < rule.length; i++) {
+    const c = rule[i]!;
+    if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"') quote = c;
+    else if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c)) depth--;
+    else if (depth === 0 && /\w/.test(c) && !/\w/.test(rule[i - 1] ?? "")) {
+      const word = /^\w+/.exec(rule.slice(i))![0].toUpperCase();
+      if (word === "OR" || word === "XOR") return [rule.trim()];
+      if (word === "AND") {
+        parts.push(rule.slice(start, i).trim());
+        start = i + 3;
+      }
+      i += word.length - 1;
+    }
+  }
+  parts.push(rule.slice(start).trim());
+  return parts.filter(Boolean);
+}
+
+/** The measurements a rule names, in order, without repeats. */
+export const named = (rule: string) => [...new Set([...rule.matchAll(/\$([A-Za-z_]\w*)/g)].map((m) => m[1]!))];
+
 /** The measurements of a run as parameters: each name gets its last value, and $results gets every measurement. */
 export function measurements(results: Record<string, unknown>[]): Record<string, unknown> {
   return { ...Object.assign({}, ...results), results };

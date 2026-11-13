@@ -15,7 +15,7 @@ export type Page = {
   /** Shows the query in the Query tab, runs it there, and returns its rows or its error. */
   query(cypher: string): { columns: string[]; rows: Record<string, unknown>[] } | Error;
   /** Selects the question in the graph and returns what its panel shows, or null when there is no such question. */
-  question(id: string): (Record<string, unknown> & { status: Status | undefined; saved: { name: string; url: string }[]; used: unknown }) | null;
+  question(id: string): (Record<string, unknown> & { status: Status | undefined; saved: { name: string; url: string }[] }) | null;
 };
 
 export type Tool = {
@@ -74,7 +74,7 @@ export function webTools(page: Page): Tool[] {
         if (typeof id !== "string") throw new Error("Give a question id.");
         const d = page.question(id);
         if (!d) throw new Error(`There is no question ${id}. Call query to list the questions.`);
-        const { status, saved, used: _, ...rest } = d;
+        const { status, saved, ...rest } = d;
         return {
           ...rest,
           answer: status?.state ?? "waiting",
@@ -86,7 +86,7 @@ export function webTools(page: Page): Tool[] {
     },
     {
       name: "navigate",
-      description: "Play an evidence walkthrough: move the camera to a question's neighborhood, highlight its paths, then open its evidence panel. Waits until the sequence finishes. A new navigation or manual interaction cancels the previous sequence. Respects reduced motion. dependencies follows NEEDS toward inputs; dependents follows NEEDS backward toward consumers; disputes follows DISPUTES in both directions. Depth is the number of links to follow, default 1, at most 10. Omit id to start from the selected question. overview cancels the sequence, clears the focus and fits the whole graph. Returns focused questions with current answers and links; cancelled is true if interrupted. Only questions already present in the replay can be visited.",
+      description: "Play an evidence walkthrough: scroll the lanes to a question's neighborhood, highlight its links, then show its evidence panel. Waits until the sequence finishes. A new navigation or manual interaction cancels the previous sequence. Respects reduced motion. dependencies follows NEEDS toward inputs; dependents follows NEEDS backward toward consumers; disputes follows DISPUTES in both directions. Depth is the number of links to follow, default 1, at most 10. Omit id to start from the selected question. overview cancels the sequence, clears the focus and shows every question. Returns focused questions with current answers and links; cancelled is true if interrupted. Only questions already present in the replay can be visited.",
       inputSchema: {
         type: "object",
         properties: {

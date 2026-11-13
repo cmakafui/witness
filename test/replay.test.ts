@@ -86,17 +86,32 @@ test("the page plays the session back into its own Relate copy", async () => {
     expect(await call("show_question", { id: "q-ffffffffffff" })).toEqual({ refused: `There is no question q-ffffffffffff. Call query to list the questions.` });
 
     const neighborhood = (relation: string, id?: string, depth?: number) => call("navigate", { relation, ...(id ? { id } : {}), ...(depth === undefined ? {} : { depth }) });
-    // Observe the actual Motion sequence: the panel stays closed until the camera and paths finish.
+    // Keep an open panel and the lanes at fixed widths throughout navigation.
     await view.evaluate(`(() => { window.walkStages = []; new MutationObserver(() => {
       window.walkStages.push([document.querySelector('main').dataset.walkthroughStage, document.getElementById('sidebar-toggle').getAttribute('aria-expanded')]);
-    }).observe(document.querySelector('main'), {attributes: true, attributeFilter: ['data-walkthrough-stage']}); })()`);
+    }).observe(document.querySelector('main'), {attributes: true, attributeFilter: ['data-walkthrough-stage']});
+      window.walkWidths = []; window.sampleWalk = true;
+      const sample = () => {
+        window.walkWidths.push([document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]);
+        if (window.sampleWalk) requestAnimationFrame(sample);
+      }; sample();
+    })()`);
     const dependencies = await neighborhood("dependencies", ids.b, 2) as { questions: { id: string; text: string; answer: string }[]; links: object[] };
-    expect(await view.evaluate("window.walkStages")).toEqual([["camera", "false"], ["paths", "false"], ["evidence", "true"], ["complete", "true"]]);
+    expect(await view.evaluate("window.walkStages")).toEqual([["camera", "true"], ["paths", "true"], ["evidence", "true"], ["complete", "true"]]);
+    expect(await view.evaluate("(() => { window.sampleWalk = false; return new Set(window.walkWidths.map(JSON.stringify)).size; })()")).toBe(1);
+    expect(await view.evaluate("window.walkWidths[0][1]")).toBe(440);
     expect(await view.evaluate("document.querySelector('main').classList.contains('walking')")).toBe(false);
     expect(dependencies.questions).toEqual([{ id: ids.b!, text: "Is the total above 100?", answer: "no" }, { id: ids.a!, text: "Does data.txt hold numbers?", answer: "yes" }]);
     expect(dependencies.links).toEqual([{ from: ids.b, to: ids.a, type: "NEEDS" }]);
-    expect(await view.evaluate("document.getElementById('navigation-summary').textContent")).toBe("Dependencies · 2 questions · 1 link · depth 2");
+    expect(await view.evaluate("document.getElementById('navigation-summary').textContent")).toBe("Dependencies: 2 questions, 1 link, depth 2");
     expect(await view.evaluate("document.getElementById('question').hidden")).toBe(false);
+
+    // A walkthrough opens a hidden panel again, at its full width, and leaves the lanes alone.
+    const lanesWidth = await view.evaluate("document.getElementById('graph').clientWidth");
+    await view.evaluate("document.getElementById('sidebar-toggle').click()");
+    await neighborhood("dependencies", ids.b, 1);
+    expect(await view.evaluate("[document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]")).toEqual([lanesWidth, 440]);
+    expect(await view.evaluate("document.getElementById('sidebar-toggle').getAttribute('aria-expanded')")).toBe("true");
 
     // An interrupt resolves the old tool call, and cannot reopen a stale panel later.
     expect(await view.evaluate(`(async () => {
@@ -105,13 +120,13 @@ test("the page plays the session back into its own Relate copy", async () => {
       await navigate.execute({relation:'overview'});
       return JSON.parse(await first);
     })()`)).toEqual({ id: ids.a, cancelled: true });
-    expect(await view.evaluate("document.getElementById('sidebar-toggle').getAttribute('aria-expanded')")).toBe("false");
+    expect(await view.evaluate("document.getElementById('sidebar-toggle').getAttribute('aria-expanded')")).toBe("true");
 
     // Pause freezes the active Motion stage, then resumes that same question.
     await view.evaluate("document.getElementById('tour-play').click()");
     await Bun.sleep(100);
     await view.evaluate("document.getElementById('tour-play').click()");
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Paused · 1 / 4");
+    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Paused at 1 of 4");
     await Bun.sleep(1200);
     expect(await view.evaluate("document.querySelector('main').dataset.walkthroughStage")).toBe("camera");
     await view.evaluate("document.getElementById('tour-play').click()");
@@ -147,7 +162,7 @@ test("the page plays the session back into its own Relate copy", async () => {
     await view.evaluate("document.getElementById('tour-next').click()");
     await Bun.sleep(50);
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the total above 100?");
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Paused · 2 / 4");
+    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Paused at 2 of 4");
     await view.evaluate("document.getElementById('tour-previous').click()");
     await Bun.sleep(50);
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
@@ -156,7 +171,7 @@ test("the page plays the session back into its own Relate copy", async () => {
       const seek = document.getElementById('tour-seek');
       seek.value = '2'; seek.dispatchEvent(new Event('input'));
     })()`);
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Seek · 3 / 4");
+    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Go to 3 of 4");
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
     await view.evaluate("document.getElementById('tour-seek').dispatchEvent(new Event('change'))");
     await Bun.sleep(50);
@@ -165,17 +180,8 @@ test("the page plays the session back into its own Relate copy", async () => {
     await view.evaluate(`(() => {
       const seek = document.getElementById('tour-seek');
       seek.value = '0'; seek.dispatchEvent(new Event('input')); seek.dispatchEvent(new Event('change'));
-      const timeout = window.setTimeout.bind(window);
-      window.setTimeout = (fn, ms, ...args) => timeout(fn, ms === 2500 ? 20 : ms, ...args);
     })()`);
     await Bun.sleep(50);
-    await view.evaluate("document.getElementById('tour-play').click()");
-    await Bun.sleep(100);
-    expect(await view.evaluate("document.getElementById('tour').classList.contains('auto-hidden')")).toBe(true);
-    expect(await view.evaluate("document.getElementById('tour-peek').hidden")).toBe(false);
-    await view.evaluate("document.getElementById('tour-peek').click()");
-    expect(await view.evaluate("document.getElementById('tour').classList.contains('auto-hidden')")).toBe(false);
-    await view.evaluate("document.getElementById('tour-play').click()");
     await view.evaluate(`(() => {
       const timeout = window.setTimeout.bind(window);
       window.setTimeout = (fn, ms, ...args) => timeout(fn, ms >= 4900 && ms <= 5000 ? 30 : ms, ...args);
@@ -187,16 +193,16 @@ test("the page plays the session back into its own Relate copy", async () => {
       document.getElementById('tour-play').click();
     })()`);
     for (let i = 0; i < 100; i++) {
-      if (await view.evaluate("document.getElementById('tour-progress').textContent === 'Finished · 4 / 4'")) break;
+      if (await view.evaluate("document.getElementById('tour-progress').textContent === 'Finished 4 of 4'")) break;
       await Bun.sleep(50);
     }
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Finished · 4 / 4");
-    expect(await view.evaluate("window.tourStops.includes('Playing · 3 / 4')")).toBe(true);
+    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Finished 4 of 4");
+    expect(await view.evaluate("window.tourStops.includes('Playing 3 of 4')")).toBe(true);
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the saved total above 100?");
     expect(await view.evaluate("[document.getElementById('tour-next').disabled,document.getElementById('tour-play').textContent]")).toEqual([true, "Replay"]);
     await view.evaluate("document.getElementById('tour-play').click()");
     await view.evaluate("document.getElementById('tour-play').click()");
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Paused · 1 / 4");
+    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Paused at 1 of 4");
   } finally {
     server.stop(true);
   }

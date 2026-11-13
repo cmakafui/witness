@@ -8,7 +8,7 @@ Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 â€
 
 `witness replay DIR` plays a recorded session from its store alone. It needs only [Bun](https://bun.com) 1.4 or later. It needs no AI agent, no API key and no uv.
 
-In the page, each question appears when it was asked. It takes the color of its answer. Click a question to see its rule, probe, inputs, measurements, plots and the questions it rests on. The Query tab runs Cypher on the page's own copy of the graph:
+In the page, each row is one direction of work, and questions appear left to right in the order they were asked. Each takes the shape and color of its answer. Click a question to see each part of its rule next to the measurement that decided it, then its plots, inputs and the questions it reads from. The Query tab runs Cypher on the page's own copy of the graph:
 
 ```cypher
 // Which yes answers survived every attempt to break them?
