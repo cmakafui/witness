@@ -27,6 +27,8 @@ experiments:      7 of 7
 ACCEPTED
 ```
 
+Press **Play** below the graph for a guided tour of every question, in asking order, ending with the judge’s verdict. Each stop moves the camera, highlights dependencies or challenges, then opens the evidence. It leaves five seconds to read before advancing. **Pause** freezes the current motion or reading time; **Previous** and **Next** let you move manually. **Replay** starts the tour again. Scrub the question timeline to preview a stop, then release to visit it; seeking pauses playback. Outcome colors mark the questions along the track. The controls tuck away during playback and return on pointer movement, keyboard focus, or pause; a small button also brings them back.
+
 In the page, each question appears when it was asked and takes the color of its answer. Click one for its rule, inputs, results, plots and the questions it rests on. Select the judge's question (`q-fd9cba107e99`) and try these in the Query tab:
 
 ```cypher
@@ -37,7 +39,7 @@ MATCH (q:Question {id: $selected})-[:NEEDS*0..]->(u:Question) RETURN DISTINCT u.
 MATCH (d:Question)-[:DISPUTES]->(c:Question) RETURN c.text AS claim, d.text AS challenge, d.id IN $yes AS held
 ```
 
-In Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) (turn on `chrome://flags/#enable-webmcp-testing`), the page gives the browser's agent two tools: `query` and `show_question`. You can ask it in plain words, for example "what does the judge's verdict rest on?". It answers with Cypher on the page's own copy and shows you the query and the questions it found. Both tools only read, and they mark what they return as untrusted. An agent in the browser can never ask a question, because asking runs code on your machine.
+In Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) (turn on `chrome://flags/#enable-webmcp-testing`), the page gives the browser's agent three tools: `query`, `show_question` and `navigate`. You can ask it in plain words, for example "what does the judge's verdict rest on?". It answers with Cypher on the page's own copy and shows you the query and the questions it found. `navigate` follows dependencies, dependents or disputes to a chosen depth, plays a Motion sequence: the camera moves, the paths highlight, then the evidence panel opens. A new navigation or manual interaction interrupts it; reduced motion shows the result immediately. Use `overview` to see the whole graph again. These tools only read, and they mark what they return as untrusted. An agent in the browser can never ask a question, because asking runs code on your machine.
 
 ## Use case
 

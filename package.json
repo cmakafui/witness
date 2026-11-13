@@ -32,6 +32,7 @@
     "@relate/relate": "1.0.0",
     "@relate/relate-wasm": "1.0.0",
     "force-graph": "1.52.0",
+    "motion": "^14.12.0",
     "zod": "4.6.7"
   },
   "devDependencies": {

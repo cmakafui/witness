@@ -28,8 +28,9 @@ AI agents do research together. Each finding is a yes/no question that a uv prob
 - `src/connect.ts`: finds or starts a workspace's hub, and bridges stdio MCP to it. `src/setup.ts`: `witness setup`.
 - `src/replay.ts`: `witness replay` plays a store back to the page, read-only. `bun run demo` replays `examples/causal-hunt`.
 - `examples/causal-hunt/` is a recorded session for the hackathon judges. Never write to its store: a new session goes in a new folder.
+- The page’s Play/Pause/Previous/Next tour visits all questions by seq, including no and failed answers, with five seconds to read each result. It waits for incoming replay records and ends at the last question.
 - `page/`: the live page. It answers its panels with Cypher on its own Relate WASM copy.
-- `page/tools.ts`: the page's WebMCP tools for a browser agent, `query` and `show_question`. They only read: a query whose plan has any operator outside `READS` is refused. `ask` never goes in the page.
+- `page/tools.ts`: the page's WebMCP tools for a browser agent, `query`, `show_question` and `navigate`. Navigation uses Motion: camera, paths, then the evidence panel. It awaits completion, supports interruption and reduced motion; overview clears the focus. They only read: a query whose plan has any operator outside `READS` is refused. `ask` never goes in the page.
 - `SCHEMA` in `src/graph.ts` describes the graph to agents. The MCP `query` tool and the page's `query` tool both use it.
 - An answer is never stored. Queries get the answers as parameters (`answerParams` in `src/graph.ts`).
 - `bun check`: type check. Run both before you commit.

@@ -11,10 +11,28 @@
       <h1>Witness</h1>
       <div id="counts"></div>
       <div id="link" class="off">connecting</div>
+      <button id="sidebar-toggle" aria-controls="sidebar" aria-expanded="true">Hide sidebar</button>
     </header>
     <main>
-      <div id="graph"></div>
-      <aside>
+      <div id="graph-stage">
+        <div id="graph"></div>
+        <div id="navigation" hidden><div><span id="navigation-summary"></span><span id="walkthrough-status" role="status" aria-live="polite"></span></div><button id="overview">Overview</button></div>
+        <div id="tour" aria-label="Investigation playback">
+          <div class="tour-copy"><span id="tour-progress" role="status" aria-live="polite">Ready to explore</span><div id="tour-title">Walk through the investigation, one question at a time.</div></div>
+          <div class="tour-controls">
+            <button id="tour-previous" aria-label="Previous question" disabled>Previous</button>
+            <button id="tour-play" aria-label="Play investigation" disabled>Play</button>
+            <button id="tour-next" aria-label="Next question" disabled>Next</button>
+          </div>
+          <div class="tour-timeline">
+            <input id="tour-seek" type="range" min="0" max="0" step="1" value="0" aria-label="Investigation timeline" disabled />
+            <div id="tour-marks" aria-hidden="true"></div>
+            <div class="timeline-labels"><span>First question</span><span>Latest question</span></div>
+          </div>
+        </div>
+        <button id="tour-peek" hidden aria-label="Show playback controls">Show playback controls</button>
+      </div>
+      <aside id="sidebar">
         <nav>
           <button data-tab="question" class="on">Question</button>
           <button data-tab="query">Query</button>

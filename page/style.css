@@ -57,14 +57,51 @@ h1 { font-size: 16px; margin: 0; letter-spacing: 0.02em; }
 #link { margin-left: auto; color: var(--muted); font-size: 12px; }
 #link.on { color: var(--yes); }
 
-main { display: grid; grid-template-columns: 1fr 420px; min-height: 0; }
+#sidebar-toggle { color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+#sidebar-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 420px; min-height: 0; overflow: hidden; transition: grid-template-columns 240ms ease; }
+main.sidebar-collapsed { grid-template-columns: minmax(0, 1fr) 0px; }
+main.sidebar-collapsed aside { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 120ms ease, visibility 0s 240ms; }
+@media (prefers-reduced-motion: reduce) {
+  main, main aside, main.sidebar-collapsed aside { transition: none; }
+}
 #graph { min-width: 0; min-height: 0; overflow: hidden; }
+#graph-stage { position: relative; min-width: 0; min-height: 0; }
+#graph { width: 100%; height: 100%; }
+#navigation { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; font-size: 12px; }
+#navigation[hidden] { display: none; }
+#walkthrough-status { display: block; color: var(--muted); margin-top: 3px; }
+#walkthrough-status:empty { display: none; }
+#tour { position: absolute; bottom: 12px; left: 12px; right: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; transition: opacity 180ms ease, transform 180ms ease; }
+#tour.auto-hidden { opacity: 0; transform: translateY(12px); pointer-events: none; visibility: hidden; transition: opacity 180ms ease, transform 180ms ease, visibility 0s 180ms; }
+#tour-peek { position: absolute; bottom: 12px; left: 12px; border-radius: 20px; border: 1px solid var(--line); background: var(--panel); color: var(--accent); padding: 7px 12px; font: inherit; font-size: 12px; cursor: pointer; }
+.tour-timeline { flex-basis: 100%; }
+#tour-seek { width: 100%; margin: 4px 0 8px; accent-color: var(--accent); cursor: pointer; }
+#tour-seek:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+#tour-marks { display: flex; gap: 3px; }
+#tour-marks span { height: 4px; flex: 1; border-radius: 2px; background: var(--c); opacity: 0.55; }
+#tour-marks span.current { opacity: 1; outline: 1px solid var(--ink); outline-offset: 2px; }
+.timeline-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 6px; }
+@media (prefers-reduced-motion: reduce) { #tour, #tour.auto-hidden { transition: none; } }
+.tour-copy { flex: 1 1 220px; min-width: 0; }
+#tour-progress { color: var(--accent); font-size: 12px; }
+#tour-title { font-size: 12px; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tour-controls { display: flex; gap: 6px; }
+.tour-controls button { color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.tour-controls #tour-play { background: var(--accent); color: var(--panel); border-color: var(--accent); min-width: 64px; }
+.tour-controls button:disabled { opacity: 0.4; cursor: default; }
+.tour-controls button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main.walking, main.walking aside { transition: none; }
+#overview { color: var(--accent); background: none; border: 0; cursor: pointer; font: inherit; }
 aside {
   border-left: 1px solid var(--line);
   background: var(--panel);
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  transition: opacity 180ms ease;
 }
 nav { display: flex; border-bottom: 1px solid var(--line); }
 nav button {
