@@ -1,1 +1,0 @@
-{"do": {"x1": 2}, "rows": 10000, "reason": "Distinguish ancestor from sink; predicted gap >0.6", "candidate_gap": 1.0255593627391075}

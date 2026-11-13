@@ -1,9 +1,0 @@
-warning: No `requires-python` value found in the workspace. Defaulting to `>=3.13`.
-Resolved 1 package in 8ms
-warning: No `requires-python` value found in the workspace. Defaulting to `>=3.13`.
-Installed 1 package in 16ms
-Traceback (most recent call last):
-  File "/private/var/folders/rt/szjj30g56jx2b_l6q2lv0h380000gn/T/witness-run-obqGmO/work/probe.py", line 18, in <module>
-    delta=np.abs(np.array(models[0]['predictions'])-np.array(models[1]['predictions']));maxdiff=float(delta.max());idx=np.unravel_index(np.argmax(delta),delta.shape)
-                                                             ~~~~~~^^^
-IndexError: list index out of range

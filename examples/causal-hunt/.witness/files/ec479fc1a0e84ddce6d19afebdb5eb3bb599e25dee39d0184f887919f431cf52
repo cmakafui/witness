@@ -1,4 +1,0 @@
-Resolved 2 packages in 5ms
-Installed 2 packages in 26ms
-WITNESS_RESULT {"graph_matches": true, "chosen_edges": [[1, 2], [2, 3], [1, 4], [4, 5], [1, 0], [2, 0], [3, 0], [5, 0]], "bic_difference": 0.0, "x1_block_best": [{"target": 0, "parents": [1, 2, 3, 5], "bic": 45001.02070952148, "success": true}, {"target": 0, "parents": [1, 2, 3, 4, 5], "bic": 45009.11109256363, "success": true}, {"target": 0, "parents": [2, 3, 4, 5], "bic": 47467.0190028955, "success": true}], "four_independent_node_choices": [{"target": 2, "parents": [1], "bic": -3191.9351261424185}, {"target": 3, "parents": [2], "bic": -3270.911234020789}, {"target": 4, "parents": [1], "bic": -3201.991791605189}, {"target": 5, "parents": [4], "bic": -3061.6846484483854}], "number_DAGs": 32768, "number_fitted_blocks": 62}
-WITNESS_ANSWER yes

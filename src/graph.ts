@@ -1,28 +1,26 @@
 // The records of the graph, and the Cypher that writes them. The hub runs these statements on its store (bun:ffi),
 // and the web page runs the same statements on its copy (WASM), so the two graphs stay the same.
 // Every statement is a MERGE by id: writing a record twice is the same as writing it once.
+//
+// Two records hold everything. A Question is what was asked: its text, its rule, its probe and its inputs. A Run is
+// one execution of the probe, written once, when it ends: what it measured, what it read and saved, and the answer
+// the rule gave on its measurements. The answer of a question now is never stored: it is the answer of the run on the
+// question's inputs as they are now.
 
-export type Label = "Question" | "Run" | "Answer" | "File" | "Package";
-export type RelType = "PROBE" | "NEEDS" | "DISPUTES" | "ANSWERS" | "READ" | "SAVED" | "USED" | "OF" | "LOG";
+export type Label = "Question" | "Run" | "File";
+export type RelType = "NEEDS" | "DISPUTES" | "OF" | "READ" | "SAVED";
 
 export type GNode = { label: Label; id: string; props: Record<string, string | number | string[] | null> };
-export type GRel = { type: RelType; from: string; to: string; role?: string; name?: string };
+export type GRel = { type: RelType; from: string; to: string; name?: string };
 
 /** The label at each end of each relationship type. schema.cypher declares the same. */
 export const ENDS: Record<RelType, [Label, Label]> = {
-  PROBE: ["Question", "File"],
   NEEDS: ["Question", "Question"],
   DISPUTES: ["Question", "Question"],
-  ANSWERS: ["Run", "Question"],
+  OF: ["Run", "Question"],
   READ: ["Run", "File"],
   SAVED: ["Run", "File"],
-  USED: ["Run", "Package"],
-  OF: ["Answer", "Run"],
-  LOG: ["Answer", "File"],
 };
-
-/** The properties that make a relationship different from another of the same type between the same nodes. */
-const KEY: Partial<Record<RelType, string>> = { READ: " {role: x.role, name: x.name}", SAVED: " {name: x.name}" };
 
 export type Statement = { cypher: string; params: { rows: unknown[] } };
 
@@ -36,9 +34,10 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
     });
   for (const type of new Set(rels.map((r) => r.type))) {
     const [a, b] = ENDS[type];
+    const named = type === "READ" || type === "SAVED";
     out.push({
-      cypher: `UNWIND $rows AS x MATCH (a:${a} {id: x.from}), (b:${b} {id: x.to}) MERGE (a)-[:${type}${KEY[type] ?? ""}]->(b)`,
-      params: { rows: rels.filter((r) => r.type === type).map(({ from, to, role, name }) => ({ from, to, role: role ?? null, name: name ?? null })) },
+      cypher: `UNWIND $rows AS x MATCH (a:${a} {id: x.from}), (b:${b} {id: x.to}) MERGE (a)-[:${type}${named ? " {name: x.name}" : ""}]->(b)`,
+      params: { rows: rels.filter((r) => r.type === type).map(({ from, to, name }) => ({ from, to, name: name ?? null })) },
     });
   }
   return out;
@@ -46,15 +45,14 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
 
 /** The graph, as agents read it: in the MCP query tool and in the page's WebMCP query tool. */
 export const SCHEMA = `The graph:
-(:Question {id, text, rule, inputs, asker, seq})-[:PROBE]->(:File {id, bytes})
+(:Question {id, text, rule, probe, inputs, asker, seq})
 (:Question)-[:NEEDS]->(:Question)      reads a file the other question saved
-(:Question)-[:DISPUTES]->(:Question)   tries to show the other answer is wrong
-(:Run {id, key, seq})-[:ANSWERS]->(:Question)
-(:Run)-[:READ {role, name}]->(:File)   role: probe, input or lock
-(:Run)-[:SAVED {name}]->(:File)
-(:Run)-[:USED]->(:Package {id, name, version})
-(:Answer {id, value, reason, results, seq})-[:OF]->(:Run)   value: yes, no or failed
-Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. An Answer node is the answer of one run, not always the current answer.`;
+(:Question)-[:DISPUTES]->(:Question)   a yes means the other question's answer is wrong
+(:Run {id, key, seq, answer, reason, results, packages})-[:OF]->(:Question)
+(:Run)-[:READ {name}]->(:File {id, bytes})    the inputs the run read; a File's id is its SHA-256
+(:Run)-[:SAVED {name}]->(:File)               the files the run saved for other questions
+rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is the measurements as JSON. packages lists name==version.
+Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $refuted lists the questions that a question answered yes disputes. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now.`;
 
 /** A question's answer as the hub works it out. It is never stored: it comes from the runs and the inputs now. */
 export type State = "yes" | "no" | "failed" | "running" | "pending" | "waiting";
@@ -63,23 +61,47 @@ export type Status = {
   id: string;
   state: State;
   run: string | null; // the run that gives the answer, when there is one
-  was: "yes" | "no" | null; // when pending: the answer on the inputs before
+  was: "yes" | "no" | null; // when pending or running: the answer on the inputs before
   reason: string | null; // why it failed, or what it waits for
 };
 
 /**
  * The parameters every query gets, so a query can use the answers: $yes, $no, $failed, $running, $pending and
- * $waiting are lists of question ids, and $current is the list of runs that give the current answers.
+ * $waiting are lists of question ids, $refuted lists the questions that a yes disputes, and $current is the list of
+ * runs that give the current answers. disputes holds each DISPUTES link as [from, to].
  */
-export function answerParams(statuses: Status[]): Record<string, string[]> {
+export function answerParams(statuses: Status[], disputes: [string, string][]): Record<State | "refuted" | "current", string[]> {
   const ids = (s: State) => statuses.filter((x) => x.state === s).map((x) => x.id);
+  const yes = new Set(ids("yes"));
   return {
-    yes: ids("yes"),
+    yes: [...yes],
     no: ids("no"),
     failed: ids("failed"),
     running: ids("running"),
     pending: ids("pending"),
     waiting: ids("waiting"),
+    refuted: [...new Set(disputes.filter(([from]) => yes.has(from)).map(([, to]) => to))],
     current: statuses.flatMap((x) => (x.run && (x.state === "yes" || x.state === "no" || x.state === "failed") ? [x.run] : [])),
   };
+}
+
+/** Words that make a rule more than an expression. A rule only computes a value from the measurements. */
+const NOT_IN_A_RULE = /\b(MATCH|CREATE|MERGE|SET|DELETE|DETACH|REMOVE|CALL|LOAD|UNION|FOREACH|USE|WITH|RETURN|UNWIND)\b/i;
+
+/** Why a rule cannot be a rule, or null when it can. The engine checks its syntax. */
+export function ruleProblem(rule: string): string | null {
+  if (!rule.trim()) return "The question has no rule. Write it before anything runs: a Cypher expression over the measurements, such as $p < 0.01 AND $gain >= 0.1.";
+  if (rule.includes(";")) return "A rule is one expression, without ;.";
+  const word = NOT_IN_A_RULE.exec(rule.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, "''").replace(/\$\w+/g, "$m"));
+  if (word) return `A rule is one expression over the measurements, and ${word[1]} is not part of one. Write it like $p < 0.01 AND $gain >= 0.1.`;
+  if (!/\$[A-Za-z_]\w*/.test(rule)) return "The rule names no measurement. Name each one with $: $total > 10 is yes when the run printed a total above 10.";
+  return null;
+}
+
+/** The statement that evaluates a rule. Each measurement is a parameter: $name, and $results for all of them. */
+export const ruleStatement = (rule: string) => `RETURN (${rule}) AS answer`;
+
+/** The measurements of a run as parameters: each name gets its last value, and $results gets every measurement. */
+export function measurements(results: Record<string, unknown>[]): Record<string, unknown> {
+  return { ...Object.assign({}, ...results), results };
 }

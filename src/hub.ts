@@ -4,16 +4,31 @@
 // An answer is never stored. For each question the hub resolves its inputs now (a workspace file by its hash; an
 // output of another question by the file that question's current run saved), and hashes them with the probe into a
 // key. The answer is the answer of the run on that key. No run on that key: the question is pending, and it runs.
-// A question that failed on a key never runs again on that key.
+// A key runs once: a question that failed on a key never runs again on that key.
+//
+// A probe only measures. When a run ends, Relate evaluates the question's rule, a Cypher expression, on the run's
+// measurements: true is yes, false is no, and anything else is failed. Then the hub writes the run, once.
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, normalize, sep } from "node:path";
-import { answerParams, type GNode, type GRel, type State, type Status, statements } from "./graph.ts";
-import { isFile, runProbe, type ProbeOutcome } from "./probe.ts";
-import { type Param, Relate, type Row } from "./relate.ts";
+import { answerParams, type GNode, type GRel, measurements, ruleProblem, ruleStatement, type State, type Status, statements } from "./graph.ts";
+import { isFile, runProbe, type ProbeOutcome, RESULT } from "./probe.ts";
+import { type Param, Relate, RelateError, type Row } from "./relate.ts";
 import { applySchema } from "./schema.ts";
 
 /** A request the hub refuses. The message says what is wrong and how to fix it. */
 export class Refusal extends Error {}
+
+/** The store format this hub reads and writes. A store of another format is refused, never changed. */
+const FORMAT = "witness 2: Question and Run, rules in Cypher";
+
+/** Why this Witness cannot open the workspace's store, or null when it can (or there is no store yet). */
+export function storeProblem(root: string): string | null {
+  const dir = join(root, ".witness");
+  if (!existsSync(join(dir, "graph"))) return null;
+  const format = join(dir, "format");
+  if (existsSync(format) && readFileSync(format, "utf8").trim() === FORMAT) return null;
+  return `${dir} was made by an older Witness, and this one cannot read it. Move it aside to start a new store: mv ${dir} ${dir}-old`;
+}
 
 const sha256 = (data: string | Uint8Array) => new Bun.CryptoHasher("sha256").update(data).digest("hex");
 const contentId = (prefix: string, ...parts: string[]) => `${prefix}-${sha256(parts.join("\0")).slice(0, 12)}`;
@@ -36,8 +51,8 @@ export type Event =
   | { type: "states"; states: Status[] }
   | { type: "result"; question: string; run: string; data: unknown };
 
-type Question = { id: string; text: string; rule: string; inputs: string[]; timeout: number; seq: number; probe: string };
-type Run = { id: string; question: string; key: string; seq: number; answer: "yes" | "no" | "failed" | null; reason: string | null };
+type Question = { id: string; rule: string; probe: string; inputs: string[]; timeout: number };
+type Run = { id: string; question: string; key: string; answer: "yes" | "no" | "failed"; reason: string | null };
 type Input = { name: string; file: string; path: string };
 type Resolved = { status: Status; question: Question; key: string | null; inputs: Input[] };
 
@@ -48,6 +63,8 @@ export class Hub {
   private wakers = new Set<() => void>();
   private timer: Timer | undefined;
   private shown = "";
+  /** An empty store in memory, where rules are evaluated. A rule never sees the graph. */
+  private judge = Relate.open(":memory:");
 
   private constructor(
     readonly root: string,
@@ -58,15 +75,23 @@ export class Hub {
     private jobs: number,
   ) {}
 
-  /** Opens the workspace's store, in root/.witness, and creates it the first time. */
+  /**
+   * Opens the workspace's store, in root/.witness, and creates it the first time. A new store uses Relate's json
+   * codec, so the graph is one readable graph.json that git can diff.
+   */
   static async open(root: string, { pollMs = 1000, jobs = 4 } = {}): Promise<Hub> {
     const dir = join(root, ".witness");
     const graphDir = join(dir, "graph");
     const filesDir = join(dir, "files");
-    mkdirSync(filesDir, { recursive: true });
+    const problem = storeProblem(root);
+    if (problem) throw new Error(problem);
     const fresh = !existsSync(graphDir);
-    const db = Relate.open(graphDir);
-    if (fresh) await applySchema(db);
+    mkdirSync(filesDir, { recursive: true });
+    const db = Relate.open(graphDir, { codec: "json" });
+    if (fresh) {
+      await applySchema(db);
+      writeFileSync(join(dir, "format"), `${FORMAT}\n`);
+    }
     const [row] = db.query("MATCH (n) WHERE n.seq IS NOT NULL RETURN max(n.seq) AS seq");
     const hub = new Hub(root, db, graphDir, filesDir, Number(row?.seq ?? 0), jobs);
     if (pollMs > 0) {
@@ -79,6 +104,7 @@ export class Hub {
   close() {
     clearInterval(this.timer);
     this.db.close();
+    this.judge.close();
   }
 
   /** Calls fn with every change: new records, new states, and results as probes print them. */
@@ -111,18 +137,18 @@ export class Hub {
 
   private questions(): Question[] {
     return this.db.query(
-      `MATCH (q:Question)-[:PROBE]->(f:File)
-       RETURN q.id AS id, q.text AS text, q.rule AS rule, q.inputs AS inputs, q.timeout AS timeout, q.seq AS seq, f.id AS probe
-       ORDER BY q.seq`,
+      "MATCH (q:Question) RETURN q.id AS id, q.rule AS rule, q.probe AS probe, q.inputs AS inputs, q.timeout AS timeout ORDER BY q.seq",
     ) as Question[];
   }
 
   private runs(): Run[] {
     return this.db.query(
-      `MATCH (r:Run)-[:ANSWERS]->(q:Question) OPTIONAL MATCH (a:Answer)-[:OF]->(r)
-       RETURN r.id AS id, q.id AS question, r.key AS key, r.seq AS seq, a.value AS answer, a.reason AS reason
-       ORDER BY r.seq`,
+      "MATCH (r:Run)-[:OF]->(q:Question) RETURN r.id AS id, q.id AS question, r.key AS key, r.answer AS answer, r.reason AS reason ORDER BY r.seq",
     ) as Run[];
+  }
+
+  private disputes(): [string, string][] {
+    return this.db.query("MATCH (a:Question)-[:DISPUTES]->(b:Question) RETURN a.id AS a, b.id AS b").map((r) => [String(r.a), String(r.b)]);
   }
 
   private saved(run: string): { name: string; file: string }[] {
@@ -180,11 +206,11 @@ export class Hub {
       }
       const key = sha256(JSON.stringify([q.probe, inputs.map((i) => [i.name, i.file])]));
       const mine = runs.get(q.id) ?? [];
-      const running = this.running.get(q.id);
       const before = mine.findLast((r) => r.answer === "yes" || r.answer === "no")?.answer as "yes" | "no" | undefined;
+      const running = this.running.get(q.id);
       if (running) return done({ question: q, key, inputs, status: status("running", { run: running, was: before ?? null }) });
-      const onKey = mine.findLast((r) => r.key === key && r.answer !== null);
-      if (onKey) return done({ question: q, key, inputs, status: status(onKey.answer!, { run: onKey.id, reason: onKey.reason }) });
+      const onKey = mine.findLast((r) => r.key === key);
+      if (onKey) return done({ question: q, key, inputs, status: status(onKey.answer, { run: onKey.id, reason: onKey.reason }) });
       return done({ question: q, key, inputs, status: status("pending", { was: before ?? null }) });
     };
     return questions.map(compute);
@@ -218,28 +244,19 @@ export class Hub {
   }
 
   private start({ question: q, key, inputs }: Resolved) {
-    const seq = ++this.seq;
-    const run = contentId("r", q.id, key!, String(seq));
-    const files = inputs.filter((i) => !OUTPUT_REF.test(i.name)).map((i) => this.keep(readFileSync(i.path)));
-    this.write(
-      [{ label: "Run", id: run, props: { key: key!, seq } }, ...files],
-      [
-        { type: "ANSWERS", from: run, to: q.id },
-        { type: "READ", from: run, to: q.probe, role: "probe", name: "probe.py" },
-        ...inputs.map((i) => ({ type: "READ" as const, from: run, to: i.file, role: "input", name: i.name })),
-      ],
-    );
+    // A key runs once, so the question and the key name the run.
+    const run = contentId("r", q.id, key!);
+    // Keep the inputs as the run reads them: a file may change while the probe runs.
+    const read = inputs.map((i) => ({ name: i.name, node: this.keep(readFileSync(i.path)) }));
     this.running.set(q.id, run);
-    const probe = readFileSync(join(this.filesDir, q.probe), "utf8");
     runProbe({
-      probe,
+      probe: q.probe,
       inputs: inputs.map((i) => ({ name: i.name, path: i.path })),
       timeoutS: q.timeout,
       onResult: (data) => this.emit({ type: "result", question: q.id, run, data }),
     })
       .catch((e): ProbeOutcome => ({
-        answer: "failed",
-        reason: `the hub could not run the probe: ${(e as Error).message}`,
+        failed: `the hub could not run the probe: ${(e as Error).message}`,
         results: [],
         outputs: [],
         lock: null,
@@ -247,7 +264,7 @@ export class Hub {
         log: String((e as Error).stack ?? e),
         cleanup: () => {},
       }))
-      .then((outcome) => this.finish(run, outcome))
+      .then((outcome) => this.finish(q, run, key!, read, outcome))
       .catch((e) => console.error(`witness: could not record run ${run} of ${q.id}:`, e))
       .finally(() => {
         this.running.delete(q.id);
@@ -258,28 +275,53 @@ export class Hub {
       });
   }
 
-  private finish(run: string, o: ProbeOutcome) {
+  /** The rule's answer on a run's measurements. Only true is yes and only false is no. */
+  private decide(rule: string, results: Record<string, unknown>[]): { answer: "yes" | "no" | "failed"; reason: string | null } {
+    let rows: Row[];
     try {
-      const seq = ++this.seq;
-      const answer = `a-${run.slice(2)}`;
+      rows = this.judge.query(ruleStatement(rule), measurements(results) as Record<string, Param>);
+    } catch (e) {
+      const message = (e as Error).message;
+      const missing = /ParameterMissing: Expected parameter\(s\): (.+)$/.exec(message);
+      if (missing) return { answer: "failed", reason: `the run did not measure ${missing[1]}, which the rule needs` };
+      return { answer: "failed", reason: `the rule could not be evaluated on the measurements: ${message}` };
+    }
+    const value = rows[0]?.answer;
+    if (value === true) return { answer: "yes", reason: null };
+    if (value === false) return { answer: "no", reason: null };
+    if (value === null || value === undefined) return { answer: "failed", reason: "the rule's value is null: a measurement it needs is null" };
+    return { answer: "failed", reason: `the rule's value is ${JSON.stringify(value)}, not true or false` };
+  }
+
+  private finish(q: Question, run: string, key: string, read: { name: string; node: GNode }[], o: ProbeOutcome) {
+    try {
+      const { answer, reason } = o.failed === null ? this.decide(q.rule, o.results) : { answer: "failed" as const, reason: o.failed };
       const outputs = o.outputs.map((f) => ({ name: f.name, node: this.keep(readFileSync(f.path)) }));
       const lock = o.lock === null ? null : this.keep(Buffer.from(o.lock));
       const log = this.keep(Buffer.from(o.log));
-      const packages: GNode[] = o.packages.map((p) => ({ label: "Package", id: `${p.name}@${p.version}`, props: { name: p.name, version: p.version } }));
       this.write(
         [
-          { label: "Answer", id: answer, props: { value: o.answer, reason: o.reason, results: JSON.stringify(o.results), seq } },
-          log,
-          ...(lock ? [lock] : []),
+          {
+            label: "Run",
+            id: run,
+            props: {
+              key,
+              seq: ++this.seq,
+              answer,
+              reason,
+              results: JSON.stringify(o.results),
+              packages: o.packages.map((p) => `${p.name}==${p.version}`),
+              lock: lock?.id ?? null,
+              log: log.id,
+            },
+          },
+          ...read.map((x) => x.node),
           ...outputs.map((x) => x.node),
-          ...packages,
         ],
         [
-          { type: "OF", from: answer, to: run },
-          { type: "LOG", from: answer, to: log.id },
-          ...(lock ? [{ type: "READ" as const, from: run, to: lock.id, role: "lock", name: "probe.py.lock" }] : []),
+          { type: "OF", from: run, to: q.id },
+          ...read.map((x) => ({ type: "READ" as const, from: run, to: x.node.id, name: x.name })),
           ...outputs.map((x) => ({ type: "SAVED" as const, from: run, to: x.node.id, name: x.name })),
-          ...packages.map((p) => ({ type: "USED" as const, from: run, to: p.id })),
         ],
       );
     } finally {
@@ -295,8 +337,7 @@ export class Hub {
     const inputs = [...new Set(a.inputs ?? [])].sort();
     const disputes = [...new Set(a.disputes ?? [])].sort();
     this.refuse(a, inputs, disputes);
-    const probe = this.keep(Buffer.from(a.probe));
-    const id = contentId("q", a.text, a.rule, probe.id, JSON.stringify(inputs), JSON.stringify(disputes));
+    const id = contentId("q", a.text, a.rule, sha256(a.probe), JSON.stringify(inputs), JSON.stringify(disputes));
     if (!this.db.query("MATCH (q:Question {id: $id}) RETURN q.id AS id", { id }).length) {
       const needs = [...new Set(inputs.flatMap((i) => OUTPUT_REF.exec(i)?.[1] ?? []))];
       this.write(
@@ -304,15 +345,10 @@ export class Hub {
           {
             label: "Question",
             id,
-            props: { text: a.text, rule: a.rule, inputs, timeout: a.timeoutS ?? 600, asker: a.asker ?? null, seq: ++this.seq },
+            props: { text: a.text, rule: a.rule, probe: a.probe, inputs, timeout: a.timeoutS ?? 600, asker: a.asker ?? null, seq: ++this.seq },
           },
-          probe,
         ],
-        [
-          { type: "PROBE", from: id, to: probe.id },
-          ...needs.map((n) => ({ type: "NEEDS" as const, from: id, to: n })),
-          ...disputes.map((d) => ({ type: "DISPUTES" as const, from: id, to: d })),
-        ],
+        [...needs.map((n) => ({ type: "NEEDS" as const, from: id, to: n })), ...disputes.map((d) => ({ type: "DISPUTES" as const, from: id, to: d }))],
       );
     }
     this.check();
@@ -325,8 +361,9 @@ export class Hub {
       });
       s = this.status(id);
     }
-    const results = s.run ? JSON.parse(String(this.db.query("MATCH (a:Answer)-[:OF]->(:Run {id: $run}) RETURN a.results AS r", { run: s.run })[0]?.r ?? "[]")) : [];
-    return { ...s, question: a.text, results, saved: s.run ? this.saved(s.run).map((x) => `${id}/${x.name}`) : [] };
+    const done = s.state === "yes" || s.state === "no" || s.state === "failed";
+    const results = done ? JSON.parse(String(this.db.query("MATCH (r:Run {id: $run}) RETURN r.results AS r", { run: s.run! })[0]?.r ?? "[]")) : [];
+    return { ...s, question: a.text, results, saved: done ? this.saved(s.run!).map((x) => `${id}/${x.name}`) : [] };
   }
 
   /** Answered, or nothing is left that could change it. */
@@ -337,11 +374,20 @@ export class Hub {
 
   private refuse(a: Ask, inputs: string[], disputes: string[]) {
     if (!a.text.trim()) throw new Refusal("The question has no text. Write it as one yes/no sentence.");
-    if (!a.rule.trim()) throw new Refusal("The question has no rule. Write the rule that decides yes or no before anything runs.");
+    const problem = ruleProblem(a.rule);
+    if (problem) throw new Refusal(problem);
+    try {
+      this.judge.query(`EXPLAIN ${ruleStatement(a.rule)}`);
+    } catch (e) {
+      if (e instanceof RelateError) throw new Refusal(`The rule is not a Cypher expression: ${e.message}`);
+      throw e;
+    }
     if (!a.probe.includes("# /// script"))
       throw new Refusal('The probe has no uv script header. Start it with a PEP 723 block: "# /// script", its dependencies, "# ///".');
-    if (!a.probe.includes("WITNESS_ANSWER"))
-      throw new Refusal('The probe never prints WITNESS_ANSWER. Print it once, at the end: print("WITNESS_ANSWER yes") or print("WITNESS_ANSWER no").');
+    if (a.probe.includes("WITNESS_ANSWER"))
+      throw new Refusal("A probe measures and does not answer. Remove WITNESS_ANSWER: the rule decides yes or no from the measurements.");
+    if (!a.probe.includes(RESULT))
+      throw new Refusal(`The probe never prints ${RESULT}. Print each measurement as a JSON object: print("${RESULT}", json.dumps({"total": total})).`);
     const known = new Set(this.questions().map((q) => q.id));
     for (const name of inputs) {
       const ref = OUTPUT_REF.exec(name);
@@ -359,12 +405,12 @@ export class Hub {
 
   /**
    * Runs a read-only Cypher query on a fresh snapshot of the graph. The answers come as parameters: $yes, $no,
-   * $failed, $running, $pending, $waiting (question ids) and $current (the runs that give the current answers).
+   * $failed, $running, $pending, $waiting and $refuted (question ids) and $current (the runs that give the answers).
    */
   query(cypher: string, params: Record<string, Param> = {}, limit = 200): { rows: Row[]; truncated: boolean } {
     const reader = Relate.open(this.graphDir, { readOnly: true });
     try {
-      const rows = reader.query(cypher, { ...answerParams(this.statuses()), ...params });
+      const rows = reader.query(cypher, { ...answerParams(this.statuses(), this.disputes()), ...params });
       return { rows: rows.slice(0, limit), truncated: rows.length > limit };
     } finally {
       reader.close();
@@ -397,9 +443,7 @@ export class Hub {
 
   /** The whole graph as records, for a page that connects. */
   snapshot(): { nodes: GNode[]; rels: GRel[] } {
-    const nodes = this.db.query("MATCH (n) RETURN labels(n)[0] AS label, n.id AS id, properties(n) AS props") as GNode[];
-    const rels = this.db.query("MATCH (a)-[r]->(b) RETURN type(r) AS type, a.id AS from, b.id AS to, r.role AS role, r.name AS name") as GRel[];
-    return { nodes, rels: rels.map(({ role, name, ...r }) => ({ ...r, ...(role ? { role } : {}), ...(name ? { name } : {}) })) };
+    return snapshot(this.db);
   }
 
   /** Whether a probe runs now. */
@@ -411,4 +455,11 @@ export class Hub {
   async idle() {
     while (this.running.size) await new Promise<void>((resolve) => this.wakers.add(resolve));
   }
+}
+
+/** A store's whole graph as records. The hub sends it to a page; replay reads a recorded store with it. */
+export function snapshot(db: Relate): { nodes: GNode[]; rels: GRel[] } {
+  const nodes = db.query("MATCH (n) RETURN labels(n)[0] AS label, n.id AS id, properties(n) AS props") as GNode[];
+  const rels = db.query("MATCH (a)-[r]->(b) RETURN type(r) AS type, a.id AS from, b.id AS to, r.name AS name") as GRel[];
+  return { nodes, rels: rels.map(({ name, ...r }) => ({ ...r, ...(name ? { name } : {}) })) };
 }

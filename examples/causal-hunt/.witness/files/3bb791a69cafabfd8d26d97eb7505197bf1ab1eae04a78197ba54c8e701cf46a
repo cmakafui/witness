@@ -1,1 +1,0 @@
-{"max_measured_error": 0.2406847935233245, "heldout_conservative_95pct_error_bounds": {"x1": 0.39854647961344075, "x3": 0.12725182301259041, "x5": 0.06474058602385052, "x6": 0.1369878117586186}, "limit": "Not every measured cell is within0.15; heldout x1 finite-sample uncertainty prevents an all-cell0.3 guarantee. Pooled measured p90 criterion remains passed."}

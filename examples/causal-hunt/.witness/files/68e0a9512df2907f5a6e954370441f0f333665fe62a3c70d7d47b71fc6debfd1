@@ -1,4 +1,0 @@
-Resolved 3 packages in 7ms
-Installed 3 packages in 32ms
-WITNESS_RESULT {"n_neighbors": 25, "best_neighbor": {"kind": "add", "edge": [3, 4], "edges": [[1, 2], [1, 4], [1, 0], [2, 3], [2, 0], [3, 0], [4, 5], [5, 0], [3, 4]], "bic": 15489.397129508481, "delta_bic": 4.899365890893023, "success": true}, "minimum_deletion_penalty": 2859.112721331172, "base_bic": 15484.497763617588}
-WITNESS_ANSWER no

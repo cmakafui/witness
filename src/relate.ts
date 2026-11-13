@@ -55,6 +55,20 @@ const { symbols: c } = dlopen(libraryPath(), {
 
 if (c.relate_abi_version() !== 2) throw new Error(`librelate_ffi ABI ${c.relate_abi_version()}, expected 2`);
 
+/** Sets a variable in the process environment that native code reads, or removes it when value is null. */
+function setenv(name: string, value: string | null) {
+  const libc = dlopen(process.platform === "darwin" ? "libc.dylib" : "libc.so.6", {
+    setenv: { args: [p, p, i32], returns: i32 },
+    unsetenv: { args: [p], returns: i32 },
+  });
+  try {
+    if (value === null) libc.symbols.unsetenv(ptr(text(name)));
+    else libc.symbols.setenv(ptr(text(name)), ptr(text(value)), 1);
+  } finally {
+    libc.close();
+  }
+}
+
 const OK = 0;
 const V = { NULL: 0, BOOL: 1, INT: 2, FLOAT: 3, STRING: 4, NODE: 5, RELATIONSHIP: 6, PATH: 7, LIST: 8, MAP: 9 } as const;
 
@@ -158,12 +172,24 @@ export class Relate {
     private conn: Ptr,
   ) {}
 
-  /** Opens a store: ":memory:", a directory, or a .rl file. Read-only opens never write. */
-  static open(uri: string, { readOnly = false } = {}): Relate {
+  /**
+   * Opens a store: ":memory:", a directory, or a .rl file. Read-only opens never write. codec picks the snapshot
+   * format of a new store: json writes the whole graph as one graph.json, so a store in git shows as a readable diff.
+   */
+  static open(uri: string, { readOnly = false, codec }: { readOnly?: boolean; codec?: "parquet" | "json" } = {}): Relate {
+    // The C ABI has no options: Relate reads RELATE_SNAPSHOT_FORMAT at open. Bun's process.env does not reach it.
+    // It applies to a new store only; an existing store keeps its own. Set it for this open, then remove it.
     const out = slot();
     const err = slot();
     const open = readOnly ? c.relate_database_open_read_only : c.relate_database_open;
-    if (open(ptr(text(uri)), ptr(out), ptr(err)) !== OK) fail(err, `open ${uri}`);
+    if (codec) setenv("RELATE_SNAPSHOT_FORMAT", codec);
+    let status: number;
+    try {
+      status = open(ptr(text(uri)), ptr(out), ptr(err));
+    } finally {
+      if (codec) setenv("RELATE_SNAPSHOT_FORMAT", null);
+    }
+    if (status !== OK) fail(err, `open ${uri}`);
     const db = at(out);
     const conn = slot();
     if (c.relate_connect_namespace(db, null, ptr(conn), ptr(err)) !== OK) {

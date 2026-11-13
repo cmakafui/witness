@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import { storeProblem } from "./hub.ts";
 
 export const MAIN = join(import.meta.dir, "main.ts");
 export const IDLE_S = 600;
@@ -37,6 +38,8 @@ export function announce(root: string, url: URL) {
 export async function hub(root: string, idleS = IDLE_S): Promise<URL> {
   const found = await running(root);
   if (found) return found.url;
+  const problem = storeProblem(root);
+  if (problem) throw new Error(problem);
   mkdirSync(join(root, ".witness"), { recursive: true });
   const log = openSync(join(root, ".witness", "hub.log"), "a");
   spawn(process.execPath, [MAIN, "serve", "--root", root, "--port", "0", "--idle", String(idleS)], { detached: true, stdio: ["ignore", log, log] }).unref();

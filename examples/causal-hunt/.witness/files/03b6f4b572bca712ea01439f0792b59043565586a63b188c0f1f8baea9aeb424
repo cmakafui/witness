@@ -1,9 +1,0 @@
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["numpy==2.3.4"]
-# ///
-import os,json,numpy as np
-a=np.loadtxt("observational.csv",delimiter=",",skiprows=1);b=np.loadtxt("data/exp5.csv",delimiter=",",skiprows=1);assert a.shape==(2000,6) and b.shape==(500,6) and np.allclose(b[:,4],3)
-d=b.mean(0)-a.mean(0);se=np.sqrt(a.var(0,ddof=1)/len(a)+b.var(0,ddof=1)/len(b));effects=d/(3-a.mean(0)[4]);flag=[i for i in range(6) if i!=4 and abs(d[i])>max(.15,4*se[i])]
-r={"do":{"x5":3},"means":b.mean(0).tolist(),"effects":effects.tolist(),"se_effect":(se/abs(3-a.mean(0)[4])).tolist(),"descendants":[f"x{i+1}" for i in flag]}
-json.dump(r,open(os.environ["WITNESS_OUT"]+"/effects.json","w"));print("WITNESS_RESULT",json.dumps(r));print("WITNESS_ANSWER","yes" if flag==[0,5] else "no")

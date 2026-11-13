@@ -1,10 +1,10 @@
 # Witness
 
-AI agents do research together. Each finding is a yes/no question that a uv probe answers. A Relate graph keeps the questions, the runs and the answers. You can watch the graph and query it. The README has the goal, the graph and the build order.
+AI agents do research together. Each finding is a yes/no question with a rule. A uv probe measures, and the rule, a Cypher expression over the measurements, decides. A Relate graph keeps the questions and their runs. You can watch the graph and query it. The README has the goal, the graph and the build order.
 
 ## Rules
 
-- Nothing writes an answer. An answer comes only from a run.
+- Nothing writes an answer. An answer comes only from a run: the question's rule on the run's measurements. A probe never answers.
 - The graph holds questions and their evidence. It does not hold agents.
 - The hub never changes or deletes a record. It only creates records. The answer to a question comes from its runs and from the inputs as they are now.
 - The hub is the only process that writes to Relate. Probes never touch the store.
@@ -21,13 +21,15 @@ AI agents do research together. Each finding is a yes/no question that a uv prob
 
 ## Code
 
-- `src/hub.ts`: the only writer. It works out each answer from the runs and the inputs now, and reruns what changed.
+- `src/hub.ts`: the only writer. It evaluates each rule with Relate on an empty in-memory store, writes a run once when it ends, works out each answer from the runs and the inputs now, and reruns what changed.
 - `src/probe.ts`: runs one probe with uv in a folder that holds only its declared inputs.
-- `src/graph.ts`: the records and the Cypher that writes them. The hub (ffi) and the page (WASM) both use it.
+- `src/graph.ts`: the two records (Question, Run) and the Cypher that writes them, and what a rule may be. The hub (ffi) and the page (WASM) both use it.
+- A store has a `format` file. The hub refuses a store of another format and never migrates one. Change `FORMAT` in `src/hub.ts` when the records change.
+- A new store uses Relate's `json` codec (one `graph.json`). The C ABI has no options, so `src/relate.ts` sets `RELATE_SNAPSHOT_FORMAT` with libc's `setenv` for that one open.
 - `src/mcp.ts`, `src/server.ts`, `src/main.ts`: the three tools, one `Bun.serve`, the CLI.
 - `src/connect.ts`: finds or starts a workspace's hub, and bridges stdio MCP to it. `src/setup.ts`: `witness setup`.
-- `src/replay.ts`: `witness replay` plays a store back to the page, read-only. `bun run demo` replays `examples/causal-hunt`.
-- `examples/causal-hunt/` is a recorded session for the hackathon judges. Never write to its store: a new session goes in a new folder.
+- `src/replay.ts`: `witness replay` plays a store back to the page, read-only.
+- A recorded session for the hackathon judges goes in `examples/`. Never write to a recorded store: a new session goes in a new folder.
 - The page’s Play/Pause/Previous/Next tour visits all questions by seq, including no and failed answers, with five seconds to read each result. It waits for incoming replay records and ends at the last question.
 - `page/`: the live page. It answers its panels with Cypher on its own Relate WASM copy.
 - `page/tools.ts`: the page's WebMCP tools for a browser agent, `query`, `show_question` and `navigate`. Navigation uses Motion: camera, paths, then the evidence panel. It awaits completion, supports interruption and reduced motion; overview clears the focus. They only read: a query whose plan has any operator outside `READS` is refused. `ask` never goes in the page.

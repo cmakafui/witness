@@ -1,4 +1,4 @@
-// A recorded session plays back from the store alone: in order, with runs before answers, and ending as answered.
+// A recorded session plays back from the store alone: in order, each question pending until its run, ending as answered.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,35 +15,35 @@ beforeAll(async () => {
   const head = "# /// script\n# dependencies = []\n# ///\nimport json, os\n";
   const a = await hub.ask({
     text: "Does data.txt hold numbers?",
-    rule: "one or more integers",
+    rule: "$count >= 1",
     inputs: ["data.txt"],
-    probe: `${head}n=[int(x) for x in open("data.txt").read().split()]\nassert n\njson.dump(n, open(os.path.join(os.environ["WITNESS_OUT"], "n.json"), "w"))\nprint("WITNESS_ANSWER yes")`,
+    probe: `${head}n=[int(x) for x in open("data.txt").read().split()]\nassert n\njson.dump(n, open(os.path.join(os.environ["WITNESS_OUT"], "n.json"), "w"))\nprint("WITNESS_RESULT", json.dumps({"count": len(n)}))`,
   });
   const b = await hub.ask({
     text: "Is the total above 100?",
-    rule: "sum > 100",
+    rule: "$total > 100",
     inputs: [`${a.id}/n.json`],
     disputes: [a.id],
-    probe: `${head}n=json.load(open("${a.id}/n.json"))\njson.dump(n, open(os.path.join(os.environ["WITNESS_OUT"], "n.json"), "w"))\nprint("WITNESS_ANSWER", "yes" if sum(n) > 100 else "no")`,
+    probe: `${head}n=json.load(open("${a.id}/n.json"))\njson.dump(n, open(os.path.join(os.environ["WITNESS_OUT"], "n.json"), "w"))\nprint("WITNESS_RESULT", json.dumps({"total": sum(n)}))`,
   });
-  const c = await hub.ask({ text: "Does it crash?", rule: "never", probe: `${head}raise SystemExit(2)\nprint("WITNESS_ANSWER no")` });
-  const d = await hub.ask({ text: "Is the saved total above 100?", rule: "sum > 100", inputs: [`${b.id}/n.json`], probe: `${head}n=json.load(open("${b.id}/n.json"))\nprint("WITNESS_ANSWER", "yes" if sum(n)>100 else "no")` });
+  const c = await hub.ask({ text: "Does it crash?", rule: "$x = 1", probe: `${head}raise SystemExit(2)\nprint("WITNESS_RESULT", "{}")` });
+  const d = await hub.ask({ text: "Is the saved total above 100?", rule: "$total > 100", inputs: [`${b.id}/n.json`], probe: `${head}n=json.load(open("${b.id}/n.json"))\nprint("WITNESS_RESULT", json.dumps({"total": sum(n)}))` });
   Object.assign(ids, { a: a.id, b: b.id, c: c.id, d: d.id });
   await hub.idle();
   hub.close();
 }, 60_000);
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-test("the timeline brings every record after what it points to, and runs before their answers", () => {
+test("the timeline brings every record after what it points to, and each question before its answer", () => {
   const steps = timeline(root);
   const seen = new Set<string>();
-  let running = false;
+  let pending = false;
   for (const s of steps) {
     for (const n of s.nodes) seen.add(n.id);
     for (const r of s.rels) expect(seen.has(r.from) && seen.has(r.to)).toBe(true);
-    if (s.states.some((x) => x.id === ids.a && x.state === "running")) running = true;
+    if (s.states.some((x) => x.id === ids.a && x.state === "pending")) pending = true;
   }
-  expect(running).toBe(true);
+  expect(pending).toBe(true);
   const last = Object.fromEntries(steps.at(-1)!.states.map((s) => [s.id, s.state]));
   expect(last).toEqual({ [ids.a!]: "yes", [ids.b!]: "no", [ids.c!]: "failed", [ids.d!]: "no" });
 });

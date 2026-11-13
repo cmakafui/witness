@@ -1,28 +1,25 @@
 // Runs one probe with uv, in a new folder that holds only the probe and its declared inputs.
 //
-// The probe prints lines to tell its result:
-//   WITNESS_RESULT {json}   any number of times: a measurement
-//   WITNESS_ANSWER yes|no   exactly once: the answer
-// It saves files for other questions in $WITNESS_OUT. A probe that crashes, times out, or does not answer exactly
-// once has failed. A failed run is never a "no".
+// A probe measures. It does not answer: the question's rule decides, from the measurements (src/hub.ts).
+//   WITNESS_RESULT {json object}   any number of times: a measurement, by name
+// It saves files for other questions in $WITNESS_OUT. A probe that crashes, times out, or prints a result that is
+// not a JSON object has failed. A failed run is never a "no".
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 export const RESULT = "WITNESS_RESULT";
-export const ANSWER = "WITNESS_ANSWER";
 
 export type ProbeRun = {
   probe: string; // the Python source
   inputs: { name: string; path: string }[]; // name: where the probe finds it (relative); path: where it is now
   timeoutS: number;
-  onResult?: (data: unknown) => void;
+  onResult?: (data: Record<string, unknown>) => void;
 };
 
 export type ProbeOutcome = {
-  answer: "yes" | "no" | "failed";
-  reason: string | null;
-  results: unknown[];
+  failed: string | null; // why the run failed, or null when it measured
+  results: Record<string, unknown>[];
   outputs: { name: string; path: string }[];
   lock: string | null; // probe.py.lock, as uv wrote it
   packages: { name: string; version: string }[];
@@ -62,8 +59,7 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
   mkdirSync(work);
   mkdirSync(out);
   const cleanup = () => rmSync(dir, { recursive: true, force: true });
-  const done = (o: Partial<ProbeOutcome> & Pick<ProbeOutcome, "answer" | "log">): ProbeOutcome => ({
-    reason: null,
+  const done = (o: Partial<ProbeOutcome> & Pick<ProbeOutcome, "failed" | "log">): ProbeOutcome => ({
     results: [],
     outputs: [],
     lock: null,
@@ -72,7 +68,7 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
     ...o,
   });
 
-  if (!uv) return done({ answer: "failed", reason: "uv is not installed on this machine", log: "" });
+  if (!uv) return done({ failed: "uv is not installed on this machine", log: "" });
   await Bun.write(join(work, "probe.py"), run.probe);
   for (const input of run.inputs) {
     mkdirSync(dirname(join(work, input.name)), { recursive: true });
@@ -83,7 +79,7 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
   // Resolve the probe's dependencies into a lock file. The lock is evidence: it says which packages answered.
   const lock = Bun.spawnSync([uv, "lock", "--script", "probe.py"], { cwd: work, env, stdout: "pipe", stderr: "pipe" });
   const lockLog = lock.stdout.toString() + lock.stderr.toString();
-  if (lock.exitCode !== 0) return done({ answer: "failed", reason: `uv could not resolve the probe's dependencies:\n${tail(lockLog)}`, log: lockLog });
+  if (lock.exitCode !== 0) return done({ failed: `uv could not resolve the probe's dependencies:\n${tail(lockLog)}`, log: lockLog });
   const lockText = await Bun.file(join(work, "probe.py.lock")).text();
 
   const started = performance.now();
@@ -95,8 +91,7 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
     timeout: run.timeoutS * 1000,
     killSignal: "SIGKILL",
   });
-  const results: unknown[] = [];
-  const answers: string[] = [];
+  const results: Record<string, unknown>[] = [];
   let badResult: string | null = null;
   let log = lockLog;
   const read = async (stream: ReadableStream<Uint8Array>, protocol: boolean) => {
@@ -118,27 +113,26 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
     if (l.startsWith(`${RESULT} `)) {
       try {
         const data = JSON.parse(l.slice(RESULT.length + 1));
+        if (data === null || typeof data !== "object" || Array.isArray(data)) throw new Error("not an object");
         results.push(data);
         run.onResult?.(data);
       } catch {
         badResult ??= l;
       }
-    } else if (l.startsWith(`${ANSWER} `)) answers.push(l.slice(ANSWER.length + 1).trim());
+    }
   };
   await Promise.all([read(proc.stdout, true), read(proc.stderr, false)]);
   const code = await proc.exited;
 
   const outputs = files(out).map((name) => ({ name, path: join(out, name) }));
   const base = { results, outputs, lock: lockText, packages: lockedPackages(lockText), log };
-  const failed = (reason: string) => done({ ...base, answer: "failed", reason });
+  const failed = (reason: string) => done({ ...base, failed: reason });
   if (proc.signalCode && performance.now() - started >= run.timeoutS * 1000) return failed(`timed out after ${run.timeoutS} s`);
   if (proc.signalCode) return failed(`stopped by ${proc.signalCode}`);
   if (code !== 0) return failed(`exit code ${code}:\n${tail(log.slice(lockLog.length))}`);
-  if (badResult) return failed(`a ${RESULT} line is not JSON: ${badResult}`);
-  if (answers.length !== 1) return failed(answers.length ? `answered ${answers.length} times` : "never printed WITNESS_ANSWER");
-  const [answer] = answers;
-  if (answer !== "yes" && answer !== "no") return failed(`answered "${answer}", not yes or no`);
-  return done({ ...base, answer, reason: null });
+  if (badResult) return failed(`a ${RESULT} line is not a JSON object: ${badResult}`);
+  if (!results.length) return failed(`measured nothing: it printed no ${RESULT} line`);
+  return done({ ...base, failed: null });
 }
 
 /** True when the path is a file, not a folder. */

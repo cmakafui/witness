@@ -541,7 +541,7 @@ function details(qid: string) {
     used.push([label, text]);
     return cypher(text, params);
   };
-  const [q] = run("The question", "MATCH (q:Question {id: $selected}) RETURN q.text AS text, q.rule AS rule, q.inputs AS inputs, q.asker AS asker", { selected: qid });
+  const [q] = run("The question", "MATCH (q:Question {id: $selected}) RETURN q.text AS text, q.rule AS rule, q.probe AS probe, q.inputs AS inputs, q.asker AS asker", { selected: qid });
   if (!q) return null;
   const s = statuses.get(qid);
   const [l] = run(
@@ -556,32 +556,34 @@ function details(qid: string) {
   );
   const runs = run(
     "Its runs and their answers",
-    `MATCH (r:Run)-[:ANSWERS]->(:Question {id: $selected}) OPTIONAL MATCH (a:Answer)-[:OF]->(r)
-     RETURN r.id AS run, r.seq AS seq, a.value AS value, a.reason AS reason, a.results AS results ORDER BY r.seq DESC`,
+    `MATCH (r:Run)-[:OF]->(:Question {id: $selected})
+     RETURN r.id AS run, r.seq AS seq, r.answer AS answer, r.reason AS reason, r.results AS results, r.packages AS packages ORDER BY r.seq DESC`,
     { selected: qid },
   );
-  const current = s?.run ?? null;
-  const shown = runs.find((r) => r.run === current) ?? runs[0];
-  const results: unknown[] = shown ? (shown.value ? JSON.parse(String(shown.results)) : (live.get(String(shown.run)) ?? [])) : [];
+  // A run is written when it ends. While one runs, the panel shows what it has printed so far.
+  const running = s?.state === "running" ? s.run : null;
+  const shown = running ? null : (runs.find((r) => r.run === s?.run) ?? runs[0]);
+  const results: unknown[] = running ? (live.get(running) ?? []) : shown ? JSON.parse(String(shown.results)) : [];
   const saved = shown ? run("What the run saved", "MATCH (:Run {id: $run})-[s:SAVED]->(f:File) RETURN s.name AS name, f.id AS file ORDER BY name", { run: shown.run }) : [];
-  const packages = shown ? run("The packages the run used", "MATCH (:Run {id: $run})-[:USED]->(p:Package) RETURN p.id AS id ORDER BY id", { run: shown.run }) : [];
   const ids = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
   return {
     id: qid,
     text: String(q.text),
     rule: String(q.rule),
+    probe: String(q.probe),
     inputs: ids(q.inputs),
     asker: (q.asker as string | null) ?? null,
     status: s,
+    refuted: params().refuted.includes(qid),
     restsOn: ids(l?.needs),
     usedBy: ids(l?.neededBy),
     disputes: ids(l?.disputes),
     disputedBy: ids(l?.disputedBy),
-    final: Boolean(shown?.value),
+    final: !running && Boolean(shown),
     results,
     saved: saved.map((f) => ({ name: String(f.name), url: `/files/${f.file}?name=${encodeURIComponent(String(f.name))}` })),
-    packages: packages.map((p) => String(p.id)),
-    runs: runs.map((r) => ({ run: String(r.run), seq: Number(r.seq), answer: (r.value as string | null) ?? null, reason: (r.reason as string | null) ?? null, current: r.run === current })),
+    packages: ids(shown?.packages),
+    runs: runs.map((r) => ({ run: String(r.run), seq: Number(r.seq), answer: String(r.answer), reason: (r.reason as string | null) ?? null, current: r.run === s?.run })),
     used,
   };
 }
@@ -594,7 +596,8 @@ function showQuestion(qid: string) {
   const parts: (HTMLElement | null)[] = [
     h("div", { class: "run" }, badge(s), h("span", { class: "id hint" }, qid), d.asker ? h("span", { class: "hint" }, `asked by ${d.asker}`) : null),
     h("h2", {}, d.text),
-    h("p", { class: "rule" }, `Rule: ${d.rule}`),
+    h("p", { class: "rule" }, "Yes when ", h("code", {}, d.rule)),
+    d.refuted ? h("p", { class: "error" }, "Refuted: a question that disputes it answers yes.") : null,
     s?.reason ? h("p", { class: "error" }, s.reason) : null,
     ...(d.inputs.length ? [h("h3", {}, "Inputs"), h("ul", {}, ...d.inputs.map((i) => h("li", { class: "id" }, i)))] : []),
     ...list("Rests on", d.restsOn),
@@ -616,15 +619,21 @@ function showQuestion(qid: string) {
           "li",
           { class: "run" },
           h("span", { class: "id hint" }, `#${r.seq}`),
-          r.answer ? h("span", { class: "badge", style: `--c: var(--${r.answer})` }, r.answer) : h("span", { class: "hint" }, "running"),
+          h("span", { class: "badge", style: `--c: var(--${r.answer})` }, r.answer),
           r.current ? h("span", { class: "hint" }, "current") : null,
           r.reason ? h("span", { class: "reason" }, r.reason.split("\n")[0]!) : null,
         ),
       ),
     ),
+    probePanel(d.probe),
     cypherPanel(d.used),
   ];
   document.getElementById("question")!.replaceChildren(...parts.filter((x) => x !== null));
+}
+
+/** The probe's source, closed until the viewer opens it. */
+function probePanel(source: string) {
+  return h("details", { class: "cypher" }, h("summary", {}, "Probe"), h("pre", {}, source));
 }
 
 /** The Cypher behind the panel, each query ready to run in the Query tab. */
@@ -655,12 +664,14 @@ function select(qid: string) {
 
 const PRESETS: [string, string][] = [
   ["What does the selected question rest on?", "MATCH (q:Question {id: $selected})-[:NEEDS*0..]->(u:Question)\nRETURN DISTINCT u.id AS id, u.text AS text, u.seq AS seq ORDER BY seq"],
-  ["Which yes answers did nothing dispute?", "MATCH (q:Question)\nWHERE q.id IN $yes AND NOT EXISTS { (:Question)-[:DISPUTES]->(q) }\nRETURN q.id AS id, q.text AS text ORDER BY q.seq"],
+  ["Which yes answers survived every dispute?", "MATCH (q:Question)\nWHERE q.id IN $yes AND NOT q.id IN $refuted\nOPTIONAL MATCH (d:Question)-[:DISPUTES]->(q)\nRETURN q.id AS id, q.text AS text, count(d) AS disputes ORDER BY disputes DESC, q.seq"],
+  ["Which answers stand refuted, and by what?", "MATCH (d:Question)-[:DISPUTES]->(c:Question)\nWHERE d.id IN $yes\nRETURN c.id AS claim, c.text AS text, d.id AS refuted_by ORDER BY d.seq"],
   ["Which claims were disputed, and did the challenge hold?", "MATCH (d:Question)-[:DISPUTES]->(c:Question)\nRETURN c.id AS claim, d.id AS challenge, d.id IN $yes AS held, d.text AS text ORDER BY d.seq"],
-  ["Which questions read each input file?", "MATCH (q:Question)<-[:ANSWERS]-(r:Run)-[x:READ {role: 'input'}]->(:File)\nWHERE r.id IN $current AND NOT x.name STARTS WITH 'q-'\nRETURN x.name AS input, count(DISTINCT q) AS read_by, collect(DISTINCT q.id) AS questions ORDER BY input"],
+  ["What were the rules?", "MATCH (q:Question)\nRETURN q.id AS id, q.rule AS rule, q.id IN $yes AS yes ORDER BY q.seq"],
+  ["Which questions read each input file?", "MATCH (q:Question)<-[:OF]-(r:Run)-[x:READ]->(:File)\nWHERE r.id IN $current AND NOT x.name STARTS WITH 'q-'\nRETURN x.name AS input, count(DISTINCT q) AS read_by, collect(DISTINCT q.id) AS questions ORDER BY input"],
   ["Which questions build on the same output?", "MATCH (a:Question)-[:NEEDS]->(u:Question)<-[:NEEDS]-(b:Question)\nWHERE a.seq < b.seq\nRETURN u.id AS output_of, a.id AS a, b.id AS b"],
-  ["Which runs failed, and why?", "MATCH (a:Answer {value: 'failed'})-[:OF]->(r:Run)-[:ANSWERS]->(q:Question)\nRETURN q.id AS id, a.reason AS reason, r.seq AS seq ORDER BY seq DESC"],
-  ["Which packages answered the most questions?", "MATCH (q:Question)<-[:ANSWERS]-(r:Run)-[:USED]->(p:Package)\nRETURN p.name AS package, count(DISTINCT q) AS questions, collect(DISTINCT p.version) AS versions\nORDER BY questions DESC, package"],
+  ["Which runs failed, and why?", "MATCH (r:Run {answer: 'failed'})-[:OF]->(q:Question)\nRETURN q.id AS id, r.reason AS reason, r.seq AS seq ORDER BY seq DESC"],
+  ["Which packages answered the most questions?", "MATCH (r:Run)-[:OF]->(q:Question)\nUNWIND r.packages AS p\nRETURN split(p, '==')[0] AS package, count(DISTINCT q) AS questions, collect(DISTINCT split(p, '==')[1]) AS versions\nORDER BY questions DESC, package"],
   ["Who asked what?", "MATCH (q:Question)\nRETURN q.asker AS asker, count(*) AS questions,\n  sum(CASE WHEN q.id IN $yes THEN 1 ELSE 0 END) AS yes,\n  sum(CASE WHEN q.id IN $no THEN 1 ELSE 0 END) AS no\nORDER BY questions DESC"],
 ];
 
@@ -677,7 +688,11 @@ text.value = PRESETS[0]![1];
 const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.flatMap(idsIn) : typeof v === "string" && nodes.has(v) ? [v] : []);
 
 /** The parameters every query in the page gets: the answers now, and the selected question and its current run. */
-const params = () => ({ ...answerParams([...statuses.values()]), selected, run: (selected && statuses.get(selected)?.run) ?? null });
+const params = () => ({
+  ...answerParams([...statuses.values()], links.filter((l) => l.type === "DISPUTES").map((l) => [id(l.source), id(l.target)] as [string, string])),
+  selected,
+  run: (selected && statuses.get(selected)?.run) ?? null,
+});
 
 /** Runs the Query tab's Cypher, shows the rows, and marks the questions they name. Returns the rows, or the error. */
 function runQuery(): { columns: string[]; rows: Row[] } | Error {

@@ -31,8 +31,8 @@ test("agents in one workspace share one hub that `witness mcp` starts", async ()
     name: "ask",
     arguments: {
       text: "Does data.txt hold three numbers?",
-      rule: "yes when exactly three integers parse",
-      probe: `# /// script\n# dependencies = []\n# ///\nn = len(open("data.txt").read().split())\nassert n\nprint("WITNESS_ANSWER", "yes" if n == 3 else "no")`,
+      rule: "$count = 3",
+      probe: `# /// script\n# dependencies = []\n# ///\nimport json\nn = len(open("data.txt").read().split())\nassert n\nprint("WITNESS_RESULT", json.dumps({"count": n}))`,
       inputs: ["data.txt"],
     },
   });

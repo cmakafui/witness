@@ -31,7 +31,6 @@ import json, os
 nums = [int(x) for x in open("data.txt").read().split()]
 assert nums
 print("WITNESS_RESULT", json.dumps({"total": sum(nums)}))
-print("WITNESS_ANSWER", "yes" if sum(nums) > 10 else "no")
 `;
 
 async function agent() {
@@ -44,7 +43,7 @@ const json = (r: Awaited<ReturnType<Client["callTool"]>>) => JSON.parse((r.conte
 test("an agent asks over MCP, queries the graph, and gets a refusal it can fix", async () => {
   const client = await agent();
   expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(["ask", "look", "query"]);
-  const a = json(await client.callTool({ name: "ask", arguments: { text: "Is the total of data.txt more than 10?", rule: "sum > 10", probe: PROBE, inputs: ["data.txt"], asker: "tester" } }));
+  const a = json(await client.callTool({ name: "ask", arguments: { text: "Is the total of data.txt more than 10?", rule: "$total > 10", probe: PROBE, inputs: ["data.txt"], asker: "tester" } }));
   expect(a).toMatchObject({ state: "yes", results: [{ total: 15 }] });
   const q = json(await client.callTool({ name: "query", arguments: { cypher: "MATCH (q:Question) WHERE q.id IN $yes RETURN q.asker AS asker" } }));
   expect(q.rows).toEqual([{ asker: "tester" }]);
@@ -55,8 +54,8 @@ test("an agent asks over MCP, queries the graph, and gets a refusal it can fix",
 
 test("ask waits over HTTP for a probe that takes longer than Bun's default idle limit", async () => {
   const client = await agent();
-  const slow = PROBE.replace("import json, os", "import json, os, time\ntime.sleep(12)").replace("sum(nums) > 10", "sum(nums) > 11");
-  const a = json(await client.callTool({ name: "ask", arguments: { text: "After 12 seconds, is the total above 11?", rule: "sum > 11", probe: slow, inputs: ["data.txt"] } }));
+  const slow = PROBE.replace("import json, os", "import json, os, time\ntime.sleep(12)");
+  const a = json(await client.callTool({ name: "ask", arguments: { text: "After 12 seconds, is the total above 11?", rule: "$total > 11", probe: slow, inputs: ["data.txt"] } }));
   expect(a.state).toBe("yes");
   await client.close();
 }, 60_000);
@@ -80,8 +79,8 @@ test("the page shows a new question and its answer live, from its own Relate cop
   };
   await until("typeof window.witness", "object");
   const client = await agent();
-  const a = json(await client.callTool({ name: "ask", arguments: { text: "Is the total at most 100?", rule: "sum <= 100", probe: PROBE.replace("sum(nums) > 10", "sum(nums) <= 100"), inputs: ["data.txt"] } }));
+  const a = json(await client.callTool({ name: "ask", arguments: { text: "Is the total at most 100?", rule: "$total <= 100", probe: PROBE, inputs: ["data.txt"] } }));
   await until(`window.witness.state(${JSON.stringify(a.id)})`, "yes");
-  await until(`window.witness.cypher("MATCH (:Run)-[:ANSWERS]->(q:Question {id: '${a.id}'}) RETURN count(*) AS n")[0].n`, 1);
+  await until(`window.witness.cypher("MATCH (:Run)-[:OF]->(q:Question {id: '${a.id}'}) RETURN count(*) AS n")[0].n`, 1);
   await client.close();
 }, 60_000);

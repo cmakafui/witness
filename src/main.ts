@@ -3,7 +3,7 @@
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { announce, bridge, hub as findHub, running } from "./connect.ts";
-import { Hub } from "./hub.ts";
+import { Hub, storeProblem } from "./hub.ts";
 import { replay } from "./replay.ts";
 import { serve } from "./server.ts";
 import { setup } from "./setup.ts";
@@ -76,7 +76,8 @@ switch (values.version ? "version" : values.help ? "help" : command) {
     try {
       hub = await Hub.open(root, { jobs: Number(values.jobs) });
     } catch (e) {
-      console.error(`Could not open ${root}/.witness/graph: ${(e as Error).message}\nAnother process may hold the store. Only one hub can serve a workspace.`);
+      const problem = storeProblem(root);
+      console.error(problem ?? `Could not open ${root}/.witness/graph: ${(e as Error).message}\nAnother process may hold the store. Only one hub can serve a workspace.`);
       process.exit(1);
     }
     const server = serve(hub, { port: Number(values.port ?? 4747), hostname: values.host });
