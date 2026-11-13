@@ -63,17 +63,14 @@ export class Hub {
     private jobs: number,
   ) {}
 
-  /**
-   * Opens the workspace's store, in root/.witness, and creates it the first time. A new store uses Relate's json
-   * codec, so the graph is one readable graph.json that git can diff.
-   */
+  /** Opens the workspace's store, in root/.witness, and creates it the first time. */
   static async open(root: string, { pollMs = 1000, jobs = 4 } = {}): Promise<Hub> {
     const dir = join(root, ".witness");
     const graphDir = join(dir, "graph");
     const filesDir = join(dir, "files");
     const fresh = !existsSync(graphDir);
     mkdirSync(filesDir, { recursive: true });
-    const db = Relate.open(graphDir, { codec: "json" });
+    const db = Relate.open(graphDir);
     if (fresh) await applySchema(db);
     const [row] = db.query("MATCH (n) WHERE n.seq IS NOT NULL RETURN max(n.seq) AS seq");
     const hub = new Hub(root, db, graphDir, filesDir, Number(row?.seq ?? 0), jobs);

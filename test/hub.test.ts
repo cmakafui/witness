@@ -138,14 +138,6 @@ test("a dispute answered yes refutes the claim it disputes; one answered no leav
   expect(standing).toEqual([{ id: b.id }]);
 }, 60_000);
 
-test("a new store keeps the graph as one readable graph.json", async () => {
-  await hub.ask({ text: "Is 2 even?", rule: "$rem = 0", probe: measure({ rem: 0 }) });
-  hub.close();
-  hub = await Hub.open(root, { pollMs: 0 });
-  const graph = await Bun.file(join(root, ".witness", "graph", "graph.json")).json();
-  expect(graph.nodes.some((n: { labels: string[]; properties: { text?: string } }) => n.labels[0] === "Question" && n.properties.text === "Is 2 even?")).toBe(true);
-}, 60_000);
-
 test("query cannot write", () => {
   expect(() => hub.query("CREATE (:Note {text: 'x'})")).toThrow(/read/i);
 });

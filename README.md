@@ -37,7 +37,7 @@ Witness is not a sandbox and does not stop an agent acting outside it. It makes 
 
 ## How it uses Relate
 
-- **Mode:** directory, at `.witness/graph/` in the workspace, with the `json` codec: the whole graph is one readable `graph.json`, so a session committed to git shows up as a diff of the questions and runs it added.
+- **Mode:** directory, at `.witness/graph/` in the workspace.
 - **Why this mode:** the hub writes every record through `bun:ffi` as it happens, so the store is on disk at all times, and other processes can open it read-only beside the hub. Relate lets one process write a store, so the hub is the only writer, and agents cannot write answers.
 - **Rules are Cypher.** A rule such as `$p < 0.01 AND $gain >= 0.1` is a Cypher expression. When a run ends, the hub evaluates it with Relate on an empty in-memory store, with the run's measurements as parameters. True is yes, false is no, and anything else, such as a measurement the run never made, is failed.
 - **What the graph models:** two records. A question is written when it is asked, and a run when it ends.

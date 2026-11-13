@@ -19,10 +19,16 @@ Witness keeps the tested answers of every agent in this workspace in one graph. 
 ## The loop
 
 1. **Look first.** Call `query` to see what others asked and answered: `MATCH (q:Question) RETURN q.id, q.text, q.rule, q.asker ORDER BY q.seq DESC LIMIT 30`. Use an answer that exists. Build on an output that exists.
-2. **Try your tools small.** Run your code on a small case in your shell first. That is not evidence. It only shows that the probe will work.
-3. **Ask.** Call `ask` with the question, the rule, the probe and every file it reads. Pass `asker` with your name or role.
-4. **Read the answer.** Read the measurements and the saved files. When data is hard to read raw, have the probe draw it, then `look` at the picture. A picture gives you the next question. It does not answer one.
-5. **Ask the next question.** Ask where the claim stops holding. Ask the question that would show it is wrong, and give the claim's id in `disputes`.
+2. **Try it cheaply.** Every PyPI package is in reach. Cheapest first: `uv run --with <package> python -c "…"` to see whether a tool helps on the smallest case that could show it; then `WITNESS_OUT=$(mktemp -d) uv run --script probe.py` on the whole probe. That is not evidence. It only shows the probe will work.
+3. **Ask.** Call `ask` with the question, the rule and every file the probe reads. Write what you expect into the rule before anything runs, so a surprise means something. Pass `asker` with your name or role.
+4. **Read the answer.** Read the measurements and the saved files. Let the measurement choose the next step.
+5. **Ask the next question.** Ask where the claim stops holding, and the question that would break it.
+
+Work in this loop the whole time: pull a tool in, measure it on a small case, keep what the measurement supports. Before you build something by hand, ask what already exists that the problem can be turned into.
+
+## Change the representation, then look
+
+When data is hard to read raw, have a probe redraw it: a graph, a heatmap, a residual plot, a spectrum, a trace, a different basis. Save the picture to `$WITNESS_OUT` and `look` at it. What you see is a hunch, not an answer: turn it into the next question, and declare the picture as that question's input (`q-…/residuals.png`), so the graph shows what prompted it. Do this when you are stuck, and also when you are not: a new view is where new questions come from. When stuck, name the assumption that failed, and change the representation, not the parameters.
 
 ## The rule
 
@@ -40,7 +46,9 @@ Write the rule before anything runs. It is the claim, made exact. The probe cann
 - **Declare every file the probe reads, and only those.** The probe runs in an empty folder that holds only the probe and its inputs. A file you did not declare is not there. A file you declare without need makes the answer go stale for nothing.
 - **Earn the "no".** Measure only what happened. If the file was empty or the list is empty, crash or leave the measurement out: the run is `failed`, never `no`.
 - **A search that found nothing proves nothing**, unless it was complete. Ask "Within N cases, does X find Z?"
+- **Know what you stand on.** Test the data, the instruments and your own assumptions before you build on them.
 - **Judge against a reference** when there is one: run the same input through a trusted tool, measure the difference, and let the rule bound it.
+- **Certify a result independently** of whatever produced it, and show that a wrong answer is rejected: alter the input, and measure that the check says no. An error or a timeout is not a rejection.
 - **A probe measures. It never acts.** Witness runs a question again whenever its inputs change, so a probe that sends a message, writes outside `$WITNESS_OUT`, deploys, or spends a budget does it again on every rerun. Do the action yourself, save what it returned to a file, and ask about that file.
 - **Save what others can use** to `$WITNESS_OUT`: tables, candidates, models, plots. Another question reads it as `q-…/name`. When that question's answer changes, every question that reads its output runs again.
 
@@ -70,7 +78,7 @@ print("WITNESS_RESULT", json.dumps({"n": int(x.size), "mean": float(x.mean())}))
 
 Asked with the rule `$mean > 10`.
 
-- `WITNESS_RESULT {json object}`: any number of times, one per measurement. Name what you measured.
+- `WITNESS_RESULT {json object}`: any number of times, one per measurement. Name what you measured. Convert numpy values with `float()` or `int()`: `json` cannot write them.
 - Pin versions in the header. The packages each run used are in the graph.
 - A loop or a sweep goes inside the probe. Print one result per case, and let the rule read `$results`.
 - The default time limit is 600 seconds (`timeout_s` changes it). `ask` waits up to 120 seconds (`wait_s`), and the run goes on after that.
