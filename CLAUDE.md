@@ -1,6 +1,6 @@
 # Witness
 
-AI agents do research together. Each finding is a yes/no question with a rule. A uv probe measures, and the rule, a Cypher expression over the measurements, decides. A Relate graph keeps the questions and their runs. You can watch the graph and query it. The README has the goal, the graph and the build order.
+AI agents do research together. Each finding is a yes/no question with a rule. A uv probe measures, and the rule, a Cypher expression over the measurements, decides. A Relate graph keeps the questions and their runs. You can watch the graph and query it. The README has the goal and the graph.
 
 ## Rules
 
@@ -8,7 +8,7 @@ AI agents do research together. Each finding is a yes/no question with a rule. A
 - The graph holds questions and their evidence. It does not hold agents.
 - The hub never changes or deletes a record. It only creates records. The answer to a question comes from its runs and from the inputs as they are now.
 - The hub is the only process that writes to Relate. Probes never touch the store.
-- Keep it small. Build the next step of the build order and nothing more.
+- Keep it small. Build what the task needs and nothing more.
 - Write plain English: short sentences, active voice, no jargon.
 
 ## Commands
