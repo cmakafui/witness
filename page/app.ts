@@ -7,7 +7,6 @@
 // DESIGN.md gives the tokens and the reasons.
 import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
-import { animate } from "motion";
 import { answerParams, clauses, type GNode, type GRel, measurements, named, type State, type Status, statements } from "../src/graph.ts";
 import { type Navigation, register, webTools } from "./tools.ts";
 
@@ -49,20 +48,14 @@ const live = new Map<string, unknown[]>(); // run -> results printed so far
 let selected: string | null = null;
 let marked = new Set<string>();
 let focus: { nodes: Set<string>; links: Set<string> } | null = null;
-let walkthrough: AbortController | null = null;
-let activeTween: ReturnType<typeof animate> | null = null;
 let tourPlaying = false;
 let tourIndex = -1;
-let tourTransition = false;
-let tourPauseAnimation = false;
 let tourReady = false;
-let tourGeneration = 0;
 let tourTimer: ReturnType<typeof setTimeout> | undefined;
 let tourDeadline = 0;
 let tourRemaining = 5000;
 let tourPreview: number | null = null;
 let replayComplete = true; // Live workspaces have no replay stream to wait for.
-const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const linkId = (l: QLink) => `${l.source}:${l.type}:${l.target}`;
 const stateOf = (q: string): State => statuses.get(q)?.state ?? "waiting";
 const colour = (s: State) => `var(--${s === "pending" ? "running" : s})`;
@@ -111,7 +104,7 @@ const names = h("div", { class: "lane-names", "aria-hidden": "true" });
 const scroller = h("div", { class: "lanes" });
 const svg = s("svg", { role: "group", "aria-label": "Questions by direction of work, in the order they were asked" }) as SVGSVGElement;
 const legend = (kind: string, words: string) => h("span", {}, s("svg", { width: 22, height: 6, "aria-hidden": "true" }, s("line", { class: `link ${kind}`, x1: 0, x2: 22, y1: 3, y2: 3 })), words);
-scroller.append(svg, h("p", { class: "caption" }, legend("needs", "reads a file from"), legend("disputes", "disputes")));
+scroller.append(svg, h("p", { class: "caption" }, legend("needs", "depends on"), legend("disputes", "disputes")));
 const empty = h("p", { class: "empty" }, "No questions yet.");
 
 const TOP = 44; // Room for the walkthrough bar.
@@ -156,7 +149,6 @@ function render() {
       s("path", {
         d: curve(from, to, l.type === "DISPUTES" ? 1 : -1, lane),
         class: `link ${l.type.toLowerCase()}${focus ? (lit ? " lit" : " dim") : ""}`,
-        ...(lit ? { pathLength: 1 } : {}),
       }),
     ];
   });
@@ -176,7 +168,6 @@ function render() {
       s("title", {}, document.createTextNode(q.text)),
       s("circle", { class: "hit", r: 15 }),
     );
-    if (state === "running" && !reducedMotion()) g.append(s("circle", { class: "pulse", r: 9 }));
     g.append(glyph(state, 9));
     if (refuted.has(q.id)) g.append(s("circle", { class: "ring refuted", r: 17 }));
     if (q.id === selected) g.append(s("circle", { class: "ring selected", r: 13.5 }));
@@ -203,13 +194,10 @@ function curve(a: { x: number; y: number }, b: { x: number; y: number }, side: 1
   return `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`;
 }
 
-/** How far a walkthrough has drawn its paths and dimmed the rest: 0 to 1. */
-const progress = (p: number) => svg.style.setProperty("--p", String(p));
-
-new ResizeObserver(() => render()).observe(el);
+new ResizeObserver(() => scheduleDisplay(true)).observe(el);
 
 function setSidebar(open: boolean, interrupt = true) {
-  if (interrupt) stopWalkthrough();
+  if (interrupt) pauseTour();
   if (!open && sidebar.contains(document.activeElement)) sidebarToggle.focus();
   main.classList.toggle("sidebar-collapsed", !open);
   sidebar.inert = !open;
@@ -218,44 +206,8 @@ function setSidebar(open: boolean, interrupt = true) {
   sidebarToggle.textContent = open ? "Hide evidence" : "Show evidence";
 }
 sidebarToggle.onclick = () => setSidebar(sidebarToggle.getAttribute("aria-expanded") !== "true");
-// Direct manipulation always wins over a guided walkthrough.
-scroller.addEventListener("pointerdown", () => stopWalkthrough());
-scroller.addEventListener("wheel", () => stopWalkthrough(), { passive: true });
-
-function stopWalkthrough(interruptTour = true) {
-  if (interruptTour) pauseTour();
-  if (!walkthrough) return;
-  walkthrough.abort();
-  walkthrough = null;
-  main.classList.remove("walking");
-  document.getElementById("question")!.style.removeProperty("opacity");
-  progress(1);
-  main.dataset.walkthroughStage = "cancelled";
-  document.getElementById("walkthrough-status")!.textContent = "";
-}
-
-/** A Motion tween that also resolves when interrupted, so WebMCP calls never hang on cancellation. */
-async function tween(duration: number, update: (progress: number) => void, signal: AbortSignal) {
-  if (signal.aborted) return false;
-  if (reducedMotion()) {
-    update(1);
-    return true;
-  }
-  const motion = animate(0, 1, { duration, ease: "easeInOut", onUpdate: (p) => { if (!signal.aborted) update(p); } });
-  activeTween = motion;
-  if (tourPauseAnimation) motion.pause();
-  return new Promise<boolean>((resolve) => {
-    const clear = () => { if (activeTween === motion) activeTween = null; };
-    const cancel = () => { motion.stop(); clear(); resolve(false); };
-    signal.addEventListener("abort", cancel, { once: true });
-    void motion.then(() => { clear(); signal.removeEventListener("abort", cancel); resolve(true); });
-  });
-}
-
-function stage(name: string, label: string) {
-  main.dataset.walkthroughStage = name;
-  document.getElementById("walkthrough-status")!.textContent = label;
-}
+scroller.addEventListener("pointerdown", () => pauseTour());
+scroller.addEventListener("wheel", () => pauseTour(), { passive: true });
 
 /** The scroll position that puts these questions in the middle of the lanes. */
 function centre(ids: Set<string>) {
@@ -267,19 +219,14 @@ function centre(ids: Set<string>) {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-async function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Navigation, fromTour = false) {
-  if (!fromTour) {
-    pauseTour();
-    tourPauseAnimation = false;
-  }
+function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Navigation, fromTour = false) {
+  if (!fromTour) pauseTour();
   if (relation === "overview") {
-    stopWalkthrough(false);
     focus = null;
     marked.clear();
-    progress(1);
     document.getElementById("navigation")!.hidden = true;
     render();
-    scroller.scrollTo({ left: 0, behavior: reducedMotion() ? "auto" : "smooth" });
+    scroller.scrollLeft = 0;
     return { relation, questions: nodes.size, selected };
   }
   if (!start) throw new Error("Select a question or give its id first.");
@@ -306,37 +253,20 @@ async function navigate({ id: start = selected ?? undefined, relation, depth = 1
     }
     frontier = next;
   }
-  stopWalkthrough(false);
-  const controller = new AbortController();
-  walkthrough = controller;
-  const { signal } = controller;
-  main.classList.add("walking");
   selected = start;
   marked.clear();
   focus = { nodes: found, links: new Set(followed.keys()) };
-  progress(0);
-  render();
   document.getElementById("navigation")!.hidden = false;
   document.getElementById("navigation-summary")!.textContent =
     `${relation[0]!.toUpperCase() + relation.slice(1)}: ${plural(found.size, "question")}, ${plural(followed.size, "link")}, depth ${depth}`;
 
-  stage("camera", "");
-  const from = scroller.scrollLeft;
-  const to = centre(found);
-  if (!(await tween(0.6, (p) => { scroller.scrollLeft = from + (to - from) * p; }, signal))) return { id: start, cancelled: true };
-  stage("paths", "");
-  if (!(await tween(0.6, progress, signal))) return { id: start, cancelled: true };
-  stage("evidence", "");
-  const panel = document.getElementById("question")!;
   tab("question", false);
   showQuestion(start);
-  panel.scrollTop = 0;
+  document.getElementById("question")!.scrollTop = 0;
   setSidebar(true, false);
-  if (!(await tween(0.3, (p) => { panel.style.opacity = String(p); }, signal))) return { id: start, cancelled: true };
-  panel.style.removeProperty("opacity");
-  walkthrough = null;
-  main.classList.remove("walking");
-  stage("complete", "");
+  // Opening the panel can change the lane viewport. Use its final dimensions.
+  render();
+  scroller.scrollLeft = centre(found);
   return {
     id: start,
     relation,
@@ -391,17 +321,13 @@ function pauseTour() {
   if (tourTimer !== undefined) tourRemaining = Math.max(0, tourDeadline - performance.now());
   clearTimeout(tourTimer);
   tourTimer = undefined;
-  if (tourTransition) {
-    tourPauseAnimation = true;
-    activeTween?.pause();
-  }
   updateTour();
 }
 
 /** Give the viewer five seconds with each completed result before moving on. */
 function continueTour() {
   updateTour();
-  if (!tourPlaying || tourTransition || !tourReady || tourTimer !== undefined) return;
+  if (!tourPlaying || !tourReady || tourTimer !== undefined) return;
   const questions = tourQuestions();
   const current = questions[tourIndex];
   if (!current || !["yes", "no", "failed"].includes(stateOf(current.id))) return;
@@ -419,25 +345,19 @@ function continueTour() {
   }, tourRemaining);
 }
 
-async function visitTour(index: number) {
+function visitTour(index: number) {
   const question = tourQuestions()[index];
   if (!question) return;
-  const generation = ++tourGeneration;
   clearTimeout(tourTimer);
   tourTimer = undefined;
   tourIndex = index;
   tourPreview = null;
-  tourTransition = true;
   tourReady = false;
-  tourPauseAnimation = false;
   tourRemaining = 5000;
   updateTour();
   const relation = links.some((l) => l.type === "DISPUTES" && l.source === question.id) ? "disputes" : "dependencies";
-  const result = await navigate({ id: question.id, relation, depth: 1 }, true);
-  if (generation !== tourGeneration) return;
-  tourTransition = false;
-  tourPauseAnimation = false;
-  tourReady = !("cancelled" in result);
+  navigate({ id: question.id, relation, depth: 1 }, true);
+  tourReady = true;
   continueTour();
 }
 
@@ -447,12 +367,6 @@ tourPlay.onclick = () => {
     return;
   }
   tourPlaying = true;
-  if (tourTransition) {
-    tourPauseAnimation = false;
-    activeTween?.play();
-    updateTour();
-    return;
-  }
   if (tourIndex < 0 || (tourReady && replayComplete && tourIndex === nodes.size - 1)) void visitTour(0);
   else if (!tourReady) void visitTour(tourIndex);
   else continueTour();
@@ -461,7 +375,6 @@ tourPrevious.onclick = () => void visitTour(tourIndex - 1);
 tourNext.onclick = () => void visitTour(tourIndex + 1);
 tourSeek.oninput = () => {
   pauseTour();
-  stopWalkthrough(false);
   tourPreview = Number(tourSeek.value);
   updateTour();
 };
@@ -470,17 +383,50 @@ tourSeek.onchange = () => void visitTour(Number(tourSeek.value));
 // ---------------------------------------------------------------------------------------------------------------
 // Messages from the hub
 
+let displayFrame: number | null = null;
+let lanesDirty = false;
+let evidenceDirty = false;
+
+/** Coalesce a burst of records and statuses into one display update. */
+function scheduleDisplay(lanes = false, evidence = false) {
+  lanesDirty ||= lanes;
+  evidenceDirty ||= evidence;
+  if (displayFrame !== null) return;
+  displayFrame = requestAnimationFrame(() => {
+    displayFrame = null;
+    const drawLanes = lanesDirty, drawEvidence = evidenceDirty;
+    lanesDirty = evidenceDirty = false;
+    if (drawLanes) { render(); counts(); }
+    if (drawEvidence && selected) showQuestion(selected);
+    continueTour();
+  });
+}
+
+/** Chip glyphs and refutation can change when a directly linked question changes. */
+function panelQuestions() {
+  const ids = new Set(selected ? [selected] : []);
+  for (const l of links) {
+    if (l.source === selected) ids.add(l.target);
+    if (l.target === selected) ids.add(l.source);
+  }
+  return ids;
+}
+
 function apply(m: Msg) {
   if (m.type === "replay") {
     replayComplete = m.step === m.of;
     const link = document.getElementById("link")!;
     link.textContent = m.step < m.of ? `Replaying ${m.step} of ${m.of}` : "Replay finished";
     link.className = "on";
-    continueTour();
+    scheduleDisplay();
     return;
   }
+  let evidence = false;
   if (m.type === "graph") {
     for (const st of statements(m.nodes, m.rels)) cypher(st.cypher, st.params);
+    evidence = selected !== null && m.rels.some((r) =>
+      (r.type === "OF" && r.to === selected) ||
+      ((r.type === "NEEDS" || r.type === "DISPUTES") && (r.from === selected || r.to === selected)));
     for (const n of m.nodes)
       if (n.label === "Question" && !nodes.has(n.id))
         nodes.set(n.id, { id: n.id, text: String(n.props.text), asker: (n.props.asker as string) ?? null, seq: Number(n.props.seq) });
@@ -488,16 +434,14 @@ function apply(m: Msg) {
       if ((r.type === "NEEDS" || r.type === "DISPUTES") && !links.some((l) => l.source === r.from && l.target === r.to && l.type === r.type))
         links.push({ source: r.from, target: r.to, type: r.type });
   } else if (m.type === "states") {
-    statuses = new Map(m.states.map((x) => [x.id, x]));
+    const next = new Map(m.states.map((x) => [x.id, x]));
+    evidence = [...panelQuestions()].some((id) => JSON.stringify(statuses.get(id)) !== JSON.stringify(next.get(id)));
+    statuses = next;
   } else if (m.type === "result") {
     live.set(m.run, [...(live.get(m.run) ?? []), m.data]);
+    evidence = m.question === selected;
   }
-  if (m.type !== "result") {
-    render();
-    counts();
-  }
-  if (selected && (m.type !== "result" || m.question === selected)) showQuestion(selected);
-  continueTour();
+  scheduleDisplay(m.type !== "result", evidence);
 }
 
 function connect(delay = 500) {
@@ -665,8 +609,8 @@ function showQuestion(qid: string) {
     ...(pictures.length
       ? [h("h3", {}, "Images"), ...pictures.map((f) => h("figure", {}, h("img", { src: f.url, alt: f.name }), h("figcaption", {}, h("a", { href: f.url, target: "_blank" }, f.name))))]
       : []),
-    ...list("Reads files from", d.restsOn),
-    ...list("Gives files to", d.usedBy),
+    ...list("Depends on", d.restsOn),
+    ...list("Used by", d.usedBy),
     ...list("Disputes", d.disputes),
     ...list("Disputed by", d.disputedBy),
     ...(files.length ? [h("h3", {}, "Files"), h("ul", {}, ...files.map((f) => h("li", {}, h("a", { href: f.url, target: "_blank" }, f.name))))] : []),
@@ -700,9 +644,8 @@ function showQuestion(qid: string) {
 }
 
 function select(qid: string) {
-  stopWalkthrough();
+  pauseTour();
   focus = null;
-  progress(1);
   document.getElementById("navigation")!.hidden = true;
   selected = qid;
   tab("question");
