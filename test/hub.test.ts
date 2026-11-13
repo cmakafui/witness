@@ -75,6 +75,13 @@ test("the rule sees each measurement by name, and every measurement as $results"
   expect(last.state).toBe("no");
 }, 60_000);
 
+test("each run records when it started and how long it took", async () => {
+  const a = await hub.ask({ text: "Is the gain above 0.1?", rule: "$gain > 0.1", probe: measure({ gain: 0.2 }) });
+  const [t] = hub.query("MATCH (r:Run {id: $run}) RETURN r.started AS started, r.ms AS ms", { run: a.run! }).rows as { started: number; ms: number }[];
+  expect(t!.started).toBeGreaterThan(1.7e12);
+  expect(t!.ms).toBeGreaterThan(0);
+}, 60_000);
+
 test("a rule that needs a measurement the run did not make has failed, never no", async () => {
   const a = await hub.ask({ text: "Is p small?", rule: "$p < 0.01", probe: measure({ gain: 0.2 }) });
   expect(a).toMatchObject({ state: "failed", reason: "the run did not measure p, which the rule needs" });

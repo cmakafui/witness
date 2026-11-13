@@ -24,6 +24,8 @@ export type ProbeOutcome = {
   lock: string | null; // probe.py.lock, as uv wrote it
   packages: { name: string; version: string }[];
   log: string;
+  started: number; // when the run began: milliseconds since 1970
+  ms: number; // how long the run took
   cleanup: () => void; // removes the run's folder, after the hub keeps the outputs
 };
 
@@ -53,6 +55,7 @@ function files(dir: string, base = dir): string[] {
 const tail = (s: string, n = 6) => s.trim().split("\n").slice(-n).join("\n");
 
 export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
+  const began = Date.now();
   const dir = mkdtempSync(join(tmpdir(), "witness-run-"));
   const work = join(dir, "work");
   const out = join(dir, "out");
@@ -60,6 +63,8 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
   mkdirSync(out);
   const cleanup = () => rmSync(dir, { recursive: true, force: true });
   const done = (o: Partial<ProbeOutcome> & Pick<ProbeOutcome, "failed" | "log">): ProbeOutcome => ({
+    started: began,
+    ms: Date.now() - began,
     results: [],
     outputs: [],
     lock: null,

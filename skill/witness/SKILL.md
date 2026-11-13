@@ -75,7 +75,7 @@ To test a claim, ask a question where yes means that the claim is wrong. Put the
 
 ## Reading the graph
 
-`query` runs read-only Cypher. The query tool description shows the graph. Witness does not store the current answers. It gives them as parameters: `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` and `$refuted` (question ids), and `$current` (the runs that give the current answers).
+`query` runs read-only Cypher. The query tool description shows the graph. Witness does not store the current answers. It gives them as parameters: `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` and `$refuted` (question ids), and `$current` (the runs that give the current answers). Each run has `started` (milliseconds since 1970) and `ms` (how long it took).
 
 ```cypher
 MATCH (q:Question {id: $id})-[:NEEDS*0..]->(u:Question) RETURN DISTINCT u.id, u.text

@@ -237,6 +237,8 @@ export class Hub {
     })
       .catch((e): ProbeOutcome => ({
         failed: `the hub could not run the probe: ${(e as Error).message}`,
+        started: Date.now(),
+        ms: 0,
         results: [],
         outputs: [],
         lock: null,
@@ -287,6 +289,8 @@ export class Hub {
             props: {
               key,
               seq: ++this.seq,
+              started: o.started,
+              ms: o.ms,
               answer,
               reason,
               results: JSON.stringify(o.results),

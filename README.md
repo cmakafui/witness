@@ -46,7 +46,7 @@ Witness is not a sandbox. It does not stop an agent from acting outside it. It m
 (:Question {text, rule, probe, inputs, asker})
 (:Question)-[:NEEDS]->(:Question)            // reads a file the other question saved
 (:Question)-[:DISPUTES]->(:Question)         // a yes means the other answer is wrong
-(:Run {answer, reason, results, packages})-[:OF]->(:Question)
+(:Run {answer, reason, started, ms, results, packages})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File)               // the inputs, as the run read them
 (:Run)-[:SAVED {name}]->(:File)              // what the run saved for other questions
 ```
