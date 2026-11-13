@@ -17,7 +17,7 @@ AI agents do research together. Each finding is a yes/no question with a rule. A
 - People get three commands: `setup`, `open [DIR]`, `replay [DIR]`. Keep it at three. `mcp` and `serve` are plumbing.
 - `bun src/main.ts mcp`: MCP over stdio for one agent. It finds the workspace's hub (`.witness/hub.json`) or starts one in the background with `--idle 600`, keeps it alive with a heartbeat, and starts a new one if it goes away.
 - `bun src/main.ts serve --root DIR`: a hub in the foreground. `--idle 0` (the default here) never exits.
-- The skill is `skill/witness/`. `witness setup` links it into `~/.claude/skills`. Change the skill when a tool or the probe format changes.
+- The skill is `skill/witness/`. `witness setup` links it into `~/.claude/skills`. Change the skill when a tool or the probe format changes. The skill teaches the tool. The working method goes in `method/prompt.md`, the same prompt for every lab.
 
 ## Code
 

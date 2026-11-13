@@ -88,6 +88,8 @@ print("WITNESS_RESULT", json.dumps({"mean": float(x.mean())}))
 
 Asked with the rule `$mean > 10`, it answers yes when the mean is above 10. It runs in an empty folder holding only its declared inputs, and saves files for other questions in `$WITNESS_OUT`. A crash, a timeout, or a measurement the rule needs and the run did not make is "failed", never "no". The skill in [`skill/witness`](skill/witness/SKILL.md) teaches agents the rest.
 
+To set agents on a problem, start one in the problem's folder and paste the prompt in [`method/prompt.md`](method/prompt.md).
+
 To develop: `bun test` (real uv probes, MCP over HTTP and stdio, the page in a real browser engine) and `bun check`.
 
 ## Where the data lives
