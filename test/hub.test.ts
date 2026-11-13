@@ -91,6 +91,30 @@ test("a rule that needs a measurement the run did not make has failed, never no"
   expect(c).toMatchObject({ state: "failed", reason: "the rule's value is 2, not true or false" });
 }, 60_000);
 
+test("a null rule names the part that is null, and says how to give a missing value a meaning", async () => {
+  const rows = measure({ n: 2, rows: [{ a: 6 }, { a: 6, error: 0.5 }] });
+  const a = await hub.ask({ text: "Is any error small?", rule: "$n = 2 AND any(r IN $rows WHERE r.error < 0.3)", probe: rows });
+  expect(a.state).toBe("failed");
+  expect(a.reason).toContain("in any(r IN $rows WHERE r.error < 0.3)");
+  expect(a.reason).toContain("A row without a field gives null");
+  const b = await hub.ask({ text: "Is any error small, when a missing error is large?", rule: "any(r IN $rows WHERE coalesce(r.error, 1.0) < 0.3)", probe: rows });
+  expect(b.state).toBe("no");
+}, 60_000);
+
+test("a question reads the files of a run that measured but whose rule could not decide, and never those of a crash", async () => {
+  const save = (then: string) => probe(`json.dump({"total": 12}, open(os.path.join(os.environ["WITNESS_OUT"], "total.json"), "w"))\n${then}`);
+  const a = await hub.ask({ text: "Is p small, when p is null?", rule: "$p < 0.01", probe: save(`print("WITNESS_RESULT", json.dumps({"p": None}))`) });
+  expect(a.state).toBe("failed");
+  const b = await hub.ask({ text: "Is the undecided total more than 10?", rule: "$total > 10", probe: big(a.id), inputs: [`${a.id}/total.json`] });
+  expect(b.state).toBe("yes");
+
+  const c = await hub.ask({ text: "Does it crash after it saves?", rule: "$p < 0.01", probe: save(`print("WITNESS_RESULT", json.dumps({"p": 1}))\nraise SystemExit(3)`) });
+  expect(c.state).toBe("failed");
+  const d = await hub.ask({ text: "Is the crashed total more than 10?", rule: "$total > 10", probe: big(c.id), inputs: [`${c.id}/total.json`] });
+  expect(d.state).toBe("waiting");
+  expect(d.reason).toContain(`${c.id} failed, so its files cannot be read: exit code 3`);
+}, 60_000);
+
 test("a probe that crashes, or measures nothing, has failed", async () => {
   const a = await hub.ask({ text: "Does it crash?", rule: "$x = 1", probe: probe(`raise SystemExit(3)\nprint("WITNESS_RESULT", "{}")`) });
   expect(a.state).toBe("failed");

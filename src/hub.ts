@@ -10,7 +10,7 @@
 // measurements: true is yes, false is no, and anything else is failed. Then the hub writes the run, once.
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, normalize, sep } from "node:path";
-import { answerParams, type GNode, type GRel, measurements, ruleProblem, ruleStatement, type State, type Status, statements } from "./graph.ts";
+import { answerParams, clauses, type GNode, type GRel, measurements, ruleProblem, ruleStatement, type State, type Status, statements } from "./graph.ts";
 import { isFile, runProbe, type ProbeOutcome, RESULT } from "./probe.ts";
 import { type Param, Relate, RelateError, type Row } from "./relate.ts";
 import { applySchema } from "./schema.ts";
@@ -40,7 +40,7 @@ export type Event =
   | { type: "result"; question: string; run: string; data: unknown };
 
 type Question = { id: string; rule: string; probe: string; inputs: string[]; timeout: number };
-type Run = { id: string; question: string; key: string; answer: "yes" | "no" | "failed"; reason: string | null };
+type Run = { id: string; question: string; key: string; answer: "yes" | "no" | "failed"; reason: string | null; measured: boolean | null };
 type Input = { name: string; file: string; path: string };
 type Resolved = { status: Status; question: Question; key: string | null; inputs: Input[] };
 
@@ -123,7 +123,7 @@ export class Hub {
 
   private runs(): Run[] {
     return this.db.query(
-      "MATCH (r:Run)-[:OF]->(q:Question) RETURN r.id AS id, q.id AS question, r.key AS key, r.answer AS answer, r.reason AS reason ORDER BY r.seq",
+      "MATCH (r:Run)-[:OF]->(q:Question) RETURN r.id AS id, q.id AS question, r.key AS key, r.answer AS answer, r.reason AS reason, r.measured AS measured ORDER BY r.seq",
     ) as Run[];
   }
 
@@ -158,7 +158,10 @@ export class Hub {
   private resolve(): Resolved[] {
     const questions = this.questions();
     const byId = new Map(questions.map((q) => [q.id, q]));
-    const runs = Map.groupBy(this.runs(), (r) => r.question);
+    const allRuns = this.runs();
+    const runs = Map.groupBy(allRuns, (r) => r.question);
+    // A run's files can be read when its probe measured, whatever its rule said. A crash may leave half a file.
+    const measured = new Set(allRuns.filter((r) => r.measured).map((r) => r.id));
     const memo = new Map<string, Resolved>();
 
     const compute = (q: Question): Resolved => {
@@ -172,7 +175,10 @@ export class Hub {
         if (ref) {
           const up = byId.get(ref[1]!);
           const upr = up ? compute(up) : null;
-          if (!upr || (upr.status.state !== "yes" && upr.status.state !== "no"))
+          const above = upr?.status;
+          if (above?.state === "failed" && !measured.has(above.run!))
+            return done({ question: q, key: null, inputs, status: status("waiting", { reason: `${ref[1]} failed, so its files cannot be read: ${above.reason}` }) });
+          if (!upr || !above || (above.state !== "yes" && above.state !== "no" && above.state !== "failed"))
             return done({ question: q, key: null, inputs, status: status("waiting", { reason: `${ref[1]} has no answer yet` }) });
           const file = this.saved(upr.status.run!).find((s) => s.name === ref[2]);
           if (!file) return done({ question: q, key: null, inputs, status: status("waiting", { reason: `${ref[1]} saved no file named ${ref[2]}` }) });
@@ -260,8 +266,9 @@ export class Hub {
   /** The rule's answer on a run's measurements. Only true is yes and only false is no. */
   private decide(rule: string, results: Record<string, unknown>[]): { answer: "yes" | "no" | "failed"; reason: string | null } {
     let rows: Row[];
+    const params = measurements(results) as Record<string, Param>;
     try {
-      rows = this.judge.query(ruleStatement(rule), measurements(results) as Record<string, Param>);
+      rows = this.judge.query(ruleStatement(rule), params);
     } catch (e) {
       const message = (e as Error).message;
       const missing = /ParameterMissing: Expected parameter\(s\): (.+)$/.exec(message);
@@ -271,8 +278,27 @@ export class Hub {
     const value = rows[0]?.answer;
     if (value === true) return { answer: "yes", reason: null };
     if (value === false) return { answer: "no", reason: null };
-    if (value === null || value === undefined) return { answer: "failed", reason: "the rule's value is null: a measurement it needs is null" };
+    if (value === null || value === undefined) return { answer: "failed", reason: this.whyNull(rule, params) };
     return { answer: "failed", reason: `the rule's value is ${JSON.stringify(value)}, not true or false` };
+  }
+
+  /** Why a rule's value is null: the part that is null, and how to say what a missing value means. */
+  private whyNull(rule: string, params: Record<string, Param>): string {
+    const parts = clauses(rule);
+    const isNull = (part: string) => {
+      try {
+        return (this.judge.query(ruleStatement(part), params)[0]?.answer ?? null) === null;
+      } catch {
+        return false;
+      }
+    };
+    const part = parts.length > 1 ? parts.find(isNull) : undefined;
+    const rows = /\b(any|all|none|single)\s*\(/i.test(part ?? rule);
+    return (
+      `the rule's value is null: a measurement it needs is null${part ? `, in ${part}` : ""}. ` +
+      (rows ? "A row without a field gives null. " : "") +
+      "Say in the rule what a missing value means, for example coalesce(r.x, 0) < 1 or r.x IS NOT NULL AND r.x < 1."
+    );
   }
 
   private finish(q: Question, run: string, key: string, read: { name: string; node: GNode }[], o: ProbeOutcome) {
@@ -293,6 +319,7 @@ export class Hub {
               ms: o.ms,
               answer,
               reason,
+              measured: o.failed === null,
               results: JSON.stringify(o.results),
               packages: o.packages.map((p) => `${p.name}==${p.version}`),
               lock: lock?.id ?? null,

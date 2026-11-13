@@ -14,7 +14,7 @@ Witness keeps the tested answers of all agents in this workspace in one graph. N
 | **Probe** | A Python script that uv runs. It prints measurements. It does not give an answer. |
 | **Input** | A file that the probe reads: a workspace path, or `q-…/name` for a file that another question saved. |
 | **Run** | One execution of the probe: the measurements, the answer, the files read and saved, the packages used. |
-| **Answer** | `yes`, `no` or `failed`. `pending`: an input changed, and the question runs again. `waiting`: a question that it reads has no answer yet. |
+| **Answer** | `yes`, `no` or `failed`. `pending`: an input changed, and the question runs again. `waiting`: a question that it reads has no answer yet, or its probe did not measure. |
 
 ## Steps
 
@@ -31,6 +31,8 @@ Write the rule before the probe runs.
 - `$results` is the list of all measurements, in order: `all(r IN $results WHERE r.error <= 0.3)`.
 - You can use comparisons, `AND`, `OR`, `NOT` and Cypher functions such as `abs()`, `all()`, `any()` and `size()`.
 - The answer is `failed` if the rule names a measurement that the run did not print, if a value is null, or if the result is not true or false.
+- A row without a field gives null, and null is not no. Say in the rule what a missing field means: `any(r IN $rows WHERE coalesce(r.error, 1.0) < 0.3)`.
+- If the probe measured but the rule could not decide, other questions can still read the files that the run saved. Files of a crash or a timeout cannot be read.
 - A rule is one expression. Witness refuses clauses such as `MATCH` and `RETURN`.
 
 ## The probe
