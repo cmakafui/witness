@@ -18,18 +18,6 @@ import { applySchema } from "./schema.ts";
 /** A request the hub refuses. The message says what is wrong and how to fix it. */
 export class Refusal extends Error {}
 
-/** The store format this hub reads and writes. A store of another format is refused, never changed. */
-const FORMAT = "witness 2: Question and Run, rules in Cypher";
-
-/** Why this Witness cannot open the workspace's store, or null when it can (or there is no store yet). */
-export function storeProblem(root: string): string | null {
-  const dir = join(root, ".witness");
-  if (!existsSync(join(dir, "graph"))) return null;
-  const format = join(dir, "format");
-  if (existsSync(format) && readFileSync(format, "utf8").trim() === FORMAT) return null;
-  return `${dir} was made by an older Witness, and this one cannot read it. Move it aside to start a new store: mv ${dir} ${dir}-old`;
-}
-
 const sha256 = (data: string | Uint8Array) => new Bun.CryptoHasher("sha256").update(data).digest("hex");
 const contentId = (prefix: string, ...parts: string[]) => `${prefix}-${sha256(parts.join("\0")).slice(0, 12)}`;
 /** An input that is a file saved by another question's current run: q-…/name. */
@@ -83,15 +71,10 @@ export class Hub {
     const dir = join(root, ".witness");
     const graphDir = join(dir, "graph");
     const filesDir = join(dir, "files");
-    const problem = storeProblem(root);
-    if (problem) throw new Error(problem);
     const fresh = !existsSync(graphDir);
     mkdirSync(filesDir, { recursive: true });
     const db = Relate.open(graphDir, { codec: "json" });
-    if (fresh) {
-      await applySchema(db);
-      writeFileSync(join(dir, "format"), `${FORMAT}\n`);
-    }
+    if (fresh) await applySchema(db);
     const [row] = db.query("MATCH (n) WHERE n.seq IS NOT NULL RETURN max(n.seq) AS seq");
     const hub = new Hub(root, db, graphDir, filesDir, Number(row?.seq ?? 0), jobs);
     if (pollMs > 0) {
@@ -384,8 +367,6 @@ export class Hub {
     }
     if (!a.probe.includes("# /// script"))
       throw new Refusal('The probe has no uv script header. Start it with a PEP 723 block: "# /// script", its dependencies, "# ///".');
-    if (a.probe.includes("WITNESS_ANSWER"))
-      throw new Refusal("A probe measures and does not answer. Remove WITNESS_ANSWER: the rule decides yes or no from the measurements.");
     if (!a.probe.includes(RESULT))
       throw new Refusal(`The probe never prints ${RESULT}. Print each measurement as a JSON object: print("${RESULT}", json.dumps({"total": total})).`);
     const known = new Set(this.questions().map((q) => q.id));

@@ -92,7 +92,7 @@ To develop: `bun test` (real uv probes, MCP over HTTP and stdio, the page in a r
 
 ## Where the data lives
 
-A workspace's store is `.witness/`: `graph/` is the Relate store, `files/` holds every input, output, lock file and log, named by SHA-256, and `format` names the store's format. A Witness of another format refuses the store and leaves it as it is. Read a store with Relate's CLI:
+A workspace's store is `.witness/`: `graph/` is the Relate store, and `files/` holds every input, output, lock file and log, named by SHA-256. Read a store with Relate's CLI:
 
 ```bash
 relate --read-only --database .witness/graph "MATCH (q:Question) RETURN q.asker, q.text, q.rule"

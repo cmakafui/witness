@@ -1,6 +1,6 @@
 // The hub, end to end with real uv probes: answers come from runs, follow their inputs, and come back with them.
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hub } from "../src/hub.ts";
@@ -146,27 +146,16 @@ test("a new store keeps the graph as one readable graph.json", async () => {
   expect(graph.nodes.some((n: { labels: string[]; properties: { text?: string } }) => n.labels[0] === "Question" && n.properties.text === "Is 2 even?")).toBe(true);
 }, 60_000);
 
-test("a store made by another format of Witness is refused, not changed", async () => {
-  const old = mkdtempSync(join(tmpdir(), "witness-old-"));
-  try {
-    mkdirSync(join(old, ".witness", "graph"), { recursive: true });
-    await expect(Hub.open(old, { pollMs: 0 })).rejects.toThrow(/older Witness/);
-  } finally {
-    rmSync(old, { recursive: true, force: true });
-  }
-});
-
 test("query cannot write", () => {
   expect(() => hub.query("CREATE (:Note {text: 'x'})")).toThrow(/read/i);
 });
 
-test("ask refuses a rule that is not an expression over measurements, a probe that answers, and an outside input", async () => {
+test("ask refuses a rule that is not an expression over measurements, a probe that measures nothing, and an outside input", async () => {
   const ok = measure({ x: 1 });
   await expect(hub.ask({ text: "x?", rule: "", probe: ok })).rejects.toThrow(/no rule/);
   await expect(hub.ask({ text: "x?", rule: "yes when x is 1", probe: ok })).rejects.toThrow(/names no measurement/);
   await expect(hub.ask({ text: "x?", rule: "$x = 1 RETURN 1 AS answer UNION MATCH (n) RETURN true", probe: ok })).rejects.toThrow(/RETURN is not part of one/);
   await expect(hub.ask({ text: "x?", rule: "$x <", probe: ok })).rejects.toThrow(/not a Cypher expression/);
-  await expect(hub.ask({ text: "x?", rule: "$x = 1", probe: probe(`print("WITNESS_ANSWER yes")`) })).rejects.toThrow(/does not answer/);
   await expect(hub.ask({ text: "x?", rule: "$x = 1", probe: "# /// script\n# ///\nprint(1)" })).rejects.toThrow(/never prints WITNESS_RESULT/);
   await expect(hub.ask({ text: "x?", rule: "$x = 1", probe: ok, inputs: ["../etc/passwd"] })).rejects.toThrow(/outside/);
 });
