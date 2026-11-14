@@ -8,7 +8,7 @@ import { SCHEMA, type Status } from "../src/graph.ts";
 export type Page = {
   /** The operators of a query's plan. */
   operators(cypher: string): string[];
-  /** Shows the query in the search bar, runs it there, and returns its rows or its error. */
+  /** Shows the query in the Query drawer, runs it there, and returns its rows or its error. */
   query(cypher: string): { columns: string[]; rows: Record<string, unknown>[] } | Error;
   /** Selects the question in the graph and returns what its panel shows, or null when there is no such question. */
   question(id: string): (Record<string, unknown> & { status: Status | undefined; read: { name: string; url: string }[]; saved: { name: string; url: string }[] }) | null;
@@ -47,7 +47,7 @@ export function webTools(page: Page): Tool[] {
   return [
     {
       name: "query",
-      description: `Run a read-only Cypher query on the Witness graph in this page, and show it to the person in the search bar. $selected is the question the person has selected. At most ${LIMIT} rows.\n\n${SCHEMA}`,
+      description: `Run a read-only Cypher query on the Witness graph in this page, and show it to the person in the Query drawer. $selected is the question the person has selected. At most ${LIMIT} rows.\n\n${SCHEMA}`,
       inputSchema: { type: "object", properties: { cypher: { type: "string", description: "A read-only Cypher query." } }, required: ["cypher"] },
       annotations: hints,
       execute: reply(({ cypher }) => {

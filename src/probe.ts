@@ -141,6 +141,30 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
   return done({ ...base, failed: null });
 }
 
+/**
+ * What is wrong with the probe's dependencies, or null. A probe that installs packages must fix the date that uv
+ * resolves them at, with exclude-newer under [tool.uv]. The probe text is in the run key, so the cutoff is part
+ * of that key. It limits eligible package uploads; it does not lock the Python version or the full environment.
+ */
+export function dependencyProblem(probe: string): string | null {
+  const block = /^# \/\/\/ script\s*$([\s\S]*?)^# \/\/\/\s*$/m.exec(probe);
+  if (!block) return null;
+  let meta: { dependencies?: unknown[]; tool?: { uv?: { "exclude-newer"?: unknown } } };
+  try {
+    meta = Bun.TOML.parse(block[1]!.split("\n").map((l) => l.replace(/^# ?/, "")).join("\n")) as never;
+  } catch (e) {
+    return `The probe's script header is not valid TOML: ${(e as Error).message}`;
+  }
+  if (!meta.dependencies?.length) return null;
+  const today = `${new Date().toISOString().slice(0, 10)}T00:00:00Z`;
+  const fix = `Add these lines before "# ///": "# [tool.uv]" and "# exclude-newer = \"${today}\"".`;
+  const date = meta.tool?.uv?.["exclude-newer"];
+  if (date === undefined) return `The probe installs packages but fixes no date to resolve them at. ${fix}`;
+  if (date instanceof Date || (typeof date === "string" && /^\d{4}-\d{2}-\d{2}/.test(date) && !Number.isNaN(Date.parse(date))))
+    return null;
+  return `exclude-newer must be a fixed date, not ${JSON.stringify(date)}: a relative date resolves differently each day. ${fix}`;
+}
+
 /** True when the path is a file, not a folder. */
 export const isFile = (path: string) => {
   try {

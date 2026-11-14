@@ -73,6 +73,8 @@ Write the rule before the probe runs.
 # /// script
 # requires-python = ">=3.11"
 # dependencies = ["numpy==2.3.4"]
+# [tool.uv]
+# exclude-newer = "2026-11-14T00:00:00Z"
 # ///
 import json, os
 import numpy as np
@@ -86,6 +88,7 @@ print("WITNESS_RESULT", json.dumps({"n": int(x.size), "mean": float(x.mean())}))
 Rule: `$mean > 10`.
 
 - Print each measurement as `WITNESS_RESULT` and one JSON object. Convert numpy values with `int()` or `float()`.
+- A probe with dependencies must set `exclude-newer` under `[tool.uv]` to a fixed date. Use today's date. Witness refuses a probe without it, or with a relative date such as "1 week".
 - The probe runs in an empty folder. The folder holds the probe and the declared inputs only.
 - Save files for other questions in `$WITNESS_OUT`.
 - If the measurement did not occur, stop the probe with an error. A crash gives `failed`, not `no`.
@@ -125,7 +128,7 @@ For more syntax, see [Relate's Cypher guide](https://github.com/relatedb/relate/
 
 `look` shows a saved file. Images come back as images.
 
-In the live page and replay, the goal line opens the chosen goal's acceptance question (`◎`), and the Goals menu lists every goal. The trail lists every question with its text, newest first. Every selected question highlights its own upstream artifact dependencies. All questions clears the selection. Follow Depends on and Used by, or select any trail row; Back restores the previous reading position. Changes lists runs that changed an answer, an input or a rule measurement. The search bar finds questions by words and runs Cypher on Enter. The panel stays open beside the trail and shows the actual rule, clause values, images, and any extra measurements from the current committed run. Values retain their full recorded precision, and All measurements shows every record when there are several. File links marked input open the archived bytes read by that run; saved links open its outputs. Pending work does not display old measurements as current. Use Cypher with `ORDER BY q.seq` or `ORDER BY r.seq` to inspect recorded order. Goal completion remains available through queries and tool replies. Browser agents use `query` and `show_question`; `show_question` selects and highlights the same way as a person clicking a question.
+In the live page and replay, choose a goal from the dropdown to open its acceptance question (`◎`). Every selected question highlights its own upstream artifact dependencies, while hovering previews questions in the top bar above the lanes. All questions clears the selection. Follow Depends on and Used by, or select any graph question; Back restores the previous reading position. The panel stays open beside the docked Query drawer and shows the actual rule, clause values, images, and any extra measurements from the current committed run. Values retain their full recorded precision, and All measurements shows every record when there are several. File links marked input open the archived bytes read by that run; saved links open its outputs. Pending work does not display old measurements as current. Use Cypher with `ORDER BY q.seq` or `ORDER BY r.seq` to inspect recorded order. Goal completion remains available through queries and tool replies. Browser agents use `query` and `show_question`; `show_question` selects and highlights the same way as a person clicking a question.
 
 ## Reporting
 

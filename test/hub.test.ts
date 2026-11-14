@@ -57,7 +57,7 @@ test("ask resolves script dependencies, records measurements and outputs, and ke
   const a = await hub.ask({
     text: "Does data.txt hold at least one number?",
     rule: "$count >= 1",
-    probe: sum.replace("# dependencies = []", '# dependencies = ["packaging==24.2"]') +
+    probe: sum.replace("# dependencies = []", '# dependencies = ["packaging==24.2"]\n# [tool.uv]\n# exclude-newer = "2026-11-01T00:00:00Z"') +
       '\nimport packaging\nassert packaging.__version__ == "24.2"\nassert not os.path.exists("probe.py.lock")\n',
     inputs: ["data.txt"],
   });
@@ -189,4 +189,14 @@ test("ask refuses a rule that is not an expression over measurements, a probe th
   await expect(hub.ask({ text: "x?", rule: "$x <", probe: ok })).rejects.toThrow(/not a Cypher expression/);
   await expect(hub.ask({ text: "x?", rule: "$x = 1", probe: "# /// script\n# ///\nprint(1)" })).rejects.toThrow(/never prints WITNESS_RESULT/);
   await expect(hub.ask({ text: "x?", rule: "$x = 1", probe: ok, inputs: ["../etc/passwd"] })).rejects.toThrow(/outside/);
+});
+
+test("ask refuses a probe with dependencies and no fixed exclude-newer date", async () => {
+  const withDeps = (uv: string) => `# /// script\n# dependencies = ["tomli"]\n${uv}# ///\nimport json\nprint("WITNESS_RESULT", json.dumps({"x": 1}))\n`;
+  await expect(hub.ask({ text: "x?", rule: "$x = 1", probe: withDeps("") })).rejects.toThrow(/exclude-newer = "\d{4}-\d{2}-\d{2}T00:00:00Z"/);
+  await expect(hub.ask({ text: "x?", rule: "$x = 1", probe: withDeps('# [tool.uv]\n# exclude-newer = "1 week"\n') })).rejects.toThrow(/fixed date/);
+  const pinned = await hub.ask({ text: "x?", rule: "$x = 1", probe: withDeps('# [tool.uv]\n# exclude-newer = "2026-11-01T00:00:00Z"\n') });
+  expect(pinned.state).toBe("yes");
+  // A probe without dependencies installs nothing, so it needs no date.
+  expect((await hub.ask({ text: "y?", rule: "$x = 1", probe: measure({ x: 1 }) })).state).toBe("yes");
 });

@@ -8,11 +8,9 @@ Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 �
 
 `witness replay DIR` opens a recorded session from its store alone. It needs only [Bun](https://bun.com) 1.4 or later. It needs no AI agent, no API key and no uv. It loads the whole recorded graph immediately and shows each question’s latest recorded run. Replay derives goal completion from those recorded answers; it does not check today’s workspace inputs.
 
-The goal line at the top shows the chosen goal and its derived state mark. Click it to open the goal's acceptance question. The Goals menu lists every goal. A goal without an acceptance question shows “No acceptance question”.
+Choose a goal from the dropdown to open its acceptance question. A goal without an acceptance question shows “No acceptance question”. The graph highlights the selected question’s upstream artifact dependencies and keeps surrounding exploration visible, marking acceptance questions with a ringed glyph (`◎`). Each row is one direction of work; parallel questions share columns while preserving lane and dependency order, and hovering or arrowing across dots previews each question in a steady bar above the lanes.
 
-The trail lists every question with its text, newest first. Rails on the left draw one column per direction of work and a curve for each artifact dependency. Acceptance questions have a ringed glyph (`◎`). The selected question's upstream chain is drawn in ink, and the rest of the exploration stays visible. Under the trail, Changes lists each run that changed an answer, an input file or a measurement the rule names, with the old and new values.
-
-The evidence panel stays open on the right. It shows the selected question’s answer, its actual rule clauses and their values, saved images, any extra measurements not already shown in the clauses, what it depends on as a tree, files, and disclosures for the probe and run history. An acceptance question also lists the goal's exploratory questions that answered no or failed. Measurement names and values come directly from the current committed run, without inferred labels, units or rounding. Multiple result records can be expanded under All measurements. Files distinguish declared inputs from saved outputs; input links open the archived bytes that the displayed run read. Pending work shows no old measurements as current. The search bar (`/` or ⌘K) finds questions by their words. Text that starts like Cypher runs on Enter, on the page's own copy of the graph, while Evidence stays open:
+The evidence panel stays open on the right, showing the selected question’s answer, actual rule clauses and their values, saved images, any extra measurements not already displayed in the clauses, files, and disclosures for the probe and run history. Measurement names and values come directly from the current committed run, without inferred labels, units or rounding. Multiple result records can be expanded under All measurements. Files distinguish declared inputs from saved outputs; input links open the archived bytes that the displayed run read. Pending work shows no old measurements as current. The Query drawer below the lanes runs Cypher on the page's own copy of the graph while keeping Evidence open:
 
 ```cypher
 // Which questions answer yes?
@@ -20,7 +18,7 @@ MATCH (q:Question) WHERE q.id IN $yes
 RETURN q.text, q.rule ORDER BY q.seq
 ```
 
-Choose All questions in the Goals menu for the whole record. Start from a goal’s acceptance question, or follow **Depends on** and **Used by** to inspect evidence in full. Click any question in the trail to inspect it, and use **Back** to return to the previous reading position. Arrow keys move along the trail. On a narrow screen, Trail, Evidence and Changes are tabs.
+Choose All questions for the whole record. Start from a goal’s acceptance question, hover upstream dots to preview how the work got there, or follow **Depends on** and **Used by** to inspect evidence in full. Click any question in the graph to inspect it, and use **Back** to return to the previous reading position. The Query drawer can list questions and runs by `seq` when you need their recorded order.
 
 Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the browser's agent two tools: `query` and `show_question`. Turn it on at `chrome://flags/#enable-webmcp-testing`. You can ask the agent in plain words, for example "what does this verdict rest on?". It answers with Cypher on the page's copy of the graph. It shows you the query and the questions it found. Selecting a question through the graph, a link or `show_question` uses the same upstream highlight; Back restores the previous question and reading position. These tools only read, and they mark what they return as untrusted. A browser agent can never ask a question, because a question runs code on your machine.
 
@@ -99,13 +97,15 @@ To measure again, send the same `ask` arguments with `rerun: true`. Keep the tex
 
 If the question is already queued or running, the call joins that execution. To request another measurement, wait for it to finish before calling again. Reruns use the normal worker limit and wait for upstream inputs. On a new question, `rerun: true` simply requests its first execution. `wait_s: 0` returns immediately while queued or running work continues.
 
-The live page shows pending, running or waiting until the new run finishes; an acceptance goal is incomplete during that time. Consumers rerun automatically when saved input bytes change, and reuse their cached runs when the bytes stay the same. Replay retains every run and displays the latest recorded execution. The cache key still covers the probe and declared input hashes, not the full environment; explicit rerun permits remeasurement, not a reproducibility guarantee.
+The live page shows pending, running or waiting until the new run finishes; an acceptance goal is incomplete during that time. Consumers rerun automatically when saved input bytes change, and reuse their cached runs when the bytes stay the same. Replay retains every run and displays the latest recorded execution. The cache key covers the probe and declared input hashes, not the full environment. A probe that installs packages must set a fixed package upload cutoff with [`exclude-newer`](https://docs.astral.sh/uv/guides/scripts/#improving-reproducibility), keeping that cutoff in the hashed probe text. It does not lock Python or the full environment; explicit rerun permits remeasurement, not a reproducibility guarantee.
 
 A probe is a uv script. It prints what it measured. It does not answer:
 
 ```python
 # /// script
 # dependencies = ["numpy"]
+# [tool.uv]
+# exclude-newer = "2026-11-14T00:00:00Z"
 # ///
 import json, numpy as np
 x = np.loadtxt("data.txt")

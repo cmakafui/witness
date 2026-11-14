@@ -11,7 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, normalize, sep } from "node:path";
 import { answerParams, clauses, type GNode, type GRel, type Goal, type GoalStatus, GOALS, goalStatuses, measurements, ruleProblem, ruleStatement, type State, type Status, statements } from "./graph.ts";
-import { isFile, runProbe, type ProbeOutcome, RESULT } from "./probe.ts";
+import { dependencyProblem, isFile, runProbe, type ProbeOutcome, RESULT } from "./probe.ts";
 import { type Param, Relate, RelateError, type Row } from "./relate.ts";
 import { applySchema } from "./schema.ts";
 
@@ -414,6 +414,8 @@ export class Hub {
     }
     if (!a.probe.includes("# /// script"))
       throw new Refusal('The probe has no uv script header. Start it with a PEP 723 block: "# /// script", its dependencies, "# ///".');
+    const deps = dependencyProblem(a.probe);
+    if (deps) throw new Refusal(deps);
     if (!a.probe.includes(RESULT))
       throw new Refusal(`The probe never prints ${RESULT}. Print each measurement as a JSON object: print("${RESULT}", json.dumps({"total": total})).`);
     const known = new Set(this.questions().map((q) => q.id));

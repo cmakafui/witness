@@ -2,9 +2,9 @@
 // The live page. It keeps its own copy of the graph in Relate (WASM), built by the same statements the hub runs,
 // and answers every panel and query with Cypher in the page. The hub sends new records and states.
 //
-// The trail shows how the agents got here: one row per question, newest first, with its text, and rails on the left
-// for each direction of work and each artifact dependency. Changes lists the runs that changed an answer, an input or
-// a measurement. The rule check on the right shows why an answer stands. DESIGN.md gives the tokens.
+// The lanes show how the agents got here: one row per direction of work, compact glyphs packed left-to-right by
+// causal and lane order, with a steady top preview strip on hover. The rule check on the right shows why an answer
+// stands: each part of the rule, the measurements it names, and whether it held. DESIGN.md gives the tokens.
 import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
 import { answerParams, clauses, type Goal, GOALS, type GNode, type GRel, measurements, named, type State, type Status, statements } from "../src/graph.ts";
@@ -43,17 +43,17 @@ const nodes = new Map<string, QNode>();
 const links: QLink[] = [];
 let statuses = new Map<string, Status>();
 let selected: string | null = null;
+let hovered: string | null = null;
 let selectedGoal = "";
 let goalInitialized = false;
 let marked = new Set<string>();
 type Neighborhood = { nodes: Set<string>; links: Set<string> };
-type QuestionVisit = { id: string; scroll: number; trail: number; probeOpen: boolean; runsOpen: boolean; marked: Set<string> };
+type QuestionVisit = { id: string; scroll: number; lanes: number; probeOpen: boolean; runsOpen: boolean; marked: Set<string> };
 const questionHistory: QuestionVisit[] = [];
 const linkId = (l: QLink) => `${l.source}:${l.target}`;
 const stateOf = (q: string): State => statuses.get(q)?.state ?? "waiting";
 const colour = (s: State) => `var(--${s === "pending" ? "running" : s})`;
 const goals = () => cypher(GOALS) as Goal[];
-const acceptance = () => new Set(goals().flatMap((g) => (g.acceptance ? [g.acceptance] : [])));
 
 /** All upstream artifact dependencies, including shared inputs from other goals. */
 function upstream(roots: string[]): Neighborhood {
@@ -69,12 +69,6 @@ function upstream(roots: string[]): Neighborhood {
   }
   return { nodes: found, links: followed };
 }
-
-/** The lane of an asker: the part after the last /, before the first -. orchestrator/evolution and evolution-tools share one. */
-const laneOf = (asker: string | null) => {
-  const last = (asker ?? "").split("/").at(-1)!.trim();
-  return (last.split("-")[0] || last || "unnamed").replaceAll("_", " ");
-};
 
 // ---------------------------------------------------------------------------------------------------------------
 // Elements
@@ -103,7 +97,7 @@ function glyph(state: State, r: number): SVGElement {
   return g;
 }
 
-/** A glyph on its own, for the goal line, chips, refs and changes. */
+/** A glyph on its own, for the hover bar, chips and refs. */
 function mark(state: State, size = 12, accepts = false) {
   const half = size / 2;
   if (accepts) {
@@ -118,190 +112,200 @@ function mark(state: State, size = 12, accepts = false) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Trail: one HTML row per question, newest first, over one SVG that draws the rails.
+// Hover bar & lanes
 
+const main = document.querySelector("main")!;
+const hoverBar = document.getElementById("hover-bar")!;
+const el = document.getElementById("graph")!;
+const sidebar = document.getElementById("sidebar")!;
+const sidebarToggle = document.getElementById("sidebar-toggle")!;
 const evidenceBack = document.getElementById("evidence-back") as HTMLButtonElement;
-const trail = document.getElementById("trail")!;
-const rails = s("svg", { class: "rails", "aria-hidden": "true" }) as SVGSVGElement;
-const list = h("ol", { role: "listbox", "aria-label": "Questions" });
-trail.append(rails, list);
+const names = h("div", { class: "lane-names", "aria-hidden": "true" });
+const scroller = h("div", { class: "lanes" });
+const svg = s("svg", { role: "group", "aria-label": "Questions by direction of work" }) as SVGSVGElement;
+scroller.append(svg);
+const empty = h("p", { class: "empty" }, "No questions yet.");
 
-const ROW = 32;
-const COL = 20;
-const PADX = 14;
+const TOP = 20;
+const PAD = 40;
+const STEP = 68;
+/** Where each question sits, from the last render. */
+const place = new Map<string, { x: number; y: number; lane: number }>();
 
-function render() {
-  const questions = [...nodes.values()].sort((a, b) => b.seq - a.seq);
-  const focused = (document.activeElement as HTMLElement | null)?.closest?.("#trail .q")?.getAttribute("data-id") ?? null;
-  if (!questions.length) {
-    rails.replaceChildren();
-    list.replaceChildren(h("li", { class: "empty" }, "No questions yet."));
+/** The lane of an asker: the part after the last /, before the first -. orchestrator/evolution and evolution-tools share one. */
+const laneOf = (asker: string | null) => {
+  const last = (asker ?? "").split("/").at(-1)!.trim();
+  return (last.split("-")[0] || last || "unnamed").replaceAll("_", " ");
+};
+
+function renderHover() {
+  const activeId = hovered && nodes.has(hovered) ? hovered : selected && nodes.has(selected) ? selected : null;
+  if (!activeId) {
+    hoverBar.replaceChildren(nodes.size ? h("span", { class: "hint" }, "All questions") : "");
     return;
   }
-  // Lanes in the order their first question was asked.
-  const lanes = [...new Set([...questions].reverse().map((q) => laneOf(q.asker)))];
-  const gutter = PADX * 2 + (lanes.length - 1) * COL;
-  trail.style.setProperty("--gutter", `${gutter}px`);
-  trail.style.setProperty("--row", `${ROW}px`);
-  const place = new Map(questions.map((q, i) => [q.id, { x: PADX + lanes.indexOf(laneOf(q.asker)) * COL, y: i * ROW + ROW / 2, row: i }]));
-  const highlight = selected ? upstream([selected]) : null;
-  const accepted = acceptance();
-  rails.setAttribute("width", String(gutter));
-  rails.setAttribute("height", String(questions.length * ROW));
+  const q = nodes.get(activeId)!;
+  const st = stateOf(activeId);
+  const accepts = goals().some((g) => g.acceptance === activeId);
+  hoverBar.replaceChildren(
+    mark(st, 12, accepts),
+    h("span", { class: "hover-state", style: `--c: ${colour(st)}` }, st),
+    h("span", { class: "hover-text" }, q.text),
+    h("span", { class: "hover-lane" }, laneOf(q.asker)),
+  );
+}
 
-  const laneLines = lanes.flatMap((name, i) => {
-    const rows = questions.flatMap((q) => (laneOf(q.asker) === name ? [place.get(q.id)!.y] : []));
-    const x = PADX + i * COL;
-    return rows.length > 1 ? [s("line", { class: "rail", x1: x, x2: x, y1: Math.min(...rows), y2: Math.max(...rows) })] : [];
-  });
+/** Updates hover state without rebuilding the lane SVG, so clicks and frame observers stay clean. */
+function setHovered(id: string | null) {
+  if (hovered === id) return;
+  if (hovered) svg.querySelector(`[data-id="${hovered}"] .hover-ring`)?.setAttribute("opacity", "0");
+  hovered = id;
+  if (hovered && hovered !== selected) svg.querySelector(`[data-id="${hovered}"] .hover-ring`)?.setAttribute("opacity", "1");
+  renderHover();
+}
+svg.addEventListener("pointerleave", () => setHovered(null));
+
+function focusNeighbor(fromId: string, key: string) {
+  const cur = place.get(fromId);
+  if (!cur) return;
+  const candidates = [...place.entries()].filter(([id]) => id !== fromId);
+  let target: string | undefined;
+  if (key === "ArrowRight" || key === "ArrowLeft") {
+    const dir = key === "ArrowRight" ? 1 : -1;
+    const sameLane = candidates
+      .filter(([, p]) => p.lane === cur.lane && (p.x - cur.x) * dir > 0)
+      .sort((a, b) => Math.abs(a[1].x - cur.x) - Math.abs(b[1].x - cur.x));
+    target = sameLane[0]?.[0];
+  } else if (key === "ArrowDown" || key === "ArrowUp") {
+    const nextLane = cur.lane + (key === "ArrowDown" ? 1 : -1);
+    const adj = candidates
+      .filter(([, p]) => p.lane === nextLane)
+      .sort((a, b) => Math.abs(a[1].x - cur.x) - Math.abs(b[1].x - cur.x));
+    target = adj[0]?.[0];
+  }
+  if (target) (svg.querySelector(`[data-id="${target}"]`) as HTMLElement | null)?.focus();
+}
+
+function render() {
+  const questions = [...nodes.values()].sort((a, b) => a.seq - b.seq);
+  renderHover();
+  if (!questions.length) {
+    el.replaceChildren(empty);
+    return;
+  }
+  if (!scroller.isConnected) el.replaceChildren(names, scroller);
+  const lanes = [...new Set(questions.map((q) => laneOf(q.asker)))];
+  const lane = Math.round(Math.max(48, Math.min(72, (el.clientHeight - TOP - 20) / lanes.length)));
+  el.style.setProperty("--lane", `${lane}px`);
+  const height = TOP + lane * lanes.length + 20;
+
+  // Pack parallel work into shared columns while keeping each lane chronological and every dependency left-to-right.
+  place.clear();
+  const colOf = new Map<string, number>();
+  const laneEnd = new Map<string, number>();
+  let maxCol = 0;
+  for (const q of questions) {
+    const name = laneOf(q.asker);
+    const laneIdx = lanes.indexOf(name);
+    const deps = links.filter((l) => l.source === q.id).map((l) => (colOf.get(l.target) ?? -1) + 1);
+    const col = Math.max((laneEnd.get(name) ?? -1) + 1, ...deps, 0);
+    colOf.set(q.id, col);
+    laneEnd.set(name, col);
+    if (col > maxCol) maxCol = col;
+    place.set(q.id, { x: PAD + col * STEP, y: TOP + lane * (laneIdx + 0.5), lane: laneIdx });
+  }
+  const width = Math.max(scroller.clientWidth, PAD * 2 + maxCol * STEP);
+  const highlight = selected ? upstream([selected]) : null;
+  const acceptedIds = new Set(goals().flatMap((g) => (g.acceptance ? [g.acceptance] : [])));
+
+  names.replaceChildren(...lanes.map((name) => h("div", { title: name }, name)));
+  svg.setAttribute("width", String(width));
+  svg.setAttribute("height", String(height));
+  const rails = lanes.map((_, i) => s("line", { class: "rail", x1: 0, x2: width, y1: TOP + lane * (i + 0.5), y2: TOP + lane * (i + 0.5) }));
   const paths = links.flatMap((l) => {
-    // Evidence flows up: from the question that saved a file (older, lower) to the one that reads it.
+    // Evidence flows forward: from the question that saved a file to the one that reads it.
     const [from, to] = [place.get(l.target), place.get(l.source)];
     if (!from || !to) return [];
     const lit = highlight?.links.has(linkId(l));
     const files = nodes.get(l.source)!.inputs.filter((i) => i.startsWith(`${l.target}/`)).map((i) => i.slice(l.target.length + 1));
-    const mid = (from.y + to.y) / 2;
-    const d = from.x === to.x
-      ? `M ${from.x} ${from.y} C ${from.x + COL * 0.8} ${from.y}, ${to.x + COL * 0.8} ${to.y}, ${to.x} ${to.y}`
-      : `M ${from.x} ${from.y} C ${from.x} ${mid}, ${to.x} ${mid}, ${to.x} ${to.y}`;
-    return [s("path", { d, class: `link${highlight ? (lit ? " lit" : " dim") : ""}` }, files.length ? s("title", {}, document.createTextNode(files.join(", "))) : null)];
+    return [
+      s(
+        "path",
+        {
+          d: curve(from, to, lane),
+          class: `link needs${highlight ? (lit ? " lit" : " dim") : ""}`,
+        },
+        files.length ? s("title", {}, document.createTextNode(files.join(", "))) : null,
+      ),
+    ];
   });
   const glyphs = questions.map((q) => {
     const p = place.get(q.id)!;
     const state = stateOf(q.id);
-    const dim = highlight && !highlight.nodes.has(q.id);
-    const g = s("g", { class: `node${dim ? " dim" : ""}`, transform: `translate(${p.x} ${p.y})` });
-    if (accepted.has(q.id)) g.append(s("circle", { class: "accept-ring", r: 8, style: `--c: ${colour(state)}` }), glyph(state, 4));
-    else g.append(glyph(state, 5.5));
-    if (q.id === selected) g.append(s("circle", { class: "ring selected", r: 10.5 }));
-    else if (marked.has(q.id)) g.append(s("circle", { class: "ring marked", r: 10.5 }));
+    const isAccepts = acceptedIds.has(q.id);
+    const g = s(
+      "g",
+      {
+        class: `q${isAccepts ? " accepts" : ""}${highlight && !highlight.nodes.has(q.id) && q.id !== selected ? " dim" : ""}`,
+        transform: `translate(${p.x} ${p.y})`,
+        tabindex: 0,
+        role: "button",
+        "aria-label": `${state}${isAccepts ? " (acceptance)" : ""}: ${q.text}`,
+        "data-id": q.id,
+        ...(isAccepts ? { "data-accepts": "true" } : {}),
+      },
+      s("title", {}, document.createTextNode(q.text)),
+      s("circle", { class: "hit", r: 18 }),
+      s("circle", { class: "ring hover hover-ring", r: 16.5, opacity: hovered === q.id && selected !== q.id ? 1 : 0 }),
+    );
+    if (isAccepts) {
+      g.append(s("circle", { class: "accept-ring", r: 12.5, style: `--c: ${colour(state)}` }));
+      g.append(glyph(state, 6.5));
+    } else {
+      g.append(glyph(state, 8.5));
+    }
+    if (q.id === selected) g.append(s("circle", { class: "ring selected", r: 16.5 }));
+    else if (marked.has(q.id)) g.append(s("circle", { class: "ring marked", r: 16.5 }));
+    g.addEventListener("pointerenter", () => setHovered(q.id));
+    g.addEventListener("focus", () => setHovered(q.id));
+    g.addEventListener("blur", () => { if (hovered === q.id) setHovered(null); });
+    g.addEventListener("click", () => select(q.id));
+    g.addEventListener("keydown", (e) => {
+      const key = (e as KeyboardEvent).key;
+      if (key === "Enter" || key === " ") {
+        e.preventDefault();
+        select(q.id);
+      } else if (key.startsWith("Arrow")) {
+        e.preventDefault();
+        focusNeighbor(q.id, key);
+      }
+    });
     return g;
   });
-  rails.replaceChildren(s("g", {}, ...laneLines), s("g", {}, ...paths), s("g", {}, ...glyphs));
-
-  const tabStop = selected && place.has(selected) ? selected : questions[0]!.id;
-  list.replaceChildren(
-    ...questions.map((q) => {
-      const state = stateOf(q.id);
-      const accepts = accepted.has(q.id);
-      const dim = highlight && !highlight.nodes.has(q.id);
-      return h(
-        "li",
-        {
-          class: `q${accepts ? " accepts" : ""}${dim ? " dim" : ""}${marked.has(q.id) ? " marked" : ""}`,
-          role: "option",
-          "aria-selected": String(q.id === selected),
-          "aria-label": `${state}${accepts ? ", acceptance" : ""}: ${q.text}`,
-          tabindex: q.id === tabStop ? "0" : "-1",
-          title: q.text,
-          "data-id": q.id,
-        },
-        h("span", { class: "text" }, q.text),
-        h("span", { class: "lane" }, laneOf(q.asker)),
-      );
-    }),
-  );
-  if (focused) (list.querySelector(`[data-id="${focused}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
+  svg.replaceChildren(s("g", {}, ...rails), s("g", {}, ...paths), s("g", {}, ...glyphs));
 }
 
-const rowOf = (e: Event) => (e.target as HTMLElement).closest<HTMLElement>(".q");
-list.addEventListener("click", (e) => {
-  const row = rowOf(e);
-  if (row) select(row.dataset.id!);
-});
-list.addEventListener("keydown", (e) => {
-  const row = rowOf(e);
-  if (!row) return;
-  if (e.key === "Enter" || e.key === " ") {
-    e.preventDefault();
-    select(row.dataset.id!);
-  } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-    e.preventDefault();
-    const next = (e.key === "ArrowDown" ? row.nextElementSibling : row.previousElementSibling) as HTMLElement | null;
-    next?.focus();
+/** An artifact dependency. Within one lane it arcs above the questions between. */
+function curve(a: { x: number; y: number }, b: { x: number; y: number }, lane: number) {
+  if (a.y === b.y) {
+    const lift = Math.min(lane * 0.44, 12 + Math.abs(b.x - a.x) * 0.16);
+    return `M ${a.x} ${a.y} Q ${(a.x + b.x) / 2} ${a.y - lift * 2} ${b.x} ${b.y}`;
   }
-});
-
-// ---------------------------------------------------------------------------------------------------------------
-// Changes: each run that differs from the run before it on the same question.
-
-const changeList = document.getElementById("change-list")!;
-let changeSignature = "";
-
-type Change = { q: string; at: number; from: string; to: string; diffs: string[] };
-
-function changes(): Change[] {
-  const runs = cypher(
-    `MATCH (r:Run)-[:OF]->(q:Question)
-     RETURN q.id AS q, q.rule AS rule, r.id AS run, r.started AS started, r.ms AS ms, r.answer AS answer, r.results AS results ORDER BY r.seq`,
-  );
-  const reads = new Map<string, Map<string, string>>();
-  for (const r of cypher("MATCH (r:Run)-[x:READ]->(f:File) RETURN r.id AS run, x.name AS name, f.id AS file")) {
-    const run = String(r.run);
-    if (!reads.has(run)) reads.set(run, new Map());
-    reads.get(run)!.set(String(r.name), String(r.file));
-  }
-  const parse = (v: unknown) => measurements(v ? (JSON.parse(String(v)) as Record<string, unknown>[]) : []);
-  const before = new Map<string, Row>();
-  const out: Change[] = [];
-  for (const r of runs) {
-    const q = String(r.q);
-    const prev = before.get(q);
-    before.set(q, r);
-    if (!prev) continue;
-    const diffs: string[] = [];
-    const a = reads.get(String(prev.run)) ?? new Map(), b = reads.get(String(r.run)) ?? new Map();
-    for (const name of new Set([...a.keys(), ...b.keys()]))
-      if (a.get(name) !== b.get(name)) diffs.push(`${name}  ${a.get(name)?.slice(0, 6) ?? "–"} → ${b.get(name)?.slice(0, 6) ?? "–"}`);
-    const [ma, mb] = [parse(prev.results), parse(r.results)];
-    for (const n of named(String(r.rule)))
-      if (n !== "results" && JSON.stringify(ma[n]) !== JSON.stringify(mb[n])) diffs.push(`${n}  ${show(ma[n]) ?? "–"} → ${show(mb[n]) ?? "–"}`);
-    if (prev.answer !== r.answer || diffs.length)
-      out.push({ q, at: Number(r.started) + Number(r.ms), from: String(prev.answer), to: String(r.answer), diffs });
-  }
-  return out.reverse();
+  const dx = Math.max(22, (b.x - a.x) / 2);
+  return `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`;
 }
 
-function renderChanges() {
-  const all = changes();
-  const accepted = acceptance();
-  const signature = JSON.stringify([all, [...accepted]]);
-  if (signature === changeSignature) return;
-  changeSignature = signature;
-  const time = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  changeList.replaceChildren(
-    ...(all.length
-      ? all.map((c) => {
-          const accepts = accepted.has(c.q);
-          const text = h("button", { type: "button", class: "change-text", title: nodes.get(c.q)?.text ?? c.q }, nodes.get(c.q)?.text ?? c.q);
-          text.onclick = () => select(c.q);
-          return h(
-            "li",
-            { "data-id": c.q },
-            h("time", {}, time(c.at)),
-            h("span", { class: "flip" }, ...(c.from === c.to ? [mark(c.to as State, 11, accepts)] : [mark(c.from as State, 11, accepts), "→", mark(c.to as State, 11, accepts)])),
-            text,
-            c.diffs.length ? h("div", { class: "diffs" }, ...c.diffs.map((d) => h("code", {}, d))) : null,
-          );
-        })
-      : [h("li", { class: "hint" }, "No changes")]),
-  );
+new ResizeObserver(() => scheduleDisplay(true)).observe(el);
+
+function setSidebar(open: boolean) {
+  if (!open && sidebar.contains(document.activeElement)) sidebarToggle.focus();
+  main.classList.toggle("sidebar-collapsed", !open);
+  sidebar.inert = !open;
+  sidebar.setAttribute("aria-hidden", String(!open));
+  sidebarToggle.setAttribute("aria-expanded", String(open));
+  sidebarToggle.textContent = open ? "Hide evidence" : "Show evidence";
 }
-
-// ---------------------------------------------------------------------------------------------------------------
-// Narrow screens: one view at a time.
-
-const narrow = matchMedia("(max-width: 860px)");
-const viewButtons = [...document.querySelectorAll<HTMLButtonElement>("#views button")];
-function setView(view: string) {
-  document.body.dataset.view = view;
-  for (const b of viewButtons) b.setAttribute("aria-selected", String(b.dataset.view === view));
-}
-for (const b of viewButtons) b.onclick = () => setView(b.dataset.view!);
-setView("trail");
-
-// ---------------------------------------------------------------------------------------------------------------
-// Back
+sidebarToggle.onclick = () => setSidebar(sidebarToggle.getAttribute("aria-expanded") !== "true");
 
 function rememberQuestion(next: string) {
   if (!selected || selected === next) return;
@@ -309,7 +313,7 @@ function rememberQuestion(next: string) {
   questionHistory.push({
     id: selected,
     scroll: panel.scrollTop,
-    trail: trail.scrollTop,
+    lanes: scroller.scrollLeft,
     probeOpen: panel.querySelector<HTMLDetailsElement>("details.probe")?.open ?? false,
     runsOpen: panel.querySelector<HTMLDetailsElement>("details.runs-disclosure")?.open ?? false,
     marked: new Set(marked),
@@ -330,27 +334,30 @@ evidenceBack.onclick = () => {
 // Messages from the hub
 
 let displayFrame: number | null = null;
-let trailDirty = false;
+let lanesDirty = false;
 let evidenceDirty = false;
 
 /** Coalesce a burst of records and statuses into one display update. */
-function scheduleDisplay(redraw = false, evidence = false) {
-  trailDirty ||= redraw;
+function scheduleDisplay(lanes = false, evidence = false) {
+  lanesDirty ||= lanes;
   evidenceDirty ||= evidence;
   if (displayFrame !== null) return;
   displayFrame = requestAnimationFrame(() => {
     displayFrame = null;
-    const drawTrail = trailDirty, drawEvidence = evidenceDirty;
-    trailDirty = evidenceDirty = false;
-    if (drawTrail) { renderGoals(); render(); renderChanges(); }
+    const drawLanes = lanesDirty, drawEvidence = evidenceDirty;
+    lanesDirty = evidenceDirty = false;
+    if (drawLanes) { renderGoals(); render(); }
     if (drawEvidence && selected) showQuestion(selected);
   });
 }
 
-/** Chip glyphs can change when a linked question changes. */
+/** Chip glyphs can change when a directly linked question changes. */
 function panelQuestions() {
-  const ids = selected ? upstream([selected]).nodes : new Set<string>();
-  for (const l of links) if (l.target === selected) ids.add(l.source);
+  const ids = new Set(selected ? [selected] : []);
+  for (const l of links) {
+    if (l.source === selected) ids.add(l.target);
+    if (l.target === selected) ids.add(l.source);
+  }
   return ids;
 }
 
@@ -360,7 +367,7 @@ function apply(m: Msg) {
     for (const st of statements(m.nodes, m.rels)) cypher(st.cypher, st.params);
     evidence = selected !== null && m.rels.some((r) =>
       (r.type === "OF" && r.to === selected) ||
-      r.type === "FOR" ||
+      (r.type === "FOR" && r.from === selected) ||
       (r.type === "ACCEPTED_BY" && r.to === selected) ||
       (r.type === "NEEDS" && (r.from === selected || r.to === selected)));
     for (const n of m.nodes)
@@ -371,8 +378,7 @@ function apply(m: Msg) {
         links.push({ source: r.from, target: r.to });
   } else if (m.type === "states") {
     const next = new Map(m.states.map((x) => [x.id, x]));
-    const watched = new Set([...panelQuestions(), ...exploration()]);
-    evidence = [...watched].some((id) => JSON.stringify(statuses.get(id)) !== JSON.stringify(next.get(id)));
+    evidence = [...panelQuestions()].some((id) => JSON.stringify(statuses.get(id)) !== JSON.stringify(next.get(id)));
     statuses = next;
   }
   scheduleDisplay(true, evidence);
@@ -391,44 +397,38 @@ function connect(delay = 500) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Goals: one line for the chosen goal, and a menu of all goals.
+// Goals
 
-const goalLine = document.getElementById("goal-line") as HTMLButtonElement;
-const goalMenu = document.getElementById("goal-menu")!;
+const goalSelect = document.getElementById("goal") as HTMLSelectElement;
 let goalSignature = "";
 
+/** The dropdown names the work; the evidence panel shows its acceptance test. */
 function renderGoals() {
   const all = goals();
-  const goalState = (g: Goal): State => (g.acceptance ? stateOf(g.acceptance) : "waiting");
-  const signature = JSON.stringify([selectedGoal, all.map((g) => [g.id, g.text, g.acceptance, goalState(g)])]);
+  const signature = JSON.stringify(all.map((g) => [g.id, g.text]));
   if (signature !== goalSignature) {
     goalSignature = signature;
-    const label = (g: Goal) => (all.filter((o) => o.text === g.text).length > 1 ? `${g.text} (${g.id})` : g.text);
-    const current = all.find((g) => g.id === selectedGoal);
-    goalLine.dataset.current = selectedGoal;
-    goalLine.title = current ? `${current.text} (${current.id})` : "All questions";
-    goalLine.replaceChildren(...(current ? [mark(goalState(current), 13, true), h("span", {}, label(current))] : [h("span", {}, "All questions")]));
-    const option = (id: string, text: string, state?: State) => {
-      const b = h("button", { type: "button", role: "menuitemradio", class: "goal-option", "aria-checked": String(id === selectedGoal), "data-goal": id }, state ? mark(state, 12, true) : null, h("span", {}, text));
-      b.onclick = () => {
-        goalMenu.hidePopover?.();
-        chooseGoal(id);
-      };
-      return b;
-    };
-    goalMenu.replaceChildren(...all.map((g) => option(g.id, label(g), goalState(g))), option("", "All questions"));
+    goalSelect.replaceChildren(
+      h("option", { value: "" }, "All questions"),
+      ...all.map((g) => {
+        const dup = all.filter((other) => other.text === g.text).length > 1;
+        return h("option", { value: g.id, title: g.id }, dup ? `${g.text} (${g.id})` : g.text);
+      }),
+    );
   }
+  goalSelect.value = selectedGoal;
+  goalSelect.disabled = !all.length;
   if (!goalInitialized && all.length) {
     goalInitialized = true;
     if (!selected) { chooseGoal(all[0]!.id); return; }
   }
   // A newly bound acceptance question opens an otherwise empty goal view.
   if (selectedGoal && !selected) {
-    const accepts = all.find((g) => g.id === selectedGoal)?.acceptance;
-    if (accepts) select(accepts);
+    const acceptance = all.find((g) => g.id === selectedGoal)?.acceptance;
+    if (acceptance) select(acceptance);
   }
 }
-goalLine.onclick = () => chooseGoal(selectedGoal);
+goalSelect.onchange = () => chooseGoal(goalSelect.value);
 
 function chooseGoal(id: string) {
   selectedGoal = id;
@@ -441,7 +441,7 @@ function chooseGoal(id: string) {
   const g = goals().find((g) => g.id === id);
   if (g?.acceptance) select(g.acceptance);
   else {
-    if (!id) trail.scrollTop = 0;
+    if (!id) scroller.scrollLeft = 0;
     document.getElementById("question")!.replaceChildren(
       ...(g ? [h("h2", {}, g.text)] : []),
       h("p", { class: "hint" }, g ? "No acceptance question." : "Select a question."),
@@ -461,32 +461,18 @@ function badge(st: Status | undefined) {
 
 /** An id in a table: clickable, with its answer's glyph. */
 function ref(q: string) {
-  const a = h("span", { class: "ref id" }, mark(stateOf(q), 10, acceptance().has(q)), q);
+  const accepts = goals().some((g) => g.acceptance === q);
+  const a = h("span", { class: "ref id" }, mark(stateOf(q), 10, accepts), q);
   a.onclick = () => select(q);
   return a;
 }
 
 /** Another question, by its text. */
 function chip(q: string) {
-  const b = h("button", { type: "button", class: "chip", title: q }, mark(stateOf(q), 12, acceptance().has(q)), h("span", {}, nodes.get(q)?.text ?? q));
+  const accepts = goals().some((g) => g.acceptance === q);
+  const b = h("button", { type: "button", class: "chip", title: q }, mark(stateOf(q), 12, accepts), h("span", {}, nodes.get(q)?.text ?? q));
   b.onclick = () => select(q);
   return b;
-}
-
-/** What the selected question depends on, as a tree. Each question shows once. */
-function tree(qid: string, seen = new Set([qid])): HTMLElement | null {
-  const deps = links.filter((l) => l.source === qid && !seen.has(l.target)).map((l) => l.target);
-  for (const d of deps) seen.add(d);
-  return deps.length ? h("ul", { class: "tree" }, ...deps.map((d) => h("li", {}, chip(d), tree(d, seen)))) : null;
-}
-
-/** The exploratory questions of the goals that the selected question accepts. */
-function exploration(): string[] {
-  if (!selected) return [];
-  return cypher(
-    "MATCH (g:Goal)-[:ACCEPTED_BY]->(:Question {id: $id}) MATCH (e:Question)-[:FOR]->(g) RETURN DISTINCT e.id AS id, e.seq AS seq ORDER BY seq DESC",
-    { id: selected },
-  ).map((r) => String(r.id));
 }
 
 const IMAGE = /\.(png|jpe?g|gif|svg|webp)$/i;
@@ -596,8 +582,6 @@ function showQuestion(qid: string) {
   const latest = Object.assign({}, ...(d.results as Record<string, unknown>[])) as Record<string, unknown>;
   // Measurements already printed inside Rule clauses are not repeated in a second table right below.
   const extraEntries = Object.entries(latest).filter(([k]) => !shownNames.has(k));
-  const explored = d.accepts.length ? exploration() : [];
-  const dependsOn = tree(qid);
   const probeDetails = h("details", { class: "probe" }, h("summary", {}, "Probe"), h("pre", {}, d.probe)) as HTMLDetailsElement;
   probeDetails.open = keepProbeOpen;
   const runsCount = d.runs.length;
@@ -632,10 +616,10 @@ function showQuestion(qid: string) {
       badge(st),
       st?.was ? h("span", {}, `was ${st.was}`) : null,
       d.accepts.length ? h("span", {}, "acceptance") : null,
-      d.asker ? h("span", {}, d.asker) : null,
       h("span", { class: "id" }, qid),
     ),
     h("h2", {}, d.text),
+    d.asker ? h("p", { class: "provenance" }, "Asked by ", h("span", {}, d.asker)) : null,
     ruleEl,
     reason ? h("p", { class: "reason" }, reason) : null,
     ...(pictures.length
@@ -647,10 +631,6 @@ function showQuestion(qid: string) {
     ...(d.results.length > 1
       ? [h("details", { class: "raw-measurements" }, h("summary", {}, "All measurements"), h("pre", {}, d.results.map((x) => JSON.stringify(x)).join("\n")))]
       : []),
-    ...(dependsOn ? [h("h3", {}, "Depends on"), dependsOn] : []),
-    ...list("Used by", d.usedBy),
-    ...list("Answered no", explored.filter((e) => stateOf(e) === "no")),
-    ...list("Failed", explored.filter((e) => stateOf(e) === "failed")),
     ...(d.inputs.length || d.saved.length
       ? [
           h("h3", {}, "Files"),
@@ -669,6 +649,8 @@ function showQuestion(qid: string) {
           ),
         ]
       : []),
+    ...list("Depends on", d.restsOn),
+    ...list("Used by", d.usedBy),
     h("div", { class: "disclosures" }, probeDetails, runsDetails),
   ];
   panel.replaceChildren(...parts.filter((x) => x !== null));
@@ -679,7 +661,7 @@ function select(qid: string, previous?: QuestionVisit) {
   if (previous) marked = new Set(previous.marked);
   selected = qid;
   updateEvidenceBack();
-  if (narrow.matches) setView("evidence");
+  setSidebar(true);
   showQuestion(qid);
   const panel = document.getElementById("question")!;
   const probe = panel.querySelector<HTMLDetailsElement>("details.probe");
@@ -689,7 +671,7 @@ function select(qid: string, previous?: QuestionVisit) {
   panel.scrollTop = previous?.scroll ?? 0;
   render();
   if (previous) {
-    trail.scrollTop = previous.trail;
+    scroller.scrollLeft = previous.lanes;
     if (evidenceBack.hidden) {
       const heading = panel.querySelector("h2")!;
       heading.tabIndex = -1;
@@ -697,100 +679,43 @@ function select(qid: string, previous?: QuestionVisit) {
     }
     return;
   }
-  list.querySelector(`[data-id="${qid}"]`)?.scrollIntoView({ block: "nearest" });
+  const x = place.get(qid)?.x;
+  if (x !== undefined && (x - PAD < scroller.scrollLeft || x + PAD > scroller.scrollLeft + scroller.clientWidth))
+    scroller.scrollLeft = Math.max(0, x + PAD - scroller.clientWidth);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Search: plain words find questions; a query that starts like Cypher runs on Enter.
+// Queries (docked under the lanes so Evidence stays visible)
 
-const PRESETS = [
-  "MATCH (g:Goal)\nOPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question)\nRETURN g.id AS goal, g.text AS text, q.id AS acceptance, q.id IN $yes AS yes ORDER BY g.seq",
-  "MATCH (r:Run {answer: 'failed'})-[:OF]->(q:Question)\nRETURN q.id AS id, r.reason AS reason, r.seq AS seq ORDER BY seq DESC",
-  "MATCH (q:Question)<-[:OF]-(r:Run)-[x:READ]->(:File)\nWHERE r.id IN $current AND NOT x.name STARTS WITH 'q-'\nRETURN x.name AS input, collect(DISTINCT q.id) AS questions ORDER BY input",
+const PRESETS: [string, string][] = [
+  ["What is each goal’s acceptance question?", "MATCH (g:Goal)\nOPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question)\nRETURN g.id AS goal, g.text AS text, q.id AS acceptance, q.id IN $yes AS yes ORDER BY g.seq"],
+  ["What does the selected question use?", "MATCH (q:Question {id: $selected})-[:NEEDS*0..]->(u:Question)\nRETURN DISTINCT u.id AS id, u.text AS text, u.seq AS seq ORDER BY seq"],
+  ["Which questions answer yes?", "MATCH (q:Question)\nWHERE q.id IN $yes\nRETURN q.id AS id, q.text AS text ORDER BY q.seq"],
+  ["What is each rule?", "MATCH (q:Question)\nRETURN q.id AS id, q.rule AS rule, q.id IN $yes AS yes ORDER BY q.seq"],
+  ["Which questions read each file?", "MATCH (q:Question)<-[:OF]-(r:Run)-[x:READ]->(:File)\nWHERE r.id IN $current AND NOT x.name STARTS WITH 'q-'\nRETURN x.name AS input, count(DISTINCT q) AS read_by, collect(DISTINCT q.id) AS questions ORDER BY input"],
+  ["Which questions read from the same question?", "MATCH (a:Question)-[:NEEDS]->(u:Question)<-[:NEEDS]-(b:Question)\nWHERE a.seq < b.seq\nRETURN u.id AS output_of, a.id AS a, b.id AS b"],
+  ["Which runs failed, and why?", "MATCH (r:Run {answer: 'failed'})-[:OF]->(q:Question)\nRETURN q.id AS id, r.reason AS reason, r.seq AS seq ORDER BY seq DESC"],
+  ["What did each asker ask?", "MATCH (q:Question)\nRETURN q.asker AS asker, count(*) AS questions,\n  sum(CASE WHEN q.id IN $yes THEN 1 ELSE 0 END) AS yes,\n  sum(CASE WHEN q.id IN $no THEN 1 ELSE 0 END) AS no\nORDER BY questions DESC"],
 ];
-const CYPHER = /^\s*(MATCH|OPTIONAL|WITH|UNWIND|RETURN|CALL)\b/i;
 
-const search = document.getElementById("search")!;
-const input = document.getElementById("search-input") as HTMLTextAreaElement;
-const results = document.getElementById("results")!;
+const queryToggle = document.getElementById("query-toggle") as HTMLButtonElement;
+const querySection = document.getElementById("query")!;
+const preset = document.getElementById("preset") as HTMLSelectElement;
+const text = document.getElementById("cypher") as HTMLTextAreaElement;
 
-function grow() {
-  input.style.height = "auto";
-  input.style.height = `${input.scrollHeight}px`;
+function setQueryOpen(open: boolean) {
+  querySection.hidden = !open;
+  queryToggle.setAttribute("aria-expanded", String(open));
+  queryToggle.textContent = open ? "▾ Query" : "▸ Query";
 }
+queryToggle.onclick = () => setQueryOpen(Boolean(querySection.hidden));
 
-function setMarked(next: Set<string>) {
-  marked = next;
-  scheduleDisplay(true);
-}
-
-function onSearch() {
-  grow();
-  const v = input.value.trim();
-  if (!v) {
-    setMarked(new Set());
-    results.hidden = !search.contains(document.activeElement);
-    results.replaceChildren(
-      ...PRESETS.map((q) => {
-        const b = h("button", { type: "button", class: "preset" }, h("code", {}, q));
-        b.onclick = () => showQuery(q);
-        return b;
-      }),
-    );
-    return;
-  }
-  if (CYPHER.test(v)) return;
-  const words = v.toLowerCase();
-  const found = [...nodes.values()]
-    .filter((q) => q.text.toLowerCase().includes(words) || q.id === words || laneOf(q.asker).toLowerCase().includes(words))
-    .sort((a, b) => b.seq - a.seq);
-  setMarked(new Set(found.map((q) => q.id)));
-  results.hidden = false;
-  results.replaceChildren(found.length ? h("div", { class: "matches" }, ...found.slice(0, 50).map((q) => chip(q.id))) : h("p", { class: "hint" }, "No matches"));
-}
-
-function closeSearch() {
-  input.value = "";
-  grow();
-  results.hidden = true;
-  results.replaceChildren();
-  setMarked(new Set());
-  input.blur();
-}
-
-input.addEventListener("input", onSearch);
-input.addEventListener("focus", () => { if (!input.value.trim()) onSearch(); });
-search.addEventListener("focusout", (e) => {
-  if (!search.contains(e.relatedTarget as Node | null) && !input.value.trim()) results.hidden = true;
-});
-input.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    e.preventDefault();
-    closeSearch();
-  } else if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    if (CYPHER.test(input.value)) runQuery();
-    else (results.querySelector(".chip") as HTMLButtonElement | null)?.click();
-  } else if (e.key === "ArrowDown" && !CYPHER.test(input.value)) {
-    const first = results.querySelector<HTMLElement>("button");
-    if (first) { e.preventDefault(); first.focus(); }
-  }
-});
-results.addEventListener("keydown", (e) => {
-  const buttons = [...results.querySelectorAll<HTMLElement>("button")];
-  const i = buttons.indexOf(document.activeElement as HTMLElement);
-  if (i < 0) return;
-  if (e.key === "ArrowDown") { e.preventDefault(); buttons[i + 1]?.focus(); }
-  else if (e.key === "ArrowUp") { e.preventDefault(); (buttons[i - 1] ?? input).focus(); }
-  else if (e.key === "Escape") closeSearch();
-});
-document.addEventListener("keydown", (e) => {
-  const typing = (e.target as HTMLElement).closest("input, textarea, select, [contenteditable]");
-  if ((e.key === "/" && !typing) || (e.key === "k" && (e.metaKey || e.ctrlKey))) {
-    e.preventDefault();
-    input.focus();
-  }
-});
+preset.replaceChildren(...PRESETS.map(([name], i) => h("option", { value: String(i) }, name)));
+preset.onchange = () => {
+  text.value = PRESETS[Number(preset.value)]![1];
+  runQuery();
+};
+text.value = PRESETS[0]![1];
 
 /** Question ids in a value: the value itself, or the items of a list. */
 const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.flatMap(idsIn) : typeof v === "string" && nodes.has(v) ? [v] : []);
@@ -802,46 +727,48 @@ const params = () => ({
   run: (selected && statuses.get(selected)?.run) ?? null,
 });
 
-/** Runs the Cypher in the search bar, shows the rows, and marks the questions they name. Returns the rows, or the error. */
+/** Runs the Query drawer's Cypher, shows the rows, and marks the questions they name. Returns the rows, or the error. */
 function runQuery(): { columns: string[]; rows: Row[] } | Error {
-  results.hidden = false;
-  if (input.value.includes("$selected") && !selected) {
-    results.replaceChildren(h("p", { class: "hint" }, "Select a question first."));
+  const out = document.getElementById("rows")!;
+  if (text.value.includes("$selected") && !selected) {
+    out.replaceChildren(h("p", { class: "hint" }, "Select a question first."));
     return new Error("No question is selected, and this query uses $selected. Select one first.");
   }
   try {
-    const r = result(input.value, params());
-    setMarked(new Set(r.rows.flatMap((row) => Object.values(row).flatMap(idsIn))));
+    const r = result(text.value, params());
+    marked = new Set(r.rows.flatMap((row) => Object.values(row).flatMap(idsIn)));
+    render();
     const cell = (v: unknown): Node | string => {
       const found = idsIn(v);
       if (found.length && (typeof v === "string" || (Array.isArray(v) && found.length === v.length)))
         return h("span", {}, ...found.flatMap((x, i) => (i ? [" ", ref(x)] : [ref(x)])));
       return typeof v === "string" ? v : JSON.stringify(v);
     };
-    results.replaceChildren(
+    out.replaceChildren(
       r.rows.length
         ? h("table", {}, h("tr", {}, ...r.columns.map((c) => h("th", {}, c))), ...r.rows.map((row) => h("tr", {}, ...r.columns.map((c) => h("td", {}, cell(row[c]))))))
-        : h("p", { class: "hint" }, "No rows"),
+        : h("p", { class: "hint" }, "No rows."),
     );
     return r;
   } catch (e) {
-    setMarked(new Set());
-    results.replaceChildren(h("p", { class: "error" }, (e as Error).message));
+    marked = new Set();
+    render();
+    out.replaceChildren(h("p", { class: "error" }, (e as Error).message));
     return e as Error;
   }
 }
+document.getElementById("run")!.onclick = () => runQuery();
 
-/** Puts a query in the search bar and runs it. Evidence stays open on the right. */
+/** Opens the Query drawer, puts a query there, and runs it while Evidence stays open on the right. */
 function showQuery(query: string) {
-  input.value = query;
-  grow();
-  if (narrow.matches) setView("trail");
+  text.value = query;
+  preset.selectedIndex = PRESETS.findIndex(([, q]) => q === query);
+  setQueryOpen(true);
   return runQuery();
 }
 
 renderGoals();
 render();
-renderChanges();
 connect();
 
 // The page's tools for a browser agent (WebMCP), on the page's own functions.
