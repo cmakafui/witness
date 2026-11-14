@@ -68,16 +68,9 @@ Start from [assets/probe.py](assets/probe.py).
 - Declare each file that the probe reads, and no other file.
 - A search that finds nothing is not a proof. Ask "Within N cases, does X find Z?"
 
-## Disputes
-
-To test a claim, ask a question where yes means that the claim is wrong. Put the id of the claim in `disputes`.
-
-- If the dispute gives yes, the claim is refuted. `$refuted` lists the refuted questions.
-- If the dispute gives no, the claim passed that test.
-
 ## Reading the graph
 
-`query` runs read-only Cypher. The query tool description shows the graph. Witness does not store the current answers. It gives them as parameters: `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` and `$refuted` (question ids), and `$current` (the runs that give the current answers). Each run has `started` (milliseconds since 1970) and `ms` (how long it took).
+`query` runs read-only Cypher. The query tool description shows the graph. Witness does not store the current answers. It gives them as parameters: `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` (question ids), and `$current` (the runs that give the current answers). Each run has `started` (milliseconds since 1970) and `ms` (how long it took).
 
 Relate query basics:
 

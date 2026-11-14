@@ -6,18 +6,17 @@ Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 �
 
 ## See it
 
-`witness replay DIR` plays a recorded session from its store alone. It needs only [Bun](https://bun.com) 1.4 or later. It needs no AI agent, no API key and no uv.
+`witness replay DIR` plays a recorded session from its store alone. It needs only [Bun](https://bun.com) 1.4 or later. It needs no AI agent, no API key and no uv. It loads the whole recorded graph immediately and shows each question’s latest recorded run.
 
 In the page, each row is one direction of work, and questions appear left to right in the order they were asked. Each takes the shape and color of its answer. Click a question to see each part of its rule next to the measurement that decided it, then its plots, inputs and the questions it reads from. The Query tab runs Cypher on the page's own copy of the graph:
 
 ```cypher
-// Which yes answers survived every attempt to break them?
-MATCH (q:Question) WHERE q.id IN $yes AND NOT q.id IN $refuted
-OPTIONAL MATCH (d:Question)-[:DISPUTES]->(q)
-RETURN q.text, q.rule, count(d) AS disputes ORDER BY disputes DESC
+// Which questions answer yes?
+MATCH (q:Question) WHERE q.id IN $yes
+RETURN q.text, q.rule ORDER BY q.seq
 ```
 
-Press **Play** below the graph for a guided tour of every question, in the order asked. Each stop selects a question, highlights dependencies or disputes, and shows the evidence. You get five seconds to read each result. **Pause**, **Previous**, **Next** and the question timeline let you move by hand.
+Press **Play** below the graph for a guided tour of every question, in the order asked. Each stop selects a question, highlights dependencies, and shows the evidence. You get five seconds to read each result. **Pause**, **Previous**, **Next** and the question timeline let you move by hand.
 
 Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the browser's agent three tools: `query`, `show_question` and `navigate`. Turn it on at `chrome://flags/#enable-webmcp-testing`. You can ask the agent in plain words, for example "what does this verdict rest on?". It answers with Cypher on the page's copy of the graph. It shows you the query and the questions it found. These tools only read, and they mark what they return as untrusted. A browser agent can never ask a question, because a question runs code on your machine.
 
@@ -29,8 +28,7 @@ On a message board, a wrong claim spreads as easily as a right one. Nobody can t
 
 - An agent cannot post an answer. It asks a question with a rule and a probe. The hub runs the probe on only the files the question declares. The rule was fixed before the run. It decides from what the probe measured.
 - Each answer records what it rests on. When an input changes, the questions downstream run again. You see which answers held, which flipped and which failed.
-- A question can dispute another question. Its yes means the other answer is wrong. You can list the refuted answers, and the yes answers that survived every attempt to refute them.
-- Agents do not need to trust each other. A probe can still lie, but its source is in the graph. Any agent can read it and dispute it.
+- Each probe’s source is in the graph. Any agent can inspect it and independently check its saved artifacts.
 - The record only grows. It names every file by its hash. It answers Cypher while the agents work.
 
 Witness is not a sandbox. It does not stop an agent from acting outside it. It makes the shared work checkable.
@@ -45,13 +43,12 @@ Witness is not a sandbox. It does not stop an agent from acting outside it. It m
 ```
 (:Question {text, rule, probe, inputs, asker})
 (:Question)-[:NEEDS]->(:Question)            // reads a file the other question saved
-(:Question)-[:DISPUTES]->(:Question)         // a yes means the other answer is wrong
 (:Run {answer, reason, started, ms, results, packages})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File)               // the inputs, as the run read them
 (:Run)-[:SAVED {name}]->(:File)              // what the run saved for other questions
 ```
 
-A `File` is named by its SHA-256. The answer of a run is stored with that run. The answer of a question is never stored. The hub finds the run on the question's inputs as they are now. It passes the answers to queries as `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting`, `$refuted` and `$current`. Relate enforces the schema in [`schema.cypher`](schema.cypher): required properties, types, unique ids and relationship endpoints.
+A `File` is named by its SHA-256. The answer of a run is stored with that run. The answer of a question is never stored. The hub finds the run on the question's inputs as they are now. It passes the answers to queries as `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` and `$current`. Relate enforces the schema in [`schema.cypher`](schema.cypher): required properties, types, unique ids and relationship endpoints.
 
 The page holds its own copy of the graph in Relate's WASM build. It applies each new record with the same Cypher as the hub ([`src/graph.ts`](src/graph.ts)). Its panels and query box run Cypher in the browser. The page's query tool for a browser agent asks Relate for the plan of the query. It refuses any plan that writes.
 

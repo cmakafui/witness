@@ -1,10 +1,10 @@
-// A recorded session plays back from the store alone: in order, each question pending until its run, ending as answered.
+// A recorded store loads immediately; the page tours the questions and their committed evidence.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hub } from "../src/hub.ts";
-import { replay, timeline } from "../src/replay.ts";
+import { replay } from "../src/replay.ts";
 
 let root: string;
 const ids: Record<string, string> = {};
@@ -23,7 +23,6 @@ beforeAll(async () => {
     text: "Is the total above 100?",
     rule: "$total > 100",
     inputs: [`${a.id}/n.json`],
-    disputes: [a.id],
     probe: `${head}n=json.load(open("${a.id}/n.json"))\njson.dump(n, open(os.path.join(os.environ["WITNESS_OUT"], "n.json"), "w"))\nprint("WITNESS_RESULT", json.dumps({"total": sum(n)}))`,
   });
   const c = await hub.ask({ text: "Does it crash?", rule: "$x = 1", probe: `${head}raise SystemExit(2)\nprint("WITNESS_RESULT", "{}")` });
@@ -34,22 +33,37 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-test("the timeline brings every record after what it points to, and each question before its answer", () => {
-  const steps = timeline(root);
-  const seen = new Set<string>();
-  let pending = false;
-  for (const s of steps) {
-    for (const n of s.nodes) seen.add(n.id);
-    for (const r of s.rels) expect(seen.has(r.from) && seen.has(r.to)).toBe(true);
-    if (s.states.some((x) => x.id === ids.a && x.state === "pending")) pending = true;
+test("a viewer receives the whole recorded graph and answers immediately, without running changed inputs", async () => {
+  writeFileSync(join(root, "data.txt"), "");
+  const server = replay(root, { port: 0 });
+  const ws = new WebSocket(new URL("/events", server.url.href.replace(/^http/, "ws")));
+  try {
+    const messages: any[] = [];
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("recorded snapshot did not arrive")), 5000);
+      ws.onerror = () => { clearTimeout(timeout); reject(new Error("recorded connection failed")); };
+      ws.onmessage = (e) => {
+        messages.push(JSON.parse(String(e.data)));
+        if (messages.length === 2) { clearTimeout(timeout); resolve(); }
+      };
+    });
+    expect(messages.map((m) => m.type)).toEqual(["graph", "states"]);
+    expect(messages[0].nodes.filter((n: any) => n.label === "Question")).toHaveLength(4);
+    expect(messages[0].nodes.filter((n: any) => n.label === "Run")).toHaveLength(4);
+    expect(Object.fromEntries(messages[1].states.map((s: any) => [s.id, s.state])))
+      .toEqual({ [ids.a!]: "yes", [ids.b!]: "no", [ids.c!]: "failed", [ids.d!]: "no" });
+    const run = messages[0].rels.find((r: any) => r.type === "OF" && r.to === ids.a).from;
+    const file = messages[0].rels.find((r: any) => r.type === "SAVED" && r.from === run).to;
+    const output = await fetch(new URL(`/files/${file}?name=n.json`, server.url));
+    expect(await output.json()).toEqual([4, 5, 6]);
+  } finally {
+    ws.close();
+    server.stop(true);
   }
-  expect(pending).toBe(true);
-  const last = Object.fromEntries(steps.at(-1)!.states.map((s) => [s.id, s.state]));
-  expect(last).toEqual({ [ids.a!]: "yes", [ids.b!]: "no", [ids.c!]: "failed", [ids.d!]: "no" });
 });
 
 test("the page plays the session back into its own Relate copy", async () => {
-  const server = replay(root, { port: 0, stepMs: 20 });
+  const server = replay(root, { port: 0 });
   try {
     await using view = new Bun.WebView({ width: 1000, height: 700 });
     await view.navigate(server.url.href);
@@ -59,8 +73,6 @@ test("the page plays the session back into its own Relate copy", async () => {
       got = (await view.evaluate(`window.witness ? window.witness.state(${JSON.stringify(ids.b)}) : null`).catch(() => null)) as string;
     }
     expect(got).toBe("no");
-    const disputes = await view.evaluate(`window.witness.cypher("MATCH (:Question)-[:DISPUTES]->(q:Question) RETURN q.id AS id")`);
-    expect(disputes).toEqual([{ id: ids.a }]);
 
     // The page's WebMCP tools: they read the page's copy, show the person what they found, and refuse to write.
     // A refusal is a reply the agent can read and fix, as on /mcp.
@@ -81,9 +93,35 @@ test("the page plays the session back into its own Relate copy", async () => {
     expect(await view.evaluate(`window.witness.cypher(${JSON.stringify(forged)})`)).toEqual([{ n: 0 }]);
 
     const shown = (await call("show_question", { id: ids.b })) as Record<string, unknown>;
-    expect(shown).toMatchObject({ id: ids.b, answer: "no", restsOn: [ids.a], disputes: [ids.a] });
+    expect(shown).toMatchObject({ id: ids.b, answer: "no", restsOn: [ids.a] });
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the total above 100?");
     expect(await call("show_question", { id: "q-ffffffffffff" })).toEqual({ refused: `There is no question q-ffffffffffff. Call query to list the questions.` });
+
+    // Follow actual dependency chips through two questions, then return to the
+    // original reading position and expanded probe. Re-selecting adds no history.
+    expect(await view.evaluate("document.getElementById('evidence-back').hidden")).toBe(true);
+    await call("show_question", { id: ids.b });
+    expect(await view.evaluate("document.getElementById('evidence-back').hidden")).toBe(true);
+    await call("show_question", { id: ids.d });
+    const readingPosition = await view.evaluate(`(() => {
+      document.querySelector('#question details').open = true;
+      const panel = document.getElementById('question'); panel.scrollTop = 120;
+      return panel.scrollTop;
+    })()`);
+    expect(readingPosition as number).toBeGreaterThan(0);
+    await view.evaluate("document.querySelector('#question button.chip').click()");
+    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the total above 100?");
+    await view.evaluate("document.querySelector('#question button.chip').click()");
+    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
+    await view.evaluate("document.getElementById('evidence-back').click()");
+    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the total above 100?");
+    await view.evaluate("document.getElementById('evidence-back').click()");
+    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the saved total above 100?");
+    expect(await view.evaluate("document.querySelector('#question details').open")).toBe(true);
+    expect(await view.evaluate("document.getElementById('question').scrollTop")).toBe(readingPosition);
+    await view.evaluate("document.getElementById('evidence-back').click()");
+    expect(await view.evaluate("document.getElementById('evidence-back').hidden")).toBe(true);
+    expect(await view.evaluate("document.activeElement === document.querySelector('#question h2')")).toBe(true);
 
     const neighborhood = (relation: string, id?: string, depth?: number) => call("navigate", { relation, ...(id ? { id } : {}), ...(depth === undefined ? {} : { depth }) });
     // Navigation immediately shows evidence without changing an open panel's width.
@@ -95,6 +133,10 @@ test("the page plays the session back into its own Relate copy", async () => {
     expect(dependencies.links).toEqual([{ from: ids.b, to: ids.a, type: "NEEDS" }]);
     expect(await view.evaluate("document.getElementById('navigation-summary').textContent")).toBe("Dependencies: 2 questions, 1 link, depth 2");
     expect(await view.evaluate("document.getElementById('question').hidden")).toBe(false);
+    await view.evaluate("document.querySelector('#question button.chip').click()");
+    await view.evaluate("document.getElementById('evidence-back').click()");
+    expect(await view.evaluate("document.getElementById('navigation').hidden")).toBe(false);
+    expect(await view.evaluate("document.getElementById('navigation-summary').textContent")).toBe("Dependencies: 2 questions, 1 link, depth 2");
 
     // A walkthrough opens a hidden panel again, at its full width, and leaves the lanes alone.
     const lanesWidth = await view.evaluate("document.getElementById('graph').clientWidth");
@@ -111,6 +153,7 @@ test("the page plays the session back into its own Relate copy", async () => {
     // Pause stops the reading timer and resumes on the same question.
     await view.evaluate("document.getElementById('tour-play').click()");
     await view.evaluate("document.getElementById('tour-play').click()");
+    expect(await view.evaluate("document.getElementById('evidence-back').hidden")).toBe(true);
     expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Paused at 1 of 4");
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
     expect(await neighborhood("dependencies", ids.d, 1)).toMatchObject({ questions: [{ id: ids.d }, { id: ids.b }] });
@@ -119,7 +162,6 @@ test("the page plays the session back into its own Relate copy", async () => {
     expect(await neighborhood("dependents", ids.a)).toMatchObject({ questions: [{ id: ids.a }, { id: ids.b }] });
     expect(await neighborhood("dependents", ids.a, 2)).toMatchObject({ questions: [{ id: ids.a }, { id: ids.b }, { id: ids.d }] });
     expect(await neighborhood("dependencies")).toMatchObject({ id: ids.a, questions: [{ id: ids.a }], links: [] });
-    for (const start of [ids.a, ids.b]) expect(await neighborhood("disputes", start)).toMatchObject({ links: [{ from: ids.b, to: ids.a, type: "DISPUTES" }] });
     expect(await neighborhood("dependencies", ids.c)).toMatchObject({ questions: [{ id: ids.c, answer: "failed" }], links: [] });
     expect(await neighborhood("dependencies", "q-ffffffffffff")).toHaveProperty("refused");
     for (const depth of [0, 1.5, 11]) expect(await neighborhood("dependencies", ids.a, depth)).toHaveProperty("refused");

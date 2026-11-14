@@ -29,7 +29,6 @@ const { values, positionals } = parseArgs({
     host: { type: "string", default: "127.0.0.1" },
     jobs: { type: "string", default: "4" },
     idle: { type: "string", default: "0" },
-    "step-ms": { type: "string", default: "600" },
     help: { type: "boolean", short: "h" },
     version: { type: "boolean", short: "v" },
   },
@@ -58,8 +57,8 @@ switch (values.version ? "version" : values.help ? "help" : command) {
     break;
   }
   case "replay": {
-    const server = replay(root, { port: Number(values.port ?? 4748), hostname: values.host, stepMs: Number(values["step-ms"]) });
-    console.log(`Witness replay of ${root}\n  page: ${server.url.href}\n  each viewer gets the session from the start; reload to play it again`);
+    const server = replay(root, { port: Number(values.port ?? 4748), hostname: values.host });
+    console.log(`Witness replay of ${root}\n  page: ${server.url.href}\n  press Play to tour the recorded questions`);
     browse(server.url);
     break;
   }

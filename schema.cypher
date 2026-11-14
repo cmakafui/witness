@@ -14,7 +14,6 @@ CREATE GRAPH TYPE witness AS {
   (f:File => {id :: STRING NOT NULL, bytes :: INTEGER NOT NULL}),
 
   (q)-[:NEEDS]->(q),
-  (q)-[:DISPUTES]->(q),
   (r)-[:OF]->(q),
   (r)-[:READ => {name :: STRING NOT NULL}]->(f),
   (r)-[:SAVED => {name :: STRING NOT NULL}]->(f)

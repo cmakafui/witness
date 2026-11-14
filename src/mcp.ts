@@ -15,7 +15,6 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 - The probe is a Python script with a PEP 723 header. uv runs it in an empty folder that holds the declared inputs only. It prints each measurement as WITNESS_RESULT and one JSON object. It saves files for other questions in $WITNESS_OUT.
 - An input is a workspace path, or q-…/name for a file that another question saved.
 - When an input changes, the question runs again. When the inputs change back, the old answer comes back. So a probe must not act: do not send, deploy, or use a budget in a probe.
-- To test a claim, ask a question where yes means that the claim is wrong, and put the id of the claim in disputes.
 - query: read the graph with Cypher. look: show a file that a run saved.`;
 
 const text = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
@@ -45,7 +44,6 @@ function server(hub: Hub): McpServer {
           .describe("A Cypher expression over the measurements. True gives yes. $name is a measurement. $results is the list of all measurements. Example: $p < 0.01 AND $gain >= 0.1."),
         probe: z.string().describe('A Python script with a PEP 723 header. It prints each measurement as WITNESS_RESULT and one JSON object, for example {"p": 0.003}.'),
         inputs: z.array(z.string()).default([]).describe("The files that the probe reads: workspace paths, or q-…/name for a file that another question saved."),
-        disputes: z.array(z.string()).default([]).describe("The ids of the questions that a yes to this question shows are wrong."),
         asker: z.string().optional().describe("Your name or role. Witness shows it and does not use it."),
         timeout_s: z.number().int().positive().max(3600).optional().describe("The time limit of one run, in seconds. Default 600."),
         wait_s: z.number().int().min(0).max(240).optional().describe("The time to wait for the answer, in seconds, at most 240. Default 120. After that, the run continues."),

@@ -14,7 +14,6 @@ export type ProbeRun = {
   probe: string; // the Python source
   inputs: { name: string; path: string }[]; // name: where the probe finds it (relative); path: where it is now
   timeoutS: number;
-  onResult?: (data: Record<string, unknown>) => void;
 };
 
 export type ProbeOutcome = {
@@ -120,7 +119,6 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
         const data = JSON.parse(l.slice(RESULT.length + 1));
         if (data === null || typeof data !== "object" || Array.isArray(data)) throw new Error("not an object");
         results.push(data);
-        run.onResult?.(data);
       } catch {
         badResult ??= l;
       }

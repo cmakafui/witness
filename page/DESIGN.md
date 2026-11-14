@@ -130,7 +130,7 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 ## Layout
 
 ```
-┌ Witness   ● 10 yes  ● 5 no  ⊘ 2 failed   2 disputed, none refuted     live ┐
+┌ Witness   ● 10 yes  ● 5 no  ⊘ 2 failed                         connected ┐
 ├─────────────────────────────────────────────────────────┬─────────────────────┤
 │ trees         ⊘  ⊘  ●───────●──●                          │ ● yes  q-…  trees   │
 │ clique_paths     ●     ●       ●──╌╌●                     │ Question text       │
@@ -144,8 +144,9 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 ```
 
 - **Lanes.** The x position is the order a question was asked. Each row is one direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. The layout never moves on its own, so a person can learn it.
-- **Links.** A solid curve runs from a question to each question that reads its output. A dashed vermilion curve runs from a dispute to the question it disputes.
+- **Links.** A solid curve runs from a question to each question that reads its output.
 - **Evidence panel.** A fixed column on the right. It opens on the answer, the question and the rule check, then the saved pictures, then what the question rests on, then the raw record.
+- **Back.** A quiet control beside the Evidence tab, visible after following another question. It restores the previous reading position. Playback uses its own Previous and Next controls.
 - **Tour.** A bar under the lanes, never over them.
 - Content is left aligned. Below 860px the panel moves under the lanes.
 
@@ -155,7 +156,7 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 
 ## Shapes
 
-- Question glyphs are 9px discs: filled for an answer, hollow for no answer yet, a slashed ring for failed. A refuted question gets a dashed vermilion halo.
+- Question glyphs are 9px discs: filled for an answer, hollow for no answer yet, a slashed ring for failed.
 - The selected question gets an ink ring.
 - Buttons and chips use a 4px radius. Verdict badges are fully rounded. Panels and clauses have square corners.
 
@@ -164,7 +165,7 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 - **Verdict badge.** The answer as a word on its colour: `yes`, `no`, `failed`. `pending`, `running` and `waiting` are outlined, because they are not answers.
 - **Rule check.** The rule split at its top-level `AND`s, one clause per row. Each row shows the clause in mono, the measured values it names, and whether it is true, false or not measured. A 4px bar on the left takes the colour of that result. The page evaluates each clause with its own Relate copy, on the run's measurements. The answer itself still comes from the run.
 - **Question chip.** A link to another question: its glyph, then the start of its text. Never a bare id.
-- **Headline.** Counts by answer, then how many questions have a dispute and how many are refuted.
+- **Headline.** Counts by answer.
 
 ## Do's and Don'ts
 
@@ -175,5 +176,5 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 - Don't add labels that repeat what the content already says.
 - Don't explain the page in sentences. Labels are one to three words. A legend draws the mark it names.
 - Don't show an id where the question's text fits.
-- Do write all page text in plain English, close to ASD-STE100: one word for one meaning ("dispute", never "challenge"), simple verbs, no figures of speech such as "rests on" or "survived".
+- Do write all page text in plain English, close to ASD-STE100: one word for one meaning, simple verbs, no figures of speech such as "rests on" or "survived".
 - Don't animate the lanes into place: they hold still so a person can read them.

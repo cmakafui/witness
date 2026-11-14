@@ -8,7 +8,7 @@
 // question's inputs as they are now.
 
 export type Label = "Question" | "Run" | "File";
-export type RelType = "NEEDS" | "DISPUTES" | "OF" | "READ" | "SAVED";
+export type RelType = "NEEDS" | "OF" | "READ" | "SAVED";
 
 export type GNode = { label: Label; id: string; props: Record<string, string | number | boolean | string[] | null> };
 export type GRel = { type: RelType; from: string; to: string; name?: string };
@@ -16,7 +16,6 @@ export type GRel = { type: RelType; from: string; to: string; name?: string };
 /** The label at each end of each relationship type. schema.cypher declares the same. */
 export const ENDS: Record<RelType, [Label, Label]> = {
   NEEDS: ["Question", "Question"],
-  DISPUTES: ["Question", "Question"],
   OF: ["Run", "Question"],
   READ: ["Run", "File"],
   SAVED: ["Run", "File"],
@@ -47,12 +46,11 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
 export const SCHEMA = `The graph:
 (:Question {id, text, rule, probe, inputs, asker, seq})
 (:Question)-[:NEEDS]->(:Question)      reads a file the other question saved
-(:Question)-[:DISPUTES]->(:Question)   a yes means the other question's answer is wrong
 (:Run {id, key, seq, started, ms, answer, reason, measured, results, packages})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File {id, bytes})    the inputs the run read; a File's id is its SHA-256
 (:Run)-[:SAVED {name}]->(:File)               the files the run saved for other questions
 rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is the measurements as JSON. measured is true when the probe measured, even if the rule could not decide: then other questions can read the files it saved. started is when the run began, in milliseconds since 1970. ms is how long it took.
-Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $refuted lists the questions that a question answered yes disputes. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now.`;
+Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now.`;
 
 /** A question's answer as the hub works it out. It is never stored: it comes from the runs and the inputs now. */
 export type State = "yes" | "no" | "failed" | "running" | "pending" | "waiting";
@@ -67,20 +65,17 @@ export type Status = {
 
 /**
  * The parameters every query gets, so a query can use the answers: $yes, $no, $failed, $running, $pending and
- * $waiting are lists of question ids, $refuted lists the questions that a yes disputes, and $current is the list of
- * runs that give the current answers. disputes holds each DISPUTES link as [from, to].
+ * $waiting are lists of question ids, and $current is the list of runs that give the current answers.
  */
-export function answerParams(statuses: Status[], disputes: [string, string][]): Record<State | "refuted" | "current", string[]> {
+export function answerParams(statuses: Status[]): Record<State | "current", string[]> {
   const ids = (s: State) => statuses.filter((x) => x.state === s).map((x) => x.id);
-  const yes = new Set(ids("yes"));
   return {
-    yes: [...yes],
+    yes: ids("yes"),
     no: ids("no"),
     failed: ids("failed"),
     running: ids("running"),
     pending: ids("pending"),
     waiting: ids("waiting"),
-    refuted: [...new Set(disputes.filter(([from]) => yes.has(from)).map(([, to]) => to))],
     current: statuses.flatMap((x) => (x.run && (x.state === "yes" || x.state === "no" || x.state === "failed") ? [x.run] : [])),
   };
 }

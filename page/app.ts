@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 // The live page. It keeps its own copy of the graph in Relate (WASM), built by the same statements the hub runs,
-// and answers every panel and query with Cypher in the page. The hub sends new records, states and results.
+// and answers every panel and query with Cypher in the page. The hub sends new records and states.
 //
 // The lanes show how the agents got here: one row per direction of work, questions in the order they were asked.
 // The rule check shows why an answer stands: each part of the rule, the measurements it names, and whether it held.
@@ -11,13 +11,11 @@ import { answerParams, clauses, type GNode, type GRel, measurements, named, type
 import { type Navigation, register, webTools } from "./tools.ts";
 
 type Msg =
-  | { type: "replay"; step: number; of: number }
   | { type: "graph"; nodes: GNode[]; rels: GRel[] }
-  | { type: "states"; states: Status[] }
-  | { type: "result"; question: string; run: string; data: unknown };
+  | { type: "states"; states: Status[] };
 
 type QNode = { id: string; text: string; asker: string | null; seq: number };
-type QLink = { source: string; target: string; type: "NEEDS" | "DISPUTES" };
+type QLink = { source: string; target: string };
 type Row = Record<string, unknown>;
 
 await init({ module_or_path: wasmUrl });
@@ -44,10 +42,12 @@ const cypher = (query: string, params: Record<string, unknown> = {}) => result(q
 const nodes = new Map<string, QNode>();
 const links: QLink[] = [];
 let statuses = new Map<string, Status>();
-const live = new Map<string, unknown[]>(); // run -> results printed so far
 let selected: string | null = null;
 let marked = new Set<string>();
-let focus: { nodes: Set<string>; links: Set<string> } | null = null;
+type Neighborhood = { nodes: Set<string>; links: Set<string> };
+let focus: Neighborhood | null = null;
+type QuestionVisit = { id: string; scroll: number; lanes: number; probeOpen: boolean; focus: Neighborhood | null; marked: Set<string>; summary: string };
+const questionHistory: QuestionVisit[] = [];
 let tourPlaying = false;
 let tourIndex = -1;
 let tourReady = false;
@@ -55,8 +55,7 @@ let tourTimer: ReturnType<typeof setTimeout> | undefined;
 let tourDeadline = 0;
 let tourRemaining = 5000;
 let tourPreview: number | null = null;
-let replayComplete = true; // Live workspaces have no replay stream to wait for.
-const linkId = (l: QLink) => `${l.source}:${l.type}:${l.target}`;
+const linkId = (l: QLink) => `${l.source}:${l.target}`;
 const stateOf = (q: string): State => statuses.get(q)?.state ?? "waiting";
 const colour = (s: State) => `var(--${s === "pending" ? "running" : s})`;
 
@@ -100,11 +99,12 @@ const main = document.querySelector("main")!;
 const el = document.getElementById("graph")!;
 const sidebar = document.getElementById("sidebar")!;
 const sidebarToggle = document.getElementById("sidebar-toggle")!;
+const evidenceBack = document.getElementById("evidence-back") as HTMLButtonElement;
 const names = h("div", { class: "lane-names", "aria-hidden": "true" });
 const scroller = h("div", { class: "lanes" });
 const svg = s("svg", { role: "group", "aria-label": "Questions by direction of work, in the order they were asked" }) as SVGSVGElement;
 const legend = (kind: string, words: string) => h("span", {}, s("svg", { width: 22, height: 6, "aria-hidden": "true" }, s("line", { class: `link ${kind}`, x1: 0, x2: 22, y1: 3, y2: 3 })), words);
-scroller.append(svg, h("p", { class: "caption" }, legend("needs", "depends on"), legend("disputes", "disputes")));
+scroller.append(svg, h("p", { class: "caption" }, legend("needs", "depends on")));
 const empty = h("p", { class: "empty" }, "No questions yet.");
 
 const TOP = 44; // Room for the walkthrough bar.
@@ -132,7 +132,6 @@ function render() {
   const col = Math.max(36, Math.min(88, (scroller.clientWidth - 2 * PAD) / Math.max(1, questions.length - 1)));
   const width = Math.max(scroller.clientWidth, 2 * PAD + col * (questions.length - 1));
   const height = TOP + lane * lanes.length;
-  const refuted = new Set(params().refuted);
   place.clear();
   questions.forEach((q, i) => place.set(q.id, { x: PAD + i * col, y: TOP + lane * (lanes.indexOf(laneOf(q.asker)) + 0.5) }));
 
@@ -141,14 +140,14 @@ function render() {
   svg.setAttribute("height", String(height));
   const rails = lanes.map((_, i) => s("line", { class: "rail", x1: 0, x2: width, y1: TOP + lane * (i + 0.5), y2: TOP + lane * (i + 0.5) }));
   const paths = links.flatMap((l) => {
-    // Evidence flows forward: from the question that saved a file to the one that read it, from a dispute to the question it disputes.
-    const [from, to] = l.type === "NEEDS" ? [place.get(l.target), place.get(l.source)] : [place.get(l.source), place.get(l.target)];
+    // Evidence flows forward: from the question that saved a file to the one that reads it.
+    const [from, to] = [place.get(l.target), place.get(l.source)];
     if (!from || !to) return [];
     const lit = focus?.links.has(linkId(l));
     return [
       s("path", {
-        d: curve(from, to, l.type === "DISPUTES" ? 1 : -1, lane),
-        class: `link ${l.type.toLowerCase()}${focus ? (lit ? " lit" : " dim") : ""}`,
+        d: curve(from, to, lane),
+        class: `link needs${focus ? (lit ? " lit" : " dim") : ""}`,
       }),
     ];
   });
@@ -169,7 +168,6 @@ function render() {
       s("circle", { class: "hit", r: 15 }),
     );
     g.append(glyph(state, 9));
-    if (refuted.has(q.id)) g.append(s("circle", { class: "ring refuted", r: 17 }));
     if (q.id === selected) g.append(s("circle", { class: "ring selected", r: 13.5 }));
     else if (marked.has(q.id) || focus?.nodes.has(q.id)) g.append(s("circle", { class: "ring marked", r: 13.5 }));
     g.addEventListener("click", () => select(q.id));
@@ -184,11 +182,11 @@ function render() {
   svg.replaceChildren(s("g", {}, ...rails), s("g", {}, ...paths), s("g", {}, ...glyphs));
 }
 
-/** A link between two questions. In one lane it arcs, above for a file and below for a dispute, so it clears the questions between. */
-function curve(a: { x: number; y: number }, b: { x: number; y: number }, side: 1 | -1, lane: number) {
+/** An artifact dependency. Within one lane it arcs above the questions between. */
+function curve(a: { x: number; y: number }, b: { x: number; y: number }, lane: number) {
   if (a.y === b.y) {
     const lift = Math.min(lane * 0.42, 10 + Math.abs(b.x - a.x) * 0.18);
-    return `M ${a.x} ${a.y} Q ${(a.x + b.x) / 2} ${a.y + side * lift * 2} ${b.x} ${b.y}`;
+    return `M ${a.x} ${a.y} Q ${(a.x + b.x) / 2} ${a.y - lift * 2} ${b.x} ${b.y}`;
   }
   const dx = Math.max(24, (b.x - a.x) / 2);
   return `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`;
@@ -219,6 +217,26 @@ function centre(ids: Set<string>) {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+function rememberQuestion(next: string) {
+  if (!selected || selected === next) return;
+  const panel = document.getElementById("question")!;
+  questionHistory.push({
+    id: selected, scroll: panel.scrollTop, lanes: scroller.scrollLeft,
+    probeOpen: panel.querySelector("details")?.open ?? false,
+    focus, marked: new Set(marked), summary: document.getElementById("navigation-summary")!.textContent ?? "",
+  });
+}
+
+function updateEvidenceBack() {
+  const previous = questionHistory.at(-1);
+  evidenceBack.hidden = !previous;
+  evidenceBack.title = previous ? `Back to: ${nodes.get(previous.id)?.text ?? previous.id}` : "";
+}
+evidenceBack.onclick = () => {
+  const previous = questionHistory.pop();
+  if (previous) select(previous.id, previous);
+};
+
 function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Navigation, fromTour = false) {
   if (!fromTour) pauseTour();
   if (relation === "overview") {
@@ -238,10 +256,7 @@ function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Na
     const next = new Set<string>();
     for (const l of links) {
       const { source: from, target: to } = l;
-      const targets =
-        relation === "disputes"
-          ? l.type === "DISPUTES" ? [frontier.has(from) ? to : null, frontier.has(to) ? from : null] : []
-          : l.type === "NEEDS" ? [relation === "dependencies" ? (frontier.has(from) ? to : null) : frontier.has(to) ? from : null] : [];
+      const targets = [relation === "dependencies" ? (frontier.has(from) ? to : null) : frontier.has(to) ? from : null];
       for (const target of targets)
         if (target) {
           followed.set(linkId(l), l);
@@ -253,7 +268,11 @@ function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Na
     }
     frontier = next;
   }
+  // Playback has its own Previous/Next controls. Back follows manual exploration.
+  if (fromTour) questionHistory.length = 0;
+  else rememberQuestion(start);
   selected = start;
+  updateEvidenceBack();
   marked.clear();
   focus = { nodes: found, links: new Set(followed.keys()) };
   document.getElementById("navigation")!.hidden = false;
@@ -272,7 +291,7 @@ function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Na
     relation,
     depth,
     questions: [...found].map((qid) => ({ id: qid, text: nodes.get(qid)!.text, answer: stateOf(qid) })),
-    links: [...followed.values()].map((l) => ({ from: l.source, to: l.target, type: l.type })),
+    links: [...followed.values()].map((l) => ({ from: l.source, to: l.target, type: "NEEDS" })),
   };
 }
 document.getElementById("overview")!.onclick = () => navigate({ relation: "overview" });
@@ -290,12 +309,12 @@ function updateTour() {
   const questions = tourQuestions();
   const position = tourPreview ?? tourIndex;
   const current = questions[position];
-  const finished = tourReady && replayComplete && tourIndex === questions.length - 1;
-  const where = `${position + 1} of ${questions.length}${replayComplete ? "" : " so far"}`;
+  const finished = tourReady && tourIndex === questions.length - 1;
+  const where = `${position + 1} of ${questions.length}`;
   document.getElementById("tour-progress")!.textContent = !questions.length
     ? "No questions yet"
     : !current
-      ? `${plural(questions.length, "question")}${replayComplete ? "" : " so far"}`
+      ? plural(questions.length, "question")
       : tourPreview !== null
         ? `Go to ${where}`
         : tourPlaying
@@ -332,11 +351,9 @@ function continueTour() {
   const current = questions[tourIndex];
   if (!current || !["yes", "no", "failed"].includes(stateOf(current.id))) return;
   if (tourIndex === questions.length - 1) {
-    if (replayComplete) {
-      tourPlaying = false;
-      updateTour();
-    }
-    return; // More questions may still arrive from the recorded session or a live workspace.
+    tourPlaying = false;
+    updateTour();
+    return;
   }
   tourDeadline = performance.now() + tourRemaining;
   tourTimer = setTimeout(() => {
@@ -355,8 +372,7 @@ function visitTour(index: number) {
   tourReady = false;
   tourRemaining = 5000;
   updateTour();
-  const relation = links.some((l) => l.type === "DISPUTES" && l.source === question.id) ? "disputes" : "dependencies";
-  navigate({ id: question.id, relation, depth: 1 }, true);
+  navigate({ id: question.id, relation: "dependencies", depth: 1 }, true);
   tourReady = true;
   continueTour();
 }
@@ -367,7 +383,7 @@ tourPlay.onclick = () => {
     return;
   }
   tourPlaying = true;
-  if (tourIndex < 0 || (tourReady && replayComplete && tourIndex === nodes.size - 1)) void visitTour(0);
+  if (tourIndex < 0 || (tourReady && tourIndex === nodes.size - 1)) void visitTour(0);
   else if (!tourReady) void visitTour(tourIndex);
   else continueTour();
 };
@@ -402,7 +418,7 @@ function scheduleDisplay(lanes = false, evidence = false) {
   });
 }
 
-/** Chip glyphs and refutation can change when a directly linked question changes. */
+/** Chip glyphs can change when a directly linked question changes. */
 function panelQuestions() {
   const ids = new Set(selected ? [selected] : []);
   for (const l of links) {
@@ -413,41 +429,30 @@ function panelQuestions() {
 }
 
 function apply(m: Msg) {
-  if (m.type === "replay") {
-    replayComplete = m.step === m.of;
-    const link = document.getElementById("link")!;
-    link.textContent = m.step < m.of ? `Replaying ${m.step} of ${m.of}` : "Replay finished";
-    link.className = "on";
-    scheduleDisplay();
-    return;
-  }
   let evidence = false;
   if (m.type === "graph") {
     for (const st of statements(m.nodes, m.rels)) cypher(st.cypher, st.params);
     evidence = selected !== null && m.rels.some((r) =>
       (r.type === "OF" && r.to === selected) ||
-      ((r.type === "NEEDS" || r.type === "DISPUTES") && (r.from === selected || r.to === selected)));
+      (r.type === "NEEDS" && (r.from === selected || r.to === selected)));
     for (const n of m.nodes)
       if (n.label === "Question" && !nodes.has(n.id))
         nodes.set(n.id, { id: n.id, text: String(n.props.text), asker: (n.props.asker as string) ?? null, seq: Number(n.props.seq) });
     for (const r of m.rels)
-      if ((r.type === "NEEDS" || r.type === "DISPUTES") && !links.some((l) => l.source === r.from && l.target === r.to && l.type === r.type))
-        links.push({ source: r.from, target: r.to, type: r.type });
+      if (r.type === "NEEDS" && !links.some((l) => l.source === r.from && l.target === r.to))
+        links.push({ source: r.from, target: r.to });
   } else if (m.type === "states") {
     const next = new Map(m.states.map((x) => [x.id, x]));
     evidence = [...panelQuestions()].some((id) => JSON.stringify(statuses.get(id)) !== JSON.stringify(next.get(id)));
     statuses = next;
-  } else if (m.type === "result") {
-    live.set(m.run, [...(live.get(m.run) ?? []), m.data]);
-    evidence = m.question === selected;
   }
-  scheduleDisplay(m.type !== "result", evidence);
+  scheduleDisplay(true, evidence);
 }
 
 function connect(delay = 500) {
   const link = document.getElementById("link")!;
   const ws = new WebSocket(new URL("/events", location.href.replace(/^http/, "ws")));
-  ws.onopen = () => ((link.textContent = "Live"), (link.className = "on"));
+  ws.onopen = () => ((link.textContent = "Connected"), (link.className = "on"));
   ws.onmessage = (e) => apply(JSON.parse(e.data));
   ws.onclose = () => {
     link.textContent = "Reconnecting";
@@ -457,12 +462,10 @@ function connect(delay = 500) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// The header: answers by kind, then how much doubt the record has survived.
+// The header: answers by kind.
 
 function counts() {
   const all = [...statuses.values()];
-  const disputed = new Set(links.filter((l) => l.type === "DISPUTES").map((l) => l.target));
-  const refuted = params().refuted.length;
   const box = document.getElementById("counts")!;
   if (!all.length) return box.replaceChildren();
   box.replaceChildren(
@@ -470,11 +473,6 @@ function counts() {
       .map((st) => [st, all.filter((x) => x.state === st).length] as const)
       .filter(([, n]) => n)
       .map(([st, n]) => h("span", { class: "count" }, mark(st), h("b", {}, String(n)), ` ${st}`)),
-    h(
-      "span",
-      { class: `doubt${disputed.size ? "" : " none"}` },
-      disputed.size ? `${disputed.size} disputed, ${refuted ? `${refuted} refuted` : "none refuted"}` : "No disputes",
-    ),
   );
 }
 
@@ -511,10 +509,8 @@ function details(qid: string) {
   const [l] = cypher(
     `MATCH (q:Question {id: $selected})
      OPTIONAL MATCH (q)-[:NEEDS]->(n:Question) WITH q, collect(DISTINCT n.id) AS needs
-     OPTIONAL MATCH (m:Question)-[:NEEDS]->(q) WITH q, needs, collect(DISTINCT m.id) AS neededBy
-     OPTIONAL MATCH (q)-[:DISPUTES]->(d:Question) WITH q, needs, neededBy, collect(DISTINCT d.id) AS disputes
-     OPTIONAL MATCH (e:Question)-[:DISPUTES]->(q)
-     RETURN needs, neededBy, disputes, collect(DISTINCT e.id) AS disputedBy`,
+     OPTIONAL MATCH (m:Question)-[:NEEDS]->(q)
+     RETURN needs, collect(DISTINCT m.id) AS neededBy`,
     { selected: qid },
   );
   const runs = cypher(
@@ -522,10 +518,9 @@ function details(qid: string) {
      RETURN r.id AS run, r.seq AS seq, r.answer AS answer, r.reason AS reason, r.results AS results, r.packages AS packages ORDER BY r.seq DESC`,
     { selected: qid },
   );
-  // A run is written when it ends. While one runs, the panel shows what it has printed so far.
-  const running = st?.state === "running" ? st.run : null;
-  const shown = running ? null : (runs.find((r) => r.run === st?.run) ?? runs[0]);
-  const results: unknown[] = running ? (live.get(running) ?? []) : shown ? JSON.parse(String(shown.results)) : [];
+  // Show measurements only from the committed run that gives this answer.
+  const shown = runs.find((r) => r.run === st?.run);
+  const results: unknown[] = shown ? JSON.parse(String(shown.results)) : [];
   const saved = shown ? cypher("MATCH (:Run {id: $run})-[s:SAVED]->(f:File) RETURN s.name AS name, f.id AS file ORDER BY name", { run: shown.run }) : [];
   const ids = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
   return {
@@ -536,12 +531,9 @@ function details(qid: string) {
     inputs: ids(q.inputs),
     asker: (q.asker as string | null) ?? null,
     status: st,
-    refuted: params().refuted.includes(qid),
     restsOn: ids(l?.needs),
     usedBy: ids(l?.neededBy),
-    disputes: ids(l?.disputes),
-    disputedBy: ids(l?.disputedBy),
-    final: !running && Boolean(shown),
+    ran: Boolean(shown),
     results,
     saved: saved.map((f) => ({ name: String(f.name), url: `/files/${f.file}?name=${encodeURIComponent(String(f.name))}` })),
     packages: ids(shown?.packages),
@@ -603,19 +595,16 @@ function showQuestion(qid: string) {
   const parts: (HTMLElement | null)[] = [
     h("div", { class: "verdict" }, badge(st), st?.was ? h("span", {}, `was ${st.was}`) : null, h("span", { class: "id" }, qid), d.asker ? h("span", {}, d.asker) : null),
     h("h2", {}, d.text),
-    ruleCheck(d.rule, d.results, d.final || d.results.length > 0),
-    d.refuted ? h("p", { class: "reason refuted" }, "Refuted by a dispute.") : null,
+    ruleCheck(d.rule, d.results, d.ran),
     reason ? h("p", { class: "reason" }, reason) : null,
     ...(pictures.length
       ? [h("h3", {}, "Images"), ...pictures.map((f) => h("figure", {}, h("img", { src: f.url, alt: f.name }), h("figcaption", {}, h("a", { href: f.url, target: "_blank" }, f.name))))]
       : []),
     ...list("Depends on", d.restsOn),
     ...list("Used by", d.usedBy),
-    ...list("Disputes", d.disputes),
-    ...list("Disputed by", d.disputedBy),
     ...(files.length ? [h("h3", {}, "Files"), h("ul", {}, ...files.map((f) => h("li", {}, h("a", { href: f.url, target: "_blank" }, f.name))))] : []),
     ...(d.inputs.length ? [h("h3", {}, "Inputs"), h("ul", {}, ...d.inputs.map((i) => h("li", { class: "id" }, i)))] : []),
-    d.results.length ? h("h3", {}, d.final ? "Measurements" : "Measurements so far") : null,
+    d.results.length ? h("h3", {}, "Measurements") : null,
     d.results.length ? h("pre", {}, d.results.map((x) => JSON.stringify(x)).join("\n")) : null,
     ...(d.runs.length
       ? [
@@ -643,14 +632,31 @@ function showQuestion(qid: string) {
   document.getElementById("question")!.replaceChildren(...parts.filter((x) => x !== null));
 }
 
-function select(qid: string) {
+function select(qid: string, previous?: QuestionVisit) {
   pauseTour();
-  focus = null;
-  document.getElementById("navigation")!.hidden = true;
+  if (!previous) rememberQuestion(qid);
+  focus = previous?.focus ?? null;
+  if (previous) marked = new Set(previous.marked);
+  document.getElementById("navigation")!.hidden = !focus;
+  if (previous) document.getElementById("navigation-summary")!.textContent = previous.summary;
   selected = qid;
+  updateEvidenceBack();
   tab("question");
   showQuestion(qid);
+  const panel = document.getElementById("question")!;
+  const probe = panel.querySelector("details");
+  if (probe && previous) probe.open = previous.probeOpen;
+  panel.scrollTop = previous?.scroll ?? 0;
   render();
+  if (previous) {
+    scroller.scrollLeft = previous.lanes;
+    if (evidenceBack.hidden) {
+      const heading = panel.querySelector("h2")!;
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+    }
+    return;
+  }
   const x = place.get(qid)?.x;
   if (x !== undefined && (x < scroller.scrollLeft || x > scroller.scrollLeft + scroller.clientWidth)) scroller.scrollLeft = x - scroller.clientWidth / 2;
 }
@@ -660,9 +666,7 @@ function select(qid: string) {
 
 const PRESETS: [string, string][] = [
   ["What does the selected question use?", "MATCH (q:Question {id: $selected})-[:NEEDS*0..]->(u:Question)\nRETURN DISTINCT u.id AS id, u.text AS text, u.seq AS seq ORDER BY seq"],
-  ["Which yes answers are not refuted?", "MATCH (q:Question)\nWHERE q.id IN $yes AND NOT q.id IN $refuted\nOPTIONAL MATCH (d:Question)-[:DISPUTES]->(q)\nRETURN q.id AS id, q.text AS text, count(d) AS disputes ORDER BY disputes DESC, q.seq"],
-  ["Which answers are refuted?", "MATCH (d:Question)-[:DISPUTES]->(c:Question)\nWHERE d.id IN $yes\nRETURN c.id AS claim, c.text AS text, d.id AS refuted_by ORDER BY d.seq"],
-  ["What did each dispute answer?", "MATCH (d:Question)-[:DISPUTES]->(c:Question)\nRETURN c.id AS question, d.id AS dispute, d.id IN $yes AS refutes, d.text AS text ORDER BY d.seq"],
+  ["Which questions answer yes?", "MATCH (q:Question)\nWHERE q.id IN $yes\nRETURN q.id AS id, q.text AS text ORDER BY q.seq"],
   ["What is each rule?", "MATCH (q:Question)\nRETURN q.id AS id, q.rule AS rule, q.id IN $yes AS yes ORDER BY q.seq"],
   ["Which questions read each file?", "MATCH (q:Question)<-[:OF]-(r:Run)-[x:READ]->(:File)\nWHERE r.id IN $current AND NOT x.name STARTS WITH 'q-'\nRETURN x.name AS input, count(DISTINCT q) AS read_by, collect(DISTINCT q.id) AS questions ORDER BY input"],
   ["Which questions read from the same question?", "MATCH (a:Question)-[:NEEDS]->(u:Question)<-[:NEEDS]-(b:Question)\nWHERE a.seq < b.seq\nRETURN u.id AS output_of, a.id AS a, b.id AS b"],
@@ -685,7 +689,7 @@ const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.flatMap(idsIn) : t
 
 /** The parameters every query in the page gets: the answers now, and the selected question and its current run. */
 const params = () => ({
-  ...answerParams([...statuses.values()], links.filter((l) => l.type === "DISPUTES").map((l) => [l.source, l.target] as [string, string])),
+  ...answerParams([...statuses.values()]),
   selected,
   run: (selected && statuses.get(selected)?.run) ?? null,
 });
@@ -732,10 +736,10 @@ function showQuery(query: string) {
 
 function tab(name: string, open = true) {
   if (open) setSidebar(true);
-  for (const b of document.querySelectorAll<HTMLButtonElement>("nav button")) b.classList.toggle("on", b.dataset.tab === name);
+  for (const b of document.querySelectorAll<HTMLButtonElement>("nav button[data-tab]")) b.classList.toggle("on", b.dataset.tab === name);
   for (const sec of document.querySelectorAll<HTMLElement>("aside section")) sec.hidden = sec.id !== name;
 }
-for (const b of document.querySelectorAll<HTMLButtonElement>("nav button")) b.onclick = () => tab(b.dataset.tab!);
+for (const b of document.querySelectorAll<HTMLButtonElement>("nav button[data-tab]")) b.onclick = () => tab(b.dataset.tab!);
 
 render();
 updateTour();

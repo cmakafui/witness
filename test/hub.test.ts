@@ -82,6 +82,21 @@ test("each run records when it started and how long it took", async () => {
   expect(t!.ms).toBeGreaterThan(0);
 }, 60_000);
 
+test("measurements appear together in the committed run, with only graph and state events", async () => {
+  const events: string[] = [];
+  hub.on((e) => events.push(e.type));
+  const a = await hub.ask({
+    text: "Are both measurements below 3?",
+    rule: "all(r IN $results WHERE r.x < 3)",
+    probe: probe('import time\nprint("WITNESS_RESULT", json.dumps({"x": 1}))\ntime.sleep(0.1)\nprint("WITNESS_RESULT", json.dumps({"x": 2}))'),
+  });
+  expect(a.state).toBe("yes");
+  expect(a.results).toEqual([{ x: 1 }, { x: 2 }]);
+  expect([...new Set(events)].sort()).toEqual(["graph", "states"]);
+  const [run] = hub.query("MATCH (r:Run {id: $run}) RETURN r.results AS results", { run: a.run! }).rows;
+  expect(JSON.parse(String(run!.results))).toEqual(a.results);
+}, 60_000);
+
 test("a rule that needs a measurement the run did not make has failed, never no", async () => {
   const a = await hub.ask({ text: "Is p small?", rule: "$p < 0.01", probe: measure({ gain: 0.2 }) });
   expect(a).toMatchObject({ state: "failed", reason: "the run did not measure p, which the rule needs" });
@@ -156,17 +171,6 @@ test("asking the same question twice is one question", async () => {
   expect(x.id).toBe(y.id);
   expect(hub.query("MATCH (q:Question) RETURN count(q) AS n").rows).toEqual([{ n: 1 }]);
   expect(hub.query("MATCH (r:Run) RETURN count(r) AS n").rows).toEqual([{ n: 1 }]);
-}, 60_000);
-
-test("a dispute answered yes refutes the claim it disputes; one answered no leaves it standing", async () => {
-  const one = measure({ x: 1 });
-  const a = await hub.ask({ text: "Is A true?", rule: "$x = 1", probe: one });
-  const b = await hub.ask({ text: "Is B true?", rule: "$x = 1", probe: one });
-  await hub.ask({ text: "Is A false after all?", rule: "$x = 1", probe: one, disputes: [a.id] });
-  await hub.ask({ text: "Is B false after all?", rule: "$x = 2", probe: one, disputes: [b.id] });
-  expect(hub.query("MATCH (q:Question) WHERE q.id IN $refuted RETURN q.id AS id").rows).toEqual([{ id: a.id }]);
-  const standing = hub.query("MATCH (q:Question)<-[:DISPUTES]-(:Question) WHERE q.id IN $yes AND NOT q.id IN $refuted RETURN q.id AS id").rows;
-  expect(standing).toEqual([{ id: b.id }]);
 }, 60_000);
 
 test("query cannot write", () => {

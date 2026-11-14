@@ -31,6 +31,7 @@ import json, os
 nums = [int(x) for x in open("data.txt").read().split()]
 assert nums
 print("WITNESS_RESULT", json.dumps({"total": sum(nums)}))
+json.dump({"total": sum(nums)}, open(os.path.join(os.environ["WITNESS_OUT"], "total.json"), "w"))
 `;
 
 async function agent() {
@@ -115,12 +116,13 @@ test("the page shows a new question and its answer live, from its own Relate cop
   await read("(() => { window.sampleDisplay = false; window.svgObserver.disconnect(); })()");
 
   // Linked work changes the selected panel even though its own answer is unchanged.
-  const dispute = json(await client.callTool({ name: "ask", arguments: {
-    text: "Does the linked dispute measure a total above 10?", rule: "$total > 10", probe: PROBE,
-    inputs: ["data.txt"], disputes: [a.id],
+  const consumer = json(await client.callTool({ name: "ask", arguments: {
+    text: "Is the saved total above 10?", rule: "$total > 10",
+    probe: `# /// script\n# dependencies = []\n# ///\nimport json\ntotal = json.load(open("${a.id}/total.json"))["total"]\nprint("WITNESS_RESULT", json.dumps({"total": total}))`,
+    inputs: [`${a.id}/total.json`],
   } }));
-  await until(`window.witness.state(${JSON.stringify(dispute.id)})`, "yes");
-  await until("document.querySelector('#question .reason.refuted')?.textContent", "Refuted by a dispute.");
+  await until(`window.witness.state(${JSON.stringify(consumer.id)})`, "yes");
+  await until("[...document.querySelectorAll('#question button.chip')].some(b => b.textContent.includes('Is the saved total above 10?'))", true);
   expect(await read("window.keptPanel === document.querySelector('#question h2')")).toBe(false);
   expect(await read("document.querySelector('#question h2').textContent")).toBe("Is the total at most 100?");
   await client.close();

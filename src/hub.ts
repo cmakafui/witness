@@ -28,7 +28,6 @@ export type Ask = {
   rule: string;
   probe: string;
   inputs?: string[];
-  disputes?: string[];
   asker?: string;
   timeoutS?: number;
   waitS?: number;
@@ -36,8 +35,7 @@ export type Ask = {
 
 export type Event =
   | { type: "graph"; nodes: GNode[]; rels: GRel[] }
-  | { type: "states"; states: Status[] }
-  | { type: "result"; question: string; run: string; data: unknown };
+  | { type: "states"; states: Status[] };
 
 type Question = { id: string; rule: string; probe: string; inputs: string[]; timeout: number };
 type Run = { id: string; question: string; key: string; answer: "yes" | "no" | "failed"; reason: string | null; measured: boolean | null };
@@ -87,7 +85,7 @@ export class Hub {
     this.judge.close();
   }
 
-  /** Calls fn with every change: new records, new states, and results as probes print them. */
+  /** Calls fn with every change: new records and new states. */
   on(fn: (e: Event) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -125,10 +123,6 @@ export class Hub {
     return this.db.query(
       "MATCH (r:Run)-[:OF]->(q:Question) RETURN r.id AS id, q.id AS question, r.key AS key, r.answer AS answer, r.reason AS reason, r.measured AS measured ORDER BY r.seq",
     ) as Run[];
-  }
-
-  private disputes(): [string, string][] {
-    return this.db.query("MATCH (a:Question)-[:DISPUTES]->(b:Question) RETURN a.id AS a, b.id AS b").map((r) => [String(r.a), String(r.b)]);
   }
 
   private saved(run: string): { name: string; file: string }[] {
@@ -239,7 +233,6 @@ export class Hub {
       probe: q.probe,
       inputs: inputs.map((i) => ({ name: i.name, path: i.path })),
       timeoutS: q.timeout,
-      onResult: (data) => this.emit({ type: "result", question: q.id, run, data }),
     })
       .catch((e): ProbeOutcome => ({
         failed: `the hub could not run the probe: ${(e as Error).message}`,
@@ -346,9 +339,8 @@ export class Hub {
   /** Asks a question and waits for its answer, up to waitS seconds. Asking the same question twice is one question. */
   async ask(a: Ask): Promise<Status & { question: string; results: unknown[]; saved: string[] }> {
     const inputs = [...new Set(a.inputs ?? [])].sort();
-    const disputes = [...new Set(a.disputes ?? [])].sort();
-    this.refuse(a, inputs, disputes);
-    const id = contentId("q", a.text, a.rule, sha256(a.probe), JSON.stringify(inputs), JSON.stringify(disputes));
+    this.refuse(a, inputs);
+    const id = contentId("q", a.text, a.rule, sha256(a.probe), JSON.stringify(inputs));
     if (!this.db.query("MATCH (q:Question {id: $id}) RETURN q.id AS id", { id }).length) {
       const needs = [...new Set(inputs.flatMap((i) => OUTPUT_REF.exec(i)?.[1] ?? []))];
       this.write(
@@ -359,7 +351,7 @@ export class Hub {
             props: { text: a.text, rule: a.rule, probe: a.probe, inputs, timeout: a.timeoutS ?? 600, asker: a.asker ?? null, seq: ++this.seq },
           },
         ],
-        [...needs.map((n) => ({ type: "NEEDS" as const, from: id, to: n })), ...disputes.map((d) => ({ type: "DISPUTES" as const, from: id, to: d }))],
+        needs.map((n) => ({ type: "NEEDS" as const, from: id, to: n })),
       );
     }
     this.check();
@@ -383,7 +375,7 @@ export class Hub {
     return s.state === "waiting" && this.running.size === 0;
   }
 
-  private refuse(a: Ask, inputs: string[], disputes: string[]) {
+  private refuse(a: Ask, inputs: string[]) {
     if (!a.text.trim()) throw new Refusal("The question has no text. Write it as one yes/no sentence.");
     const problem = ruleProblem(a.rule);
     if (problem) throw new Refusal(problem);
@@ -409,17 +401,16 @@ export class Hub {
         throw new Refusal(`Input ${name} is outside the workspace. Give a path relative to the workspace root.`);
       if (!isFile(join(this.root, clean))) throw new Refusal(`Input ${name} is not a file in the workspace. Declare files, not folders.`);
     }
-    for (const d of disputes) if (!known.has(d)) throw new Refusal(`The question disputes ${d}, which does not exist.`);
   }
 
   /**
    * Runs a read-only Cypher query on a fresh snapshot of the graph. The answers come as parameters: $yes, $no,
-   * $failed, $running, $pending, $waiting and $refuted (question ids) and $current (the runs that give the answers).
+   * $failed, $running, $pending and $waiting (question ids) and $current (the runs that give the answers).
    */
   query(cypher: string, params: Record<string, Param> = {}, limit = 200): { rows: Row[]; truncated: boolean } {
     const reader = Relate.open(this.graphDir, { readOnly: true });
     try {
-      const rows = reader.query(cypher, { ...answerParams(this.statuses(), this.disputes()), ...params });
+      const rows = reader.query(cypher, { ...answerParams(this.statuses()), ...params });
       return { rows: rows.slice(0, limit), truncated: rows.length > limit };
     } finally {
       reader.close();

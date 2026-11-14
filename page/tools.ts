@@ -4,7 +4,7 @@
 // asking runs code on this machine, so `ask` stays with the agents on /mcp.
 import { SCHEMA, type Status } from "../src/graph.ts";
 
-export type Navigation = { id?: string; relation: "dependencies" | "dependents" | "disputes" | "overview"; depth?: number };
+export type Navigation = { id?: string; relation: "dependencies" | "dependents" | "overview"; depth?: number };
 
 /** What the tools need from the page. */
 export type Page = {
@@ -67,7 +67,7 @@ export function webTools(page: Page): Tool[] {
     {
       name: "show_question",
       description:
-        "Select a question in the Witness graph and show it to the person. Returns its text, its rule, its answer now, what it rests on and what disputes it, the results of its current run, the files that run saved, and its runs.",
+        "Select a question in the Witness graph and show it to the person. Returns its text, its rule, its answer now, its dependencies and consumers, the results of its current run, the files that run saved, and its runs.",
       inputSchema: { type: "object", properties: { id: { type: "string", description: "The question's id: q- and 12 hex digits." } }, required: ["id"] },
       annotations: hints,
       execute: reply(({ id }) => {
@@ -86,20 +86,20 @@ export function webTools(page: Page): Tool[] {
     },
     {
       name: "navigate",
-      description: "Show a question's neighborhood and evidence immediately. dependencies follows NEEDS toward inputs; dependents follows NEEDS backward toward consumers; disputes follows DISPUTES in both directions. Depth is the number of links to follow, default 1, at most 10. Omit id to start from the selected question. overview clears the focus and scrolls to the start. Returns focused questions with current answers and links. Only questions already present in the replay can be visited.",
+      description: "Show a question's neighborhood and evidence immediately. dependencies follows NEEDS toward inputs; dependents follows NEEDS backward toward consumers. Depth is the number of links to follow, default 1, at most 10. Omit id to start from the selected question. overview clears the focus and scrolls to the start. Returns focused questions with current answers and links. Only questions present in the page can be visited.",
       inputSchema: {
         type: "object",
         properties: {
           id: { type: "string", description: "Starting question; defaults to the selected question. Not needed for overview." },
-          relation: { type: "string", enum: ["dependencies", "dependents", "disputes", "overview"] },
+          relation: { type: "string", enum: ["dependencies", "dependents", "overview"] },
           depth: { type: "integer", minimum: 1, maximum: 10, default: 1 },
         },
         required: ["relation"],
       },
       annotations: hints,
       execute: reply(({ id, relation, depth }) => {
-        if (!["dependencies", "dependents", "disputes", "overview"].includes(String(relation)))
-          throw new Error("Choose dependencies, dependents, disputes or overview.");
+        if (!["dependencies", "dependents", "overview"].includes(String(relation)))
+          throw new Error("Choose dependencies, dependents or overview.");
         if (id !== undefined && typeof id !== "string") throw new Error("Give a question id.");
         if (depth !== undefined && (typeof depth !== "number" || !Number.isInteger(depth) || depth < 1 || depth > 10))
           throw new Error("Depth must be an integer from 1 to 10.");

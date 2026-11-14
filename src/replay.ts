@@ -1,49 +1,27 @@
-// witness replay: plays a recorded session back to the page, from a store opened read-only. No agent, hub or uv.
-//
-// Records come in the order the hub wrote them (seq): a question when it was asked, a run when it ended. A question
-// is pending until its first run, then shows the answer of its latest run so far. Each viewer gets its own playback.
+// witness replay: loads a recorded store read-only. The page's tour controls playback. No agent, hub or uv.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import page from "../page/index.html";
-import type { GNode, GRel, Status } from "./graph.ts";
+import type { Status } from "./graph.ts";
 import { snapshot } from "./hub.ts";
 import { Relate } from "./relate.ts";
 
-type Step = { at: number; nodes: GNode[]; rels: GRel[]; states: Status[] };
-
-/** The session as steps, one per seq that wrote something. */
-export function timeline(root: string): Step[] {
-  const db = Relate.open(join(root, ".witness", "graph"), { readOnly: true });
-  const { nodes, rels } = snapshot(db);
-  db.close();
-
-  const seq = new Map(nodes.filter((n) => typeof n.props.seq === "number").map((n) => [n.id, n.props.seq as number]));
-  // A File has no seq: it appears with the first run that read or saved it. A relationship appears with its later end.
-  const at = new Map(seq);
-  for (const r of rels) if (!seq.has(r.to)) at.set(r.to, Math.min(at.get(r.to) ?? Infinity, seq.get(r.from) ?? 0));
-  const relAt = (r: GRel) => Math.max(at.get(r.from) ?? 0, at.get(r.to) ?? 0);
-
-  const answer = new Map(nodes.filter((n) => n.label === "Run").map((n) => [n.id, n.props.answer as Status["state"]]));
-  const runs = rels.filter((r) => r.type === "OF").map((r) => ({ run: r.from, question: r.to, seq: seq.get(r.from)! })).sort((a, b) => a.seq - b.seq);
-  const questions = nodes.filter((n) => n.label === "Question").map((n) => n.id);
-
-  const states = (t: number): Status[] =>
-    questions
-      .filter((q) => (at.get(q) ?? 0) <= t)
-      .map((q) => {
-        const last = runs.findLast((r) => r.question === q && r.seq <= t);
-        return { id: q, state: last ? answer.get(last.run)! : "pending", run: last?.run ?? null, was: null, reason: null };
-      });
-
-  const times = [...new Set(at.values())].sort((a, b) => a - b);
-  return times.map((t) => ({ at: t, nodes: nodes.filter((n) => at.get(n.id) === t), rels: rels.filter((r) => relAt(r) === t), states: states(t) }));
-}
-
-export function replay(root: string, { port = 4748, hostname = "127.0.0.1", stepMs = 600 } = {}) {
+export function replay(root: string, { port = 4748, hostname = "127.0.0.1" } = {}) {
   if (!existsSync(join(root, ".witness", "graph"))) throw new Error(`There is no Witness store in ${root}/.witness.`);
-  const steps = timeline(root);
+  const db = Relate.open(join(root, ".witness", "graph"), { readOnly: true });
+  let graph: ReturnType<typeof snapshot>;
+  let states: Status[];
+  try {
+    graph = snapshot(db);
+    const latest = new Map<string, Status>();
+    for (const r of db.query("MATCH (r:Run)-[:OF]->(q:Question) RETURN q.id AS question, r.id AS run, r.answer AS answer, r.reason AS reason ORDER BY r.seq"))
+      latest.set(String(r.question), { id: String(r.question), state: r.answer as Status["state"], run: String(r.run), was: null, reason: r.reason as string | null });
+    states = graph.nodes.filter((n) => n.label === "Question").map((q) =>
+      latest.get(q.id) ?? { id: q.id, state: "pending", run: null, was: null, reason: null });
+  } finally {
+    db.close();
+  }
   const files = join(root, ".witness", "files");
-  const timers = new WeakMap<object, Timer>();
   return Bun.serve({
     port,
     hostname,
@@ -60,19 +38,8 @@ export function replay(root: string, { port = 4748, hostname = "127.0.0.1", step
     },
     websocket: {
       open(ws) {
-        let i = 0;
-        const next = () => {
-          const s = steps[i++];
-          if (!s) return;
-          ws.send(JSON.stringify({ type: "graph", nodes: s.nodes, rels: s.rels }));
-          ws.send(JSON.stringify({ type: "states", states: s.states }));
-          ws.send(JSON.stringify({ type: "replay", step: i, of: steps.length }));
-          timers.set(ws, setTimeout(next, stepMs));
-        };
-        next();
-      },
-      close(ws) {
-        clearTimeout(timers.get(ws));
+        ws.send(JSON.stringify({ type: "graph", ...graph }));
+        ws.send(JSON.stringify({ type: "states", states }));
       },
       message() {},
     },
