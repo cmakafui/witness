@@ -90,7 +90,7 @@ test("the page shows a new question and its answer live, from its own Relate cop
   // Unrelated work must not replace a reader's open evidence or its expanded probe.
   await read(`(() => {
     window.witness.select(${JSON.stringify(a.id)});
-    window.keptProbe = document.querySelector('#question details');
+    window.keptProbe = document.querySelector('#question details.probe');
     window.keptProbe.open = true;
     window.keptPanel = document.querySelector('#question h2');
   })()`);
@@ -99,7 +99,7 @@ test("the page shows a new question and its answer live, from its own Relate cop
   } }));
   await until(`window.witness.state(${JSON.stringify(unrelated.id)})`, "no");
   await read("new Promise(requestAnimationFrame)");
-  expect(await read("window.keptProbe === document.querySelector('#question details') && window.keptProbe.open && window.keptPanel === document.querySelector('#question h2')")).toBe(true);
+  expect(await read("window.keptProbe === document.querySelector('#question details.probe') && window.keptProbe.open && window.keptPanel === document.querySelector('#question h2')")).toBe(true);
 
   // A burst can rebuild the lane SVG at most once per frame.
   await read(`(() => {
@@ -115,7 +115,7 @@ test("the page shows a new question and its answer live, from its own Relate cop
   await until("Object.keys(window.svgUpdates).length > 0", true);
   await read("new Promise(requestAnimationFrame)");
   expect(await read("Math.max(...Object.values(window.svgUpdates))")).toBe(1);
-  expect(await read("window.keptProbe === document.querySelector('#question details')")).toBe(true);
+  expect(await read("window.keptProbe === document.querySelector('#question details.probe')")).toBe(true);
   await read("(() => { window.sampleDisplay = false; window.svgObserver.disconnect(); })()");
 
   // Linked work changes the selected panel even though its own answer is unchanged.
@@ -131,7 +131,7 @@ test("the page shows a new question and its answer live, from its own Relate cop
   await client.close();
 }, 60_000);
 
-test("live goal rows follow acceptance invalidation and restoration, while exploration is only context", async () => {
+test("the selected acceptance test shows current measurements through invalidation and restoration", async () => {
   await using view = new Bun.WebView({ width: 1000, height: 700 });
   await view.navigate(server.url.href);
   const until = async (js: string, want: unknown) => {
@@ -144,28 +144,50 @@ test("live goal rows follow acceptance invalidation and restoration, while explo
   };
   await until("typeof window.witness", "object");
   const g = hub.goal("The live candidate is positive.");
-  const row = `document.querySelector('[data-goal="${g.id}"]')`;
-  await until(`${row}?.textContent.includes('No acceptance question')`, true);
+  await until(`!!document.querySelector('#goal option[value="${g.id}"]')`, true);
+  await view.evaluate(`(() => { const goal = document.getElementById('goal'); goal.value = '${g.id}'; goal.dispatchEvent(new Event('change')); })()`);
+  expect(await view.evaluate("document.getElementById('question').textContent")).toContain("No acceptance question.");
   writeFileSync(join(root, "live-candidate.txt"), "1");
   const probe = `# /// script\n# dependencies = []\n# ///\nimport json, time\ntime.sleep(0.2)\nx = int(open('live-candidate.txt').read())\nprint('WITNESS_RESULT', json.dumps({'x': x}))`;
   const a = await hub.ask({ text: "Is the live candidate positive?", rule: "$x > 0", probe, inputs: ["live-candidate.txt"], accepts: g.id });
-  await until(`${row}?.querySelector('.goal-completion').textContent`, "Complete");
-  await view.evaluate(`${row}.querySelector('button').click()`);
-  expect(await view.evaluate("document.querySelector('#question .goal-context').textContent")).toContain("Acceptance forThe live candidate is positive.");
+  await until("document.querySelector('#question .measurements td')?.textContent", "1");
+  expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the live candidate positive?");
+  const inputUrl = await view.evaluate("document.querySelector('#question .files a').href") as string;
+  expect(await (await fetch(inputUrl)).text()).toBe("1");
   await hub.ask({ text: "Is this candidate below zero?", rule: "$x < 0", probe, inputs: ["live-candidate.txt"], goal: g.id });
-  await until(`${row}?.querySelector('.goal-completion').textContent`, "Complete");
+  await until("document.querySelector('#question .measurements td')?.textContent", "1");
   // The browser query tool derives the same completion as the worker's query tool.
   const query = `MATCH (g:Goal {id: '${g.id}'}) RETURN g.id IN $complete AS complete`;
   const run = () => view.evaluate(`window.witness.tools.find(t => t.name === 'query').execute({cypher: ${JSON.stringify(query)}}).then(JSON.parse)`);
   expect(await run()).toMatchObject({ rows: [{ complete: true }] });
   writeFileSync(join(root, "live-candidate.txt"), "-2");
   hub.check();
-  await until(`${row}?.querySelector('.goal-completion').textContent`, "Incomplete");
+  await until("document.querySelector('#question .measurements') === null", true);
   await hub.idle();
   await until(`window.witness.state('${a.id}')`, "no");
+  await until("document.querySelector('#question .measurements td')?.textContent", "-2");
+  expect(await view.evaluate("document.querySelector('#question .clause .mark').textContent")).toBe("false");
+  expect(await (await fetch(inputUrl)).text()).toBe("1");
   expect(await run()).toMatchObject({ rows: [{ complete: false }] });
   writeFileSync(join(root, "live-candidate.txt"), "1");
   hub.check();
-  await until(`${row}?.querySelector('.goal-completion').textContent`, "Complete");
+  await until("document.querySelector('#question .measurements td')?.textContent", "1");
   expect(await run()).toMatchObject({ rows: [{ complete: true }] });
+}, 30_000);
+
+test("measurement tables retain exact values and every result record", async () => {
+  await using view = new Bun.WebView({ width: 1000, height: 700 });
+  const a = await hub.ask({ text: "Are both precise measurements above one?", rule: "all(r IN $results WHERE r.x > 1)",
+    probe: `# /// script\n# dependencies = []\n# ///\nimport json\nprint('WITNESS_RESULT', json.dumps({'x': 1.23456789012345, 'values': [1, None, 3], 'label': 'first'}))\nprint('WITNESS_RESULT', json.dumps({'x': 1.98765432109876, 'label': 'last'}))` });
+  await view.navigate(server.url.href);
+  for (let i = 0; i < 100; i++) {
+    if (await view.evaluate(`window.witness?.state('${a.id}')`).catch(() => null) === "yes") break;
+    await Bun.sleep(50);
+  }
+  await view.evaluate(`window.witness.select('${a.id}')`);
+  expect(await view.evaluate("[...document.querySelectorAll('#question .measurements tbody tr')].map(r => [r.querySelector('th').textContent, r.querySelector('td').textContent])"))
+    .toEqual([["x", "1.98765432109876"], ["values", "[1,null,3]"], ["label", '"last"']]);
+  expect(await view.evaluate("document.querySelector('#question .measurements thead').textContent")).toBe("MeasurementLast value");
+  const records = (await view.evaluate("document.querySelector('#question .raw-measurements pre').textContent") as string).split("\n").map((line) => JSON.parse(line));
+  expect(records).toEqual([{ x: 1.23456789012345, values: [1, null, 3], label: "first" }, { x: 1.98765432109876, label: "last" }]);
 }, 30_000);

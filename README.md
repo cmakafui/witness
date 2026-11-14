@@ -8,7 +8,9 @@ Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 �
 
 `witness replay DIR` opens a recorded session from its store alone. It needs only [Bun](https://bun.com) 1.4 or later. It needs no AI agent, no API key and no uv. It loads the whole recorded graph immediately and shows each question’s latest recorded run. Replay derives goal completion from those recorded answers; it does not check today’s workspace inputs.
 
-Goals appear above the graph with their derived completion and a link to their acceptance question. An unbound goal shows “No acceptance question”. In the graph, each row is one direction of work, and questions appear left to right in the order they were asked. Each takes the shape and color of its answer. Click a question to see each part of its rule next to the measurement that decided it, then its plots, inputs and the questions it reads from. The Query tab runs Cypher on the page's own copy of the graph:
+Choose a goal from the selector to open its acceptance question. A goal without one shows “No acceptance question”. The graph highlights the acceptance question’s upstream artifact dependencies and keeps surrounding exploration visible. Each row is one direction of work; labeled questions follow creation order, with space for their text. Connections name the files read from another question.
+
+The evidence panel shows the selected question’s answer, actual rule clauses and their values, followed by measurements and files. Measurement names and values come directly from the current committed run, without inferred labels, units or rounding. Multiple result records show the last value per name and can be expanded under All measurements. Files distinguish declared inputs from saved outputs; input links open the archived bytes that the displayed run read. Pending work shows no old measurements as current. The Query tab runs Cypher on the page's own copy of the graph:
 
 ```cypher
 // Which questions answer yes?
@@ -16,7 +18,7 @@ MATCH (q:Question) WHERE q.id IN $yes
 RETURN q.text, q.rule ORDER BY q.seq
 ```
 
-Start from a goal’s acceptance question, then follow **Depends on** and **Used by** to inspect its evidence. Click any question in the graph to inspect it, and use **Back** to return to the previous reading position. The Query tab can list questions and runs by `seq` when you need their recorded order.
+Choose All questions for the whole record. Start from a goal’s acceptance question, then follow **Depends on** and **Used by** to inspect its evidence. Click any question in the graph to inspect it, and use **Back** to return to the previous reading position. The Query tab can list questions and runs by `seq` when you need their recorded order.
 
 Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the browser's agent three tools: `query`, `show_question` and `navigate`. Turn it on at `chrome://flags/#enable-webmcp-testing`. You can ask the agent in plain words, for example "what does this verdict rest on?". It answers with Cypher on the page's copy of the graph. It shows you the query and the questions it found. These tools only read, and they mark what they return as untrusted. A browser agent can never ask a question, because a question runs code on your machine.
 

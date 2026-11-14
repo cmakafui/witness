@@ -7,14 +7,14 @@
 // DESIGN.md gives the tokens and the reasons.
 import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
-import { answerParams, clauses, type Goal, GOALS, goalStatuses, type GNode, type GRel, measurements, named, type State, type Status, statements } from "../src/graph.ts";
+import { answerParams, clauses, type Goal, GOALS, type GNode, type GRel, measurements, named, type State, type Status, statements } from "../src/graph.ts";
 import { type Navigation, register, webTools } from "./tools.ts";
 
 type Msg =
   | { type: "graph"; nodes: GNode[]; rels: GRel[] }
   | { type: "states"; states: Status[] };
 
-type QNode = { id: string; text: string; asker: string | null; seq: number };
+type QNode = { id: string; text: string; asker: string | null; seq: number; inputs: string[] };
 type QLink = { source: string; target: string };
 type Row = Record<string, unknown>;
 
@@ -43,6 +43,8 @@ const nodes = new Map<string, QNode>();
 const links: QLink[] = [];
 let statuses = new Map<string, Status>();
 let selected: string | null = null;
+let selectedGoal = "";
+let goalInitialized = false;
 let marked = new Set<string>();
 type Neighborhood = { nodes: Set<string>; links: Set<string> };
 let focus: Neighborhood | null = null;
@@ -52,7 +54,26 @@ const linkId = (l: QLink) => `${l.source}:${l.target}`;
 const stateOf = (q: string): State => statuses.get(q)?.state ?? "waiting";
 const colour = (s: State) => `var(--${s === "pending" ? "running" : s})`;
 const goals = () => cypher(GOALS) as Goal[];
-const completion = () => goalStatuses(goals(), [...statuses.values()]);
+
+/** All upstream artifact dependencies, including shared inputs from other goals. */
+function upstream(roots: string[]): Neighborhood {
+  const found = new Set(roots), followed = new Set<string>();
+  let frontier = roots;
+  while (frontier.length) {
+    const next: string[] = [];
+    for (const l of links) if (frontier.includes(l.source)) {
+      followed.add(linkId(l));
+      if (!found.has(l.target)) { found.add(l.target); next.push(l.target); }
+    }
+    frontier = next;
+  }
+  return { nodes: found, links: followed };
+}
+
+function goalFocus() {
+  const g = goals().find((g) => g.id === selectedGoal);
+  return g?.acceptance ? upstream([g.acceptance]) : null;
+}
 
 // ---------------------------------------------------------------------------------------------------------------
 // Elements
@@ -98,12 +119,12 @@ const evidenceBack = document.getElementById("evidence-back") as HTMLButtonEleme
 const names = h("div", { class: "lane-names", "aria-hidden": "true" });
 const scroller = h("div", { class: "lanes" });
 const svg = s("svg", { role: "group", "aria-label": "Questions by direction of work, in the order they were asked" }) as SVGSVGElement;
-const legend = (kind: string, words: string) => h("span", {}, s("svg", { width: 22, height: 6, "aria-hidden": "true" }, s("line", { class: `link ${kind}`, x1: 0, x2: 22, y1: 3, y2: 3 })), words);
-scroller.append(svg, h("p", { class: "caption" }, legend("needs", "depends on")));
+scroller.append(svg);
 const empty = h("p", { class: "empty" }, "No questions yet.");
 
 const TOP = 44; // Room for the neighborhood focus bar.
 const PAD = 28;
+const LABEL = 220;
 /** Where each question sits, from the last render. */
 const place = new Map<string, { x: number; y: number }>();
 
@@ -122,28 +143,49 @@ function render() {
   if (!scroller.isConnected) el.replaceChildren(names, scroller);
   const lanes = [...new Set(questions.map((q) => laneOf(q.asker)))];
   // Lanes share the height there is, within limits that keep them readable.
-  const lane = Math.round(Math.max(56, Math.min(104, (el.clientHeight - TOP - 56) / lanes.length)));
+  const lane = Math.round(Math.max(88, Math.min(120, (el.clientHeight - TOP - 24) / lanes.length)));
   el.style.setProperty("--lane", `${lane}px`);
-  const col = Math.max(36, Math.min(88, (scroller.clientWidth - 2 * PAD) / Math.max(1, questions.length - 1)));
-  const width = Math.max(scroller.clientWidth, 2 * PAD + col * (questions.length - 1));
-  const height = TOP + lane * lanes.length;
+  const height = TOP + lane * lanes.length + 24;
   place.clear();
-  questions.forEach((q, i) => place.set(q.id, { x: PAD + i * col, y: TOP + lane * (lanes.indexOf(laneOf(q.asker)) + 0.5) }));
+  const ends = new Map<string, number>();
+  let lastX = PAD - 32;
+  for (const q of questions) {
+    const name = laneOf(q.asker);
+    const x = Math.max(lastX + 32, ends.get(name) ?? PAD);
+    place.set(q.id, { x, y: TOP + lane * (lanes.indexOf(name) + 0.5) });
+    ends.set(name, x + LABEL + 24);
+    lastX = x;
+  }
+  const width = Math.max(scroller.clientWidth, lastX + LABEL + PAD);
+  const highlight = focus ?? goalFocus();
 
   names.replaceChildren(...lanes.map((name) => h("div", { title: name }, name)));
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
   const rails = lanes.map((_, i) => s("line", { class: "rail", x1: 0, x2: width, y1: TOP + lane * (i + 0.5), y2: TOP + lane * (i + 0.5) }));
+  const captions: { x: number; y: number; width: number }[] = [];
   const paths = links.flatMap((l) => {
     // Evidence flows forward: from the question that saved a file to the one that reads it.
     const [from, to] = [place.get(l.target), place.get(l.source)];
     if (!from || !to) return [];
-    const lit = focus?.links.has(linkId(l));
+    const lit = highlight?.links.has(linkId(l));
+    const files = nodes.get(l.source)!.inputs.filter((i) => i.startsWith(`${l.target}/`)).map((i) => i.slice(l.target.length + 1));
+    const full = files.join(", ");
+    const caption = full.length > 40 ? `${full.slice(0, 37)}…` : full;
+    const x = (from.x + to.x) / 2, captionWidth = caption.length * 7;
+    const baseline = (from.y + to.y) / 2 - (from.y === to.y ? lane * 0.42 : 10);
+    const y = [0, -26, 26, -52, 52].map((offset) => baseline + offset).find((y) =>
+      y > 14 && ![...place.values()].some((p) => x < p.x + LABEL && x + captionWidth > p.x - 16 && y > p.y - 30 && y - 14 < p.y + 30) &&
+      !captions.some((c) => x < c.x + c.width && x + captionWidth > c.x && Math.abs(y - c.y) < 18));
+    const label = (lit || !highlight) && files.length && y !== undefined;
+    if (label) captions.push({ x, y, width: captionWidth });
     return [
       s("path", {
         d: curve(from, to, lane),
-        class: `link needs${focus ? (lit ? " lit" : " dim") : ""}`,
+        class: `link needs${highlight ? (lit ? " lit" : " dim") : ""}`,
       }),
+      ...(label ? [s("text", { class: "artifact-label", x, y },
+        s("title", {}, document.createTextNode(full)), document.createTextNode(caption))] : []),
     ];
   });
   const glyphs = questions.map((q) => {
@@ -152,7 +194,7 @@ function render() {
     const g = s(
       "g",
       {
-        class: `q${focus && !focus.nodes.has(q.id) ? " dim" : ""}`,
+        class: `q${highlight && !highlight.nodes.has(q.id) && q.id !== selected ? " dim" : ""}`,
         transform: `translate(${p.x} ${p.y})`,
         tabindex: 0,
         role: "button",
@@ -163,6 +205,9 @@ function render() {
       s("circle", { class: "hit", r: 15 }),
     );
     g.append(glyph(state, 9));
+    const lines = questionLines(q.text);
+    g.append(s("text", { class: "question-label", x: 22, y: -(lines.length - 1) * 8 },
+      ...lines.map((line, i) => s("tspan", { x: 22, dy: i ? 16 : 0 }, document.createTextNode(line)))));
     if (q.id === selected) g.append(s("circle", { class: "ring selected", r: 13.5 }));
     else if (marked.has(q.id) || focus?.nodes.has(q.id)) g.append(s("circle", { class: "ring marked", r: 13.5 }));
     g.addEventListener("click", () => select(q.id));
@@ -175,6 +220,18 @@ function render() {
     return g;
   });
   svg.replaceChildren(s("g", {}, ...rails), s("g", {}, ...paths), s("g", {}, ...glyphs));
+}
+
+/** Keep node labels readable; the full question is available on hover and in evidence. */
+function questionLines(text: string) {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/)) {
+    if (line && `${line} ${word}`.length > 28) { lines.push(line); line = word; }
+    else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines.length > 3 ? [...lines.slice(0, 2), `${lines[2]!.slice(0, 25)}…`] : lines;
 }
 
 /** An artifact dependency. Within one lane it arcs above the questions between. */
@@ -214,7 +271,7 @@ function rememberQuestion(next: string) {
   const panel = document.getElementById("question")!;
   questionHistory.push({
     id: selected, scroll: panel.scrollTop, lanes: scroller.scrollLeft,
-    probeOpen: panel.querySelector("details")?.open ?? false,
+    probeOpen: panel.querySelector<HTMLDetailsElement>("details.probe")?.open ?? false,
     focus, marked: new Set(marked), summary: document.getElementById("navigation-summary")!.textContent ?? "",
   });
 }
@@ -231,6 +288,8 @@ evidenceBack.onclick = () => {
 
 function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Navigation) {
   if (relation === "overview") {
+    selectedGoal = "";
+    goalSelect.value = "";
     focus = null;
     marked.clear();
     document.getElementById("navigation")!.hidden = true;
@@ -327,7 +386,7 @@ function apply(m: Msg) {
       (r.type === "NEEDS" && (r.from === selected || r.to === selected)));
     for (const n of m.nodes)
       if (n.label === "Question" && !nodes.has(n.id))
-        nodes.set(n.id, { id: n.id, text: String(n.props.text), asker: (n.props.asker as string) ?? null, seq: Number(n.props.seq) });
+        nodes.set(n.id, { id: n.id, text: String(n.props.text), asker: (n.props.asker as string) ?? null, seq: Number(n.props.seq), inputs: n.props.inputs as string[] });
     for (const r of m.rels)
       if (r.type === "NEEDS" && !links.some((l) => l.source === r.from && l.target === r.to))
         links.push({ source: r.from, target: r.to });
@@ -354,20 +413,51 @@ function connect(delay = 500) {
 // ---------------------------------------------------------------------------------------------------------------
 // Goals
 
-/** Goals stay separate from the question lanes: only the acceptance question determines completion. */
+const goalSelect = document.getElementById("goal") as HTMLSelectElement;
+let goalOptions = "";
+
+/** The selector names the work. Question answers and measurements remain in evidence. */
 function renderGoals() {
-  const box = document.getElementById("goals")!;
-  const all = completion();
-  box.hidden = !all.length;
-  box.replaceChildren(...all.map((g) => {
-    const acceptance = g.acceptance ? h("button", { class: "goal-acceptance", title: g.acceptance }, `Acceptance: ${g.state}`, h("span", {}, nodes.get(g.acceptance)?.text ?? g.acceptance)) : h("span", { class: "hint" }, "No acceptance question");
-    if (g.acceptance) acceptance.onclick = () => select(g.acceptance!);
-    return h("div", { class: "goal", "data-goal": g.id },
-      h("strong", { class: "goal-completion", style: g.complete ? "color: var(--yes)" : "" }, g.complete ? "Complete" : "Incomplete"),
-      h("div", { class: "goal-copy" }, h("div", { class: "goal-text" }, g.text), acceptance),
-      h("span", { class: "id" }, g.id));
-  }));
+  const all = goals();
+  const signature = JSON.stringify(all.map((g) => [g.id, g.text]));
+  if (signature !== goalOptions) {
+    goalOptions = signature;
+    goalSelect.replaceChildren(h("option", { value: "" }, "All questions"), ...all.map((g) => h("option", { value: g.id, title: g.id },
+      all.filter((other) => other.text === g.text).length > 1 ? `${g.text} (${g.id})` : g.text)));
+    goalSelect.value = selectedGoal;
+  }
+  goalSelect.disabled = !all.length;
+  if (!goalInitialized && all.length) {
+    goalInitialized = true;
+    if (!selected) { chooseGoal(all[0]!.id); return; }
+  }
+  // A newly bound acceptance question opens an otherwise empty goal view.
+  if (selectedGoal && !selected) {
+    const acceptance = all.find((g) => g.id === selectedGoal)?.acceptance;
+    if (acceptance) select(acceptance);
+  }
 }
+
+function chooseGoal(id: string) {
+  selectedGoal = id;
+  goalSelect.value = id;
+  goalInitialized = true;
+  selected = null;
+  focus = null;
+  marked.clear();
+  questionHistory.length = 0;
+  updateEvidenceBack();
+  document.getElementById("navigation")!.hidden = true;
+  const g = goals().find((g) => g.id === id);
+  if (g?.acceptance) select(g.acceptance);
+  else {
+    tab("question");
+    document.getElementById("question")!.replaceChildren(
+      ...(g ? [h("h2", {}, g.text)] : []), h("p", { class: "hint" }, g ? "No acceptance question." : "Select a question."));
+    render();
+  }
+}
+goalSelect.onchange = () => chooseGoal(goalSelect.value);
 
 // ---------------------------------------------------------------------------------------------------------------
 // The evidence panel
@@ -408,14 +498,16 @@ function details(qid: string) {
   );
   const runs = cypher(
     `MATCH (r:Run)-[:OF]->(:Question {id: $selected})
-     RETURN r.id AS run, r.seq AS seq, r.answer AS answer, r.reason AS reason, r.results AS results ORDER BY r.seq DESC`,
+     RETURN r.id AS run, r.seq AS seq, r.answer AS answer, r.reason AS reason, r.results AS results, r.ms AS ms ORDER BY r.seq DESC`,
     { selected: qid },
   );
   // Show measurements only from the committed run that gives this answer.
   const shown = runs.find((r) => r.run === st?.run);
   const results: unknown[] = shown ? JSON.parse(String(shown.results)) : [];
   const saved = shown ? cypher("MATCH (:Run {id: $run})-[s:SAVED]->(f:File) RETURN s.name AS name, f.id AS file ORDER BY name", { run: shown.run }) : [];
+  const read = shown ? cypher("MATCH (:Run {id: $run})-[s:READ]->(f:File) RETURN s.name AS name, f.id AS file ORDER BY name", { run: shown.run }) : [];
   const ids = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
+  const files = (rows: Row[]) => rows.map((f) => ({ name: String(f.name), url: `/files/${f.file}?name=${encodeURIComponent(String(f.name))}` }));
   return {
     id: qid,
     text: String(q.text),
@@ -430,21 +522,15 @@ function details(qid: string) {
     usedBy: ids(l?.neededBy),
     ran: Boolean(shown),
     results,
-    saved: saved.map((f) => ({ name: String(f.name), url: `/files/${f.file}?name=${encodeURIComponent(String(f.name))}` })),
-    runs: runs.map((r) => ({ run: String(r.run), seq: Number(r.seq), answer: String(r.answer), reason: (r.reason as string | null) ?? null, current: r.run === st?.run })),
+    read: files(read),
+    saved: files(saved),
+    runs: runs.map((r) => ({ run: String(r.run), seq: Number(r.seq), ms: Number(r.ms), answer: String(r.answer), reason: (r.reason as string | null) ?? null, current: r.run === st?.run })),
   };
 }
 
-/** A measured value, short enough to read at a glance. */
+/** Display recorded values without rounding, inferred units or invented field names. */
 function show(v: unknown): string {
-  if (typeof v === "number") {
-    const a = Math.abs(v);
-    const text = Number.isInteger(v) ? v.toLocaleString("en-US") : a !== 0 && (a < 1e-3 || a >= 1e6) ? v.toExponential(3) : String(Number(v.toPrecision(5)));
-    return text.replace("-", "−");
-  }
-  if (typeof v === "string") return `'${v}'`;
-  const json = JSON.stringify(v);
-  return json.length > 64 ? `${json.slice(0, 62)}…` : json;
+  return JSON.stringify(v);
 }
 
 /**
@@ -474,7 +560,14 @@ function ruleCheck(rule: string, results: unknown[], ran: boolean) {
       values.length ? h("div", { class: "values" }, ...values.map((n) => h("span", {}, h("small", {}, n), show(m[n])))) : null,
     );
   });
-  return h("div", { class: "rule-check" }, h("h3", {}, "Yes when"), h("ul", { class: "clauses" }, ...rows));
+  return h("div", { class: "rule-check" }, h("h3", {}, "Rule"), h("ul", { class: "clauses" }, ...rows));
+}
+
+function measurementTable(results: unknown[]) {
+  const latest = Object.assign({}, ...results) as Record<string, unknown>;
+  return h("table", { class: "measurements", "aria-label": "Measurements" },
+    h("thead", {}, h("tr", {}, h("th", {}, "Measurement"), h("th", {}, results.length > 1 ? "Last value" : "Value"))),
+    h("tbody", {}, ...Object.entries(latest).map(([key, value]) => h("tr", {}, h("th", { scope: "row" }, key), h("td", {}, h("code", {}, show(value)))))));
 }
 
 function showQuestion(qid: string) {
@@ -482,26 +575,31 @@ function showQuestion(qid: string) {
   if (!d) return;
   const st = d.status;
   const pictures = d.saved.filter((f) => IMAGE.test(f.name));
-  const files = d.saved.filter((f) => !IMAGE.test(f.name));
   // Why it failed, or what it waits for. A replay's states leave it out, so fall back to the current run's.
   const reason = st?.reason ?? d.runs.find((r) => r.current)?.reason ?? null;
   const list = (title: string, qs: string[]) => (qs.length ? [h("h3", {}, title), h("div", {}, ...qs.map(chip))] : []);
   const parts: (HTMLElement | null)[] = [
-    h("div", { class: "verdict" }, badge(st), st?.was ? h("span", {}, `was ${st.was}`) : null, h("span", { class: "id" }, qid), d.asker ? h("span", {}, d.asker) : null),
+    h("div", { class: "verdict" }, badge(st), st?.was ? h("span", {}, `was ${st.was}`) : null, h("span", { class: "id" }, qid)),
     h("h2", {}, d.text),
-    ...d.accepts.map((g) => h("p", { class: "goal-context" }, h("strong", {}, "Acceptance for"), String(g.text), h("span", { class: "id" }, String(g.id)))),
-    ...d.explores.map((g) => h("p", { class: "goal-context" }, h("strong", {}, "Explores goal"), String(g.text), h("small", {}, "Does not determine completion"), h("span", { class: "id" }, String(g.id)))),
+    d.asker ? h("p", { class: "provenance" }, "Asked by ", h("span", {}, d.asker)) : null,
     ruleCheck(d.rule, d.results, d.ran),
     reason ? h("p", { class: "reason" }, reason) : null,
+    h("h3", {}, "Measurements"),
+    d.results.length ? measurementTable(d.results) : h("p", { class: "hint" }, "No current measurements."),
+    ...(d.results.length > 1 ? [h("details", { class: "raw-measurements" }, h("summary", {}, "All measurements"), h("pre", {}, d.results.map((x) => JSON.stringify(x)).join("\n")))] : []),
+    ...(d.inputs.length || d.saved.length ? [h("h3", {}, "Files"), h("table", { class: "files", "aria-label": "Files" },
+      h("tbody", {},
+        ...d.inputs.map((name) => {
+          const f = d.read.find((f) => f.name === name);
+          return h("tr", {}, h("td", {}, f ? h("a", { href: f.url, target: "_blank" }, name) : h("code", {}, name)), h("td", {}, "input"));
+        }),
+        ...d.saved.map((f) => h("tr", {}, h("td", {}, h("a", { href: f.url, target: "_blank" }, f.name)), h("td", {}, "saved")))))] : []),
+    ...list("Depends on", d.restsOn),
+    ...list("Used by", d.usedBy),
     ...(pictures.length
       ? [h("h3", {}, "Images"), ...pictures.map((f) => h("figure", {}, h("img", { src: f.url, alt: f.name }), h("figcaption", {}, h("a", { href: f.url, target: "_blank" }, f.name))))]
       : []),
-    ...list("Depends on", d.restsOn),
-    ...list("Used by", d.usedBy),
-    ...(files.length ? [h("h3", {}, "Files"), h("ul", {}, ...files.map((f) => h("li", {}, h("a", { href: f.url, target: "_blank" }, f.name))))] : []),
-    ...(d.inputs.length ? [h("h3", {}, "Inputs"), h("ul", {}, ...d.inputs.map((i) => h("li", { class: "id" }, i)))] : []),
-    d.results.length ? h("h3", {}, "Measurements") : null,
-    d.results.length ? h("pre", {}, d.results.map((x) => JSON.stringify(x)).join("\n")) : null,
+    h("details", { class: "probe" }, h("summary", {}, "Probe"), h("pre", {}, d.probe)),
     ...(d.runs.length
       ? [
           h("h3", {}, "Runs"),
@@ -513,7 +611,8 @@ function showQuestion(qid: string) {
                 "li",
                 {},
                 h("span", { class: "badge", style: `--c: ${colour(r.answer as State)}` }, r.answer),
-                h("span", { class: "id" }, `#${r.seq}`),
+                h("span", { class: "id", title: `#${r.seq}` }, r.run),
+                h("span", { class: "hint" }, `${r.ms} ms`),
                 r.current ? h("span", { class: "hint" }, "current") : null,
                 r.reason ? h("span", { class: "reason-line" }, r.reason.split("\n")[0]!) : null,
               ),
@@ -521,7 +620,6 @@ function showQuestion(qid: string) {
           ),
         ]
       : []),
-    h("details", {}, h("summary", {}, "Probe"), h("pre", {}, d.probe)),
   ];
   document.getElementById("question")!.replaceChildren(...parts.filter((x) => x !== null));
 }
@@ -537,7 +635,7 @@ function select(qid: string, previous?: QuestionVisit) {
   tab("question");
   showQuestion(qid);
   const panel = document.getElementById("question")!;
-  const probe = panel.querySelector("details");
+  const probe = panel.querySelector<HTMLDetailsElement>("details.probe");
   if (probe && previous) probe.open = previous.probeOpen;
   panel.scrollTop = previous?.scroll ?? 0;
   render();
@@ -551,14 +649,14 @@ function select(qid: string, previous?: QuestionVisit) {
     return;
   }
   const x = place.get(qid)?.x;
-  if (x !== undefined && (x < scroller.scrollLeft || x > scroller.scrollLeft + scroller.clientWidth)) scroller.scrollLeft = x - scroller.clientWidth / 2;
+  if (x !== undefined && (x < scroller.scrollLeft || x + LABEL > scroller.scrollLeft + scroller.clientWidth)) scroller.scrollLeft = x + LABEL - scroller.clientWidth;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
 // Queries
 
 const PRESETS: [string, string][] = [
-  ["Which goals are complete?", "MATCH (g:Goal)\nOPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question)\nRETURN g.id AS goal, g.text AS text, g.id IN $complete AS complete, q.id AS acceptance ORDER BY g.seq"],
+  ["What is each goal’s acceptance question?", "MATCH (g:Goal)\nOPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question)\nRETURN g.id AS goal, g.text AS text, q.id AS acceptance, q.id IN $yes AS yes ORDER BY g.seq"],
   ["What does the selected question use?", "MATCH (q:Question {id: $selected})-[:NEEDS*0..]->(u:Question)\nRETURN DISTINCT u.id AS id, u.text AS text, u.seq AS seq ORDER BY seq"],
   ["Which questions answer yes?", "MATCH (q:Question)\nWHERE q.id IN $yes\nRETURN q.id AS id, q.text AS text ORDER BY q.seq"],
   ["What is each rule?", "MATCH (q:Question)\nRETURN q.id AS id, q.rule AS rule, q.id IN $yes AS yes ORDER BY q.seq"],

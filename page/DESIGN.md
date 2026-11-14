@@ -100,7 +100,7 @@ components:
 
 ## Overview
 
-The page shows a record of evidence, not a dashboard. A person comes to it to answer two questions: how did the agents get here, and why does each answer stand. The lanes answer the first. The rule check answers the second. Goal rows above them state the solved conditions and whether their acceptance questions currently answer yes.
+The page shows a record of evidence, not a dashboard. A person comes to it to answer two questions: how did the agents get here, and why does each answer stand. The lanes answer the first. The rule check answers the second. A compact goal selector opens the acceptance question and highlights its input chain. The evidence panel shows what the current test measured.
 
 The tone is a lab notebook kept by a careful clerk: plain, legible, and exact. Nothing on the page is decoration. Every mark is a question, a link between questions, or a measurement.
 
@@ -131,24 +131,24 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 
 ```
 ┌ Witness                                                       connected ┐
-│ Complete    Goal text · Acceptance: yes                                  │
+│ [ Sort records without losing duplicates                         ▾ ]    │
 ├─────────────────────────────────────────────────────────┬─────────────────────┤
 │ trees         ⊘  ⊘  ●───────●──●                          │ ● yes  q-…  trees   │
 │ clique_paths     ●     ●       ●──╌╌●                     │ Question text       │
 │ evolution     ●          ●             ●                  │                     │
-│ verification     ●  ●  ●──╌╌●   ●──●                      │ Yes when            │
+│ verification     ●  ●  ●──╌╌●   ●──●                      │ Rule                │
 │                                                          │ $margin < -1e-8     │
 │                                                          │   −0.0501  true     │
 │                                                          │ picture, links …    │
 └──────────────────────────────────────────────────────────┴─────────────────────┘
 ```
 
-- **Goals.** Flat rows above the graph, separated by rules. Each shows the solved condition, Complete or Incomplete, and its acceptance state and question. An unbound goal shows No acceptance question. Clicking the acceptance question opens its evidence. Goal rows scroll within 30vh; they never crowd out the graph. Only complete uses green; incomplete stays neutral so it cannot be confused with a negative answer.
-- **Lanes.** The x position is the order a question was asked. Each row is one direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. The layout never moves on its own, so a person can learn it.
-- **Links.** A solid curve runs from a question to each question that reads its output.
-- **Evidence panel.** A fixed column on the right. It opens on the answer, the question and the rule check, with goal context (Acceptance for or Explores goal), then the saved pictures, then what the question rests on, then the raw record.
+- **Goal selector.** A compact select below the header names the work. It opens the acceptance question; a goal without one shows No acceptance question in the panel. All questions clears goal context. First load opens the first goal when there is no selection. Live arrivals preserve the reader’s choice. There are no completion banners.
+- **Lanes.** Questions follow creation order. Horizontal spacing leaves room for up to three lines of question text beside each glyph. Each row is one direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. The layout never moves on its own, so a person can learn it.
+- **Links.** A curve runs from a question to each question that reads its output, labeled with the artifact names. Selecting a goal highlights the upstream chain of its acceptance question; other exploration stays readable. Links record artifact reads.
+- **Evidence panel.** A fixed column on the right. It opens on the answer, question, asker and rule check, then the exact measurements, input and saved file links, dependencies, images, probe and run records. No goal summary repeats the selector.
 - **Back.** A quiet control beside the Evidence tab, visible after following another question. It restores the previous reading position.
-- **Evidence navigation.** Start at a goal’s acceptance question, then follow dependency and consumer chips. Graph selection, query results and WebMCP also open evidence directly. The lanes use the full available height.
+- **Evidence navigation.** Choose a goal to open its acceptance question, then follow dependency and consumer chips. Graph selection, query results and WebMCP also open evidence directly. The lanes use the full available height.
 - Content is left aligned. Below 860px the panel moves under the lanes.
 
 ## Elevation & Depth
@@ -165,8 +165,10 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 
 - **Verdict badge.** The answer as a word on its colour: `yes`, `no`, `failed`. `pending`, `running` and `waiting` are outlined, because they are not answers.
 - **Rule check.** The rule split at its top-level `AND`s, one clause per row. Each row shows the clause in mono, the measured values it names, and whether it is true, false or not measured. A 4px bar on the left takes the colour of that result. The page evaluates each clause with its own Relate copy, on the run's measurements. The answer itself still comes from the run.
+- **Measurements.** A table of recorded names and exact JSON values. With multiple result records, label the values Last value and expose every record under All measurements. Never infer units, rename measurements or round them. Pending and running tests show no stale values as current.
+- **Files.** A table of input and saved files. Input links refer to the content hash read by the displayed run, not the mutable workspace path. Declared inputs without a committed run remain plain names.
 - **Question chip.** A link to another question: its glyph, then the start of its text. Never a bare id.
-- **Header.** The name, connection state and evidence toggle. Completion appears on each goal.
+- **Header.** The name, connection state and evidence toggle. The selected question’s result appears in evidence.
 
 ## Do's and Don'ts
 
@@ -177,5 +179,6 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 - Don't add labels that repeat what the content already says.
 - Don't explain the page in sentences. Labels are one to three words. A legend draws the mark it names.
 - Don't show an id where the question's text fits.
+- Show the test and its measurements; do not add Complete or Incomplete banners.
 - Do write all page text in plain English, close to ASD-STE100: one word for one meaning, simple verbs, no figures of speech such as "rests on" or "survived".
 - Don't animate the lanes into place: they hold still so a person can read them.

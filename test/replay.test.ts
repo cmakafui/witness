@@ -89,7 +89,12 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
       ["show_question", true, true],
       ["navigate", true, true],
     ]);
-    expect(await view.evaluate("[...document.querySelectorAll('.goal-completion')].map(e => e.textContent)")).toEqual(["Complete", "Incomplete", "Incomplete"]);
+    const choose = (id: string) => view.evaluate(`(() => { const goal = document.getElementById('goal'); goal.value = ${JSON.stringify(id)}; goal.dispatchEvent(new Event('change')); })()`);
+    expect(await view.evaluate("document.getElementById('goal').value")).toBe(ids.complete);
+    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
+    await choose(ids.open!);
+    expect(await view.evaluate("document.getElementById('question').textContent")).toContain("No acceptance question.");
+    await choose("");
     expect(await call("query", { cypher: "MATCH (g:Goal) OPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question) RETURN g.id AS id, g.id IN $complete AS complete, q.id AS acceptance ORDER BY g.seq" }))
       .toMatchObject({ rows: [{ id: ids.complete, complete: true, acceptance: ids.a }, { id: ids.open, complete: false, acceptance: null }, { id: ids.incomplete, complete: false, acceptance: ids.d }] });
     const yes = "MATCH (q:Question) WHERE q.id IN $yes RETURN q.id AS id";
@@ -113,7 +118,7 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     expect(await view.evaluate("document.getElementById('evidence-back').hidden")).toBe(true);
     await call("show_question", { id: ids.d });
     const readingPosition = await view.evaluate(`(() => {
-      document.querySelector('#question details').open = true;
+      document.querySelector('#question details.probe').open = true;
       const panel = document.getElementById('question'); panel.scrollTop = 120;
       return panel.scrollTop;
     })()`);
@@ -126,16 +131,19 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the total above 100?");
     await view.evaluate("document.getElementById('evidence-back').click()");
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the saved total above 100?");
-    expect(await view.evaluate("document.querySelector('#question details').open")).toBe(true);
+    expect(await view.evaluate("document.querySelector('#question details.probe').open")).toBe(true);
     expect(await view.evaluate("document.getElementById('question').scrollTop")).toBe(readingPosition);
     await view.evaluate("document.getElementById('evidence-back').click()");
     expect(await view.evaluate("document.getElementById('evidence-back').hidden")).toBe(true);
     expect(await view.evaluate("document.activeElement === document.querySelector('#question h2')")).toBe(true);
 
-    await view.evaluate(`document.querySelector('[data-goal="${ids.complete}"] button').click()`);
-    expect(await view.evaluate("document.querySelector('#question .goal-context').textContent")).toContain("Acceptance forThe data holds numbers.");
+    await choose(ids.complete!);
+    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
     expect(await call("show_question", { id: ids.b })).toMatchObject({ explores: [{ id: ids.complete, text: "The data holds numbers." }], accepts: [] });
-    expect(await view.evaluate("document.querySelector('#question .goal-context').textContent")).toContain("Does not determine completion");
+    expect(await view.evaluate("document.querySelector('#question .measurements tbody').textContent")).toContain("total15");
+    expect(await view.evaluate("[...document.querySelectorAll('.q')].map(q => q.dataset.id)")).toContain(ids.c);
+    const inputUrl = await view.evaluate("document.querySelector('#question .files a').href") as string;
+    expect(await (await fetch(inputUrl)).json()).toEqual([4, 5, 6]);
 
     const neighborhood = (relation: string, id?: string, depth?: number) => call("navigate", { relation, ...(id ? { id } : {}), ...(depth === undefined ? {} : { depth }) });
     // Navigation immediately shows evidence without changing an open panel's width.
@@ -177,8 +185,8 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     expect(await neighborhood("overview")).toMatchObject({ relation: "overview", questions: 4 });
     expect(await view.evaluate("document.getElementById('navigation').hidden")).toBe(true);
 
-    // Goal links and graph selections open evidence directly, including no and failed answers.
-    await view.evaluate(`document.querySelector('[data-goal="${ids.incomplete}"] button').click()`);
+    // Goal selection and graph selections open evidence directly, including no and failed answers.
+    await choose(ids.incomplete!);
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the saved total above 100?");
     expect(await view.evaluate("document.querySelector('#question .badge').textContent")).toBe("no");
     await view.evaluate(`document.querySelector('[data-id="${ids.c}"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);

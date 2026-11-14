@@ -15,7 +15,7 @@ export type Page = {
   /** Shows the query in the Query tab, runs it there, and returns its rows or its error. */
   query(cypher: string): { columns: string[]; rows: Record<string, unknown>[] } | Error;
   /** Selects the question in the graph and returns what its panel shows, or null when there is no such question. */
-  question(id: string): (Record<string, unknown> & { status: Status | undefined; saved: { name: string; url: string }[] }) | null;
+  question(id: string): (Record<string, unknown> & { status: Status | undefined; read: { name: string; url: string }[]; saved: { name: string; url: string }[] }) | null;
 };
 
 export type Tool = {
@@ -67,20 +67,22 @@ export function webTools(page: Page): Tool[] {
     {
       name: "show_question",
       description:
-        "Select a question in the Witness graph and show it to the person. Returns its text, rule, answer now, the goals it explores or accepts, dependencies and consumers, results of its current run, files that run saved, and runs. Exploratory questions never determine goal completion.",
+        "Select a question in the Witness graph and show it to the person. Returns its text, rule, answer now, the goals it explores or accepts, dependencies and consumers, measurements of its current run, archived inputs, saved files, and runs. File URLs refer to the bytes that run read or saved. Exploratory questions never determine goal completion.",
       inputSchema: { type: "object", properties: { id: { type: "string", description: "The question's id: q- and 12 hex digits." } }, required: ["id"] },
       annotations: hints,
       execute: reply(({ id }) => {
         if (typeof id !== "string") throw new Error("Give a question id.");
         const d = page.question(id);
         if (!d) throw new Error(`There is no question ${id}. Call query to list the questions.`);
-        const { status, saved, ...rest } = d;
+        const { status, read, saved, ...rest } = d;
+        const urls = (files: { name: string; url: string }[]) => files.map((f) => ({ name: f.name, url: new URL(f.url, location.href).href }));
         return {
           ...rest,
           answer: status?.state ?? "waiting",
           was: status?.was ?? null,
           reason: status?.reason ?? null,
-          saved: saved.map((f) => ({ name: f.name, url: new URL(f.url, location.href).href })),
+          read: urls(read),
+          saved: urls(saved),
         };
       }),
     },

@@ -114,7 +114,7 @@ For more syntax, see [Relate's Cypher guide](https://github.com/relatedb/relate/
 
 `look` shows a saved file. Images come back as images.
 
-In the live page and replay, start from a goal’s acceptance link, follow Depends on and Used by, or select a graph question. Back restores the previous reading position. Use Cypher with `ORDER BY q.seq` or `ORDER BY r.seq` to inspect recorded order. Goal completion is shown on each goal; question totals do not measure completion.
+In the live page and replay, choose a goal to open its acceptance question and highlight the input chain. All questions clears this context. Follow Depends on and Used by, or select any graph question; Back restores the previous reading position. The panel shows the actual rule, clause values and measurements from the current committed run. Values retain their full recorded precision. With several result records, the table shows the last value per name; All measurements shows every record. File links marked input open the archived bytes read by that run; saved links open its outputs. Pending work does not display old measurements as current. Use Cypher with `ORDER BY q.seq` or `ORDER BY r.seq` to inspect recorded order. Goal completion remains available through queries and tool replies.
 
 ## Reporting
 
