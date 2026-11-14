@@ -37,3 +37,13 @@ test("an edge between the wrong kinds of node is rejected", () => {
   db.query(question, { id: "q-1" });
   expect(() => db.query("MATCH (q:Question {id: 'q-1'}) CREATE (q)-[:OF]->(q)")).toThrow(/endpoint/);
 });
+
+test("goals require immutable record fields, unique ids and the correct relationship endpoints", () => {
+  expect(() => db.query("CREATE (:Goal {id: 'g-1', seq: 1})")).toThrow(/requires properties/);
+  db.query("CREATE (:Goal {id: 'g-1', text: 'Solved condition', seq: 1})");
+  expect(() => db.query("CREATE (:Goal {id: 'g-1', text: 'Other', seq: 2})")).toThrow(/uniqueness/);
+  db.query(question, { id: "q-1" });
+  db.query("MATCH (g:Goal), (q:Question) CREATE (g)-[:ACCEPTED_BY]->(q), (q)-[:FOR]->(g)");
+  expect(() => db.query("MATCH (g:Goal), (q:Question) CREATE (q)-[:ACCEPTED_BY]->(g)")).toThrow(/endpoint/);
+  expect(() => db.query("MATCH (g:Goal), (q:Question) CREATE (g)-[:FOR]->(q)")).toThrow(/endpoint/);
+});

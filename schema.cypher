@@ -2,9 +2,11 @@
 // Relate enforces required properties, types, unique ids and edge endpoints. It accepts other labels and SET.
 // The graph holds questions and the evidence for their answers. It does not hold agents.
 // The hub is the only writer. It only creates. It gives every write a number (seq), in order.
-// Two records hold everything: a Question when it is asked, a Run when it ends. A File's id is its SHA-256.
+// Goals, questions and runs are immutable records. Goal completion is derived from its acceptance question.
+// The hub binds at most one acceptance question per goal, before that question runs. A File's id is its SHA-256.
 
 CREATE GRAPH TYPE witness AS {
+  (g:Goal => {id :: STRING NOT NULL, text :: STRING NOT NULL, seq :: INTEGER NOT NULL}),
   (q:Question => {id :: STRING NOT NULL, text :: STRING NOT NULL, rule :: STRING NOT NULL, probe :: STRING NOT NULL,
                   inputs :: LIST<STRING NOT NULL> NOT NULL, timeout :: INTEGER NOT NULL,
                   asker :: STRING, seq :: INTEGER NOT NULL}),
@@ -12,6 +14,8 @@ CREATE GRAPH TYPE witness AS {
              answer :: STRING NOT NULL, reason :: STRING, measured :: BOOLEAN, results :: STRING NOT NULL}),
   (f:File => {id :: STRING NOT NULL, bytes :: INTEGER NOT NULL}),
 
+  (g)-[:ACCEPTED_BY]->(q),
+  (q)-[:FOR]->(g),
   (q)-[:NEEDS]->(q),
   (r)-[:OF]->(q),
   (r)-[:READ => {name :: STRING NOT NULL}]->(f),
@@ -20,6 +24,7 @@ CREATE GRAPH TYPE witness AS {
 
 ALTER CURRENT GRAPH TYPE SET GRAPH TYPE witness;
 
+CREATE CONSTRAINT goal_id FOR (n:Goal) REQUIRE n.id IS UNIQUE;
 CREATE CONSTRAINT question_id FOR (n:Question) REQUIRE n.id IS UNIQUE;
 CREATE CONSTRAINT run_id FOR (n:Run) REQUIRE n.id IS UNIQUE;
 CREATE CONSTRAINT file_id FOR (n:File) REQUIRE n.id IS UNIQUE;

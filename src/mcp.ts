@@ -1,4 +1,4 @@
-// The three tools agents use, over MCP (streamable HTTP). Each request gets its own server: the hub holds the state.
+// The tools agents use, over MCP (streamable HTTP). Each request gets its own server: the hub holds the state.
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { readFileSync } from "node:fs";
@@ -10,7 +10,9 @@ import { VERSION } from "./version.ts";
 
 const GUIDE = `Witness keeps the tested answers of a team of agents in one graph. No agent writes an answer. A probe measures, and a rule decides.
 
+- goal: create an immutable goal that states the solved condition. It starts open and incomplete. Each call creates a new goal.
 - ask: give a yes/no question, a rule, a probe, and the files that the probe reads. Witness runs the probe and returns the answer.
+- Set goal to a goal id for exploratory work. Exploratory answers never vote on completion. Set accepts instead to bind a goal's only acceptance question before it runs. The goal is complete only while that question currently answers yes. Changing the acceptance contract requires a new goal.
 - The rule is a Cypher expression over the measurements, for example $p < 0.01 AND $gain >= 0.1. $name is a measurement. $results is the list of all measurements. True gives yes. False gives no. All other results give failed.
 - The probe is a Python script with a PEP 723 header. uv runs it in an empty folder that holds the declared inputs only. It prints each measurement as WITNESS_RESULT and one JSON object. It saves files for other questions in $WITNESS_OUT.
 - An input is a workspace path, or q-…/name for a file that another question saved.
@@ -33,6 +35,15 @@ function server(hub: Hub): McpServer {
   const s = new McpServer({ name: "witness", version: VERSION }, { instructions: GUIDE });
 
   s.registerTool(
+    "goal",
+    {
+      description: "Create a new immutable goal with its solved condition. Returns its id and open, incomplete state. Each call creates a new goal, even for the same text. Query first to reuse an existing goal.",
+      inputSchema: { text: z.string().describe("The solved condition: what a successful result must satisfy.") },
+    },
+    ({ text: condition }) => tool(() => hub.goal(condition)),
+  );
+
+  s.registerTool(
     "ask",
     {
       description:
@@ -44,6 +55,8 @@ function server(hub: Hub): McpServer {
           .describe("A Cypher expression over the measurements. True gives yes. $name is a measurement. $results is the list of all measurements. Example: $p < 0.01 AND $gain >= 0.1."),
         probe: z.string().describe('A Python script with a PEP 723 header. It prints each measurement as WITNESS_RESULT and one JSON object, for example {"p": 0.003}.'),
         inputs: z.array(z.string()).default([]).describe("The files that the probe reads: workspace paths, or q-…/name for a file that another question saved."),
+        goal: z.string().optional().describe("An existing goal id for exploratory work. Its answer never determines goal completion. Use either goal or accepts."),
+        accepts: z.string().optional().describe("An existing goal id whose only acceptance question this will be. Binds before execution. Only its current yes completes the goal. An identical retry is allowed; a different acceptance question requires a new goal."),
         asker: z.string().optional().describe("Your name or role. Witness shows it and does not use it."),
         timeout_s: z.number().int().positive().max(3600).optional().describe("The time limit of one run, in seconds. Default 600."),
         wait_s: z.number().int().min(0).max(240).optional().describe("The time to wait for the answer, in seconds, at most 240. Default 120. After that, the run continues."),

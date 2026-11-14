@@ -44,7 +44,7 @@ body {
   color: var(--ink);
   font: 400 15px/1.5 var(--sans);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   -webkit-font-smoothing: antialiased;
 }
 code, pre, textarea, .id { font-family: var(--mono); font-size: 13px; }
@@ -82,6 +82,7 @@ h1 { font-size: 17px; font-weight: 700; margin: 0; }
 .button.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); min-width: 76px; }
 
 main {
+  grid-row: 3;
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--panel-width);
   min-height: 0;
@@ -89,6 +90,20 @@ main {
 }
 main.sidebar-collapsed { grid-template-columns: minmax(0, 1fr) 0px; }
 main.sidebar-collapsed aside { visibility: hidden; }
+
+/* Immutable goals, above the investigation. Completion belongs to acceptance alone. */
+#goals { padding: 0; flex: none; max-height: 30vh; overflow: auto; background: var(--surface); }
+#goals[hidden] { display: none; }
+.goal { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 8px 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: baseline; }
+.goal-completion { font-size: 13px; color: var(--muted); }
+.goal-copy { min-width: 0; }
+.goal-text { font-weight: 600; overflow-wrap: anywhere; }
+.goal > .id { color: var(--muted); font-size: 11px; }
+.goal-acceptance { display: flex; flex-wrap: wrap; gap: 0 12px; border: 0; padding: 0; background: none; color: var(--accent); font: 13px/1.5 var(--sans); text-align: left; cursor: pointer; }
+.goal-acceptance span { color: var(--muted); }
+.goal-acceptance:hover { text-decoration: underline; }
+.goal-context { display: grid; gap: 2px; padding-left: 12px; border-left: 2px solid var(--line); font-size: 14px; }
+.goal-context strong, .goal-context small, .goal-context .id { font-size: 12px; color: var(--muted); }
 
 /* The lanes: one row per direction of work, questions in the order they were asked. */
 #graph-stage { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
@@ -285,7 +300,9 @@ th { color: var(--muted); font-weight: 600; }
 .error { color: var(--no); margin-top: 12px; white-space: pre-wrap; }
 
 @media (max-width: 860px) {
-  body { grid-template-rows: auto auto; height: auto; }
+  body { grid-template-rows: auto auto auto; height: auto; }
+  .goal { grid-template-columns: 76px minmax(0, 1fr); gap: 4px 12px; }
+  .goal > .id { grid-column: 2; }
   header { flex-wrap: wrap; gap: 8px 16px; }
   main, main.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; overflow: visible; }
   main.sidebar-collapsed aside { display: none; }

@@ -43,11 +43,14 @@ const json = (r: Awaited<ReturnType<Client["callTool"]>>) => JSON.parse((r.conte
 
 test("an agent asks over MCP, queries the graph, and gets a refusal it can fix", async () => {
   const client = await agent();
-  expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(["ask", "look", "query"]);
-  const a = json(await client.callTool({ name: "ask", arguments: { text: "Is the total of data.txt more than 10?", rule: "$total > 10", probe: PROBE, inputs: ["data.txt"], asker: "tester" } }));
-  expect(a).toMatchObject({ state: "yes", results: [{ total: 15 }] });
+  expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(["ask", "goal", "look", "query"]);
+  const g = json(await client.callTool({ name: "goal", arguments: { text: "The total of data.txt exceeds 10." } }));
+  expect(g).toMatchObject({ state: "open", complete: false });
+  const a = json(await client.callTool({ name: "ask", arguments: { accepts: g.id, text: "Is the total of data.txt more than 10?", rule: "$total > 10", probe: PROBE, inputs: ["data.txt"], asker: "tester" } }));
+  expect(a).toMatchObject({ state: "yes", results: [{ total: 15 }], goal: { id: g.id, complete: true, acceptance: a.id } });
   const q = json(await client.callTool({ name: "query", arguments: { cypher: "MATCH (q:Question) WHERE q.id IN $yes RETURN q.asker AS asker" } }));
   expect(q.rows).toEqual([{ asker: "tester" }]);
+  expect(json(await client.callTool({ name: "query", arguments: { cypher: "RETURN $complete AS ids" } })).rows).toEqual([{ ids: [g.id] }]);
   const refused = await client.callTool({ name: "ask", arguments: { text: "x?", rule: "r", probe: "print(1)" } });
   expect(refused.isError).toBe(true);
   await client.close();
@@ -127,3 +130,42 @@ test("the page shows a new question and its answer live, from its own Relate cop
   expect(await read("document.querySelector('#question h2').textContent")).toBe("Is the total at most 100?");
   await client.close();
 }, 60_000);
+
+test("live goal rows follow acceptance invalidation and restoration, while exploration is only context", async () => {
+  await using view = new Bun.WebView({ width: 1000, height: 700 });
+  await view.navigate(server.url.href);
+  const until = async (js: string, want: unknown) => {
+    for (let i = 0; i < 100; i++) {
+      const got = await view.evaluate(js).catch(() => undefined);
+      if (JSON.stringify(got) === JSON.stringify(want)) return;
+      await Bun.sleep(50);
+    }
+    expect(await view.evaluate(js)).toEqual(want);
+  };
+  await until("typeof window.witness", "object");
+  const g = hub.goal("The live candidate is positive.");
+  const row = `document.querySelector('[data-goal="${g.id}"]')`;
+  await until(`${row}?.textContent.includes('No acceptance question')`, true);
+  writeFileSync(join(root, "live-candidate.txt"), "1");
+  const probe = `# /// script\n# dependencies = []\n# ///\nimport json, time\ntime.sleep(0.2)\nx = int(open('live-candidate.txt').read())\nprint('WITNESS_RESULT', json.dumps({'x': x}))`;
+  const a = await hub.ask({ text: "Is the live candidate positive?", rule: "$x > 0", probe, inputs: ["live-candidate.txt"], accepts: g.id });
+  await until(`${row}?.querySelector('.goal-completion').textContent`, "Complete");
+  await view.evaluate(`${row}.querySelector('button').click()`);
+  expect(await view.evaluate("document.querySelector('#question .goal-context').textContent")).toContain("Acceptance forThe live candidate is positive.");
+  await hub.ask({ text: "Is this candidate below zero?", rule: "$x < 0", probe, inputs: ["live-candidate.txt"], goal: g.id });
+  await until(`${row}?.querySelector('.goal-completion').textContent`, "Complete");
+  // The browser query tool derives the same completion as the worker's query tool.
+  const query = `MATCH (g:Goal {id: '${g.id}'}) RETURN g.id IN $complete AS complete`;
+  const run = () => view.evaluate(`window.witness.tools.find(t => t.name === 'query').execute({cypher: ${JSON.stringify(query)}}).then(JSON.parse)`);
+  expect(await run()).toMatchObject({ rows: [{ complete: true }] });
+  writeFileSync(join(root, "live-candidate.txt"), "-2");
+  hub.check();
+  await until(`${row}?.querySelector('.goal-completion').textContent`, "Incomplete");
+  await hub.idle();
+  await until(`window.witness.state('${a.id}')`, "no");
+  expect(await run()).toMatchObject({ rows: [{ complete: false }] });
+  writeFileSync(join(root, "live-candidate.txt"), "1");
+  hub.check();
+  await until(`${row}?.querySelector('.goal-completion').textContent`, "Complete");
+  expect(await run()).toMatchObject({ rows: [{ complete: true }] });
+}, 30_000);

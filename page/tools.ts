@@ -67,7 +67,7 @@ export function webTools(page: Page): Tool[] {
     {
       name: "show_question",
       description:
-        "Select a question in the Witness graph and show it to the person. Returns its text, its rule, its answer now, its dependencies and consumers, the results of its current run, the files that run saved, and its runs.",
+        "Select a question in the Witness graph and show it to the person. Returns its text, rule, answer now, the goals it explores or accepts, dependencies and consumers, results of its current run, files that run saved, and runs. Exploratory questions never determine goal completion.",
       inputSchema: { type: "object", properties: { id: { type: "string", description: "The question's id: q- and 12 hex digits." } }, required: ["id"] },
       annotations: hints,
       execute: reply(({ id }) => {

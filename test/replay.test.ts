@@ -12,21 +12,27 @@ beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), "witness-replay-"));
   writeFileSync(join(root, "data.txt"), "4 5 6");
   const hub = await Hub.open(root, { pollMs: 0 });
+  const complete = hub.goal("The data holds numbers.");
+  const open = hub.goal("An acceptance contract is still to be chosen.");
+  const incomplete = hub.goal("The saved total exceeds 100.");
+  Object.assign(ids, { complete: complete.id, open: open.id, incomplete: incomplete.id });
   const head = "# /// script\n# dependencies = []\n# ///\nimport json, os\n";
   const a = await hub.ask({
+    accepts: complete.id,
     text: "Does data.txt hold numbers?",
     rule: "$count >= 1",
     inputs: ["data.txt"],
     probe: `${head}n=[int(x) for x in open("data.txt").read().split()]\nassert n\njson.dump(n, open(os.path.join(os.environ["WITNESS_OUT"], "n.json"), "w"))\nprint("WITNESS_RESULT", json.dumps({"count": len(n)}))`,
   });
   const b = await hub.ask({
+    goal: complete.id,
     text: "Is the total above 100?",
     rule: "$total > 100",
     inputs: [`${a.id}/n.json`],
     probe: `${head}n=json.load(open("${a.id}/n.json"))\njson.dump(n, open(os.path.join(os.environ["WITNESS_OUT"], "n.json"), "w"))\nprint("WITNESS_RESULT", json.dumps({"total": sum(n)}))`,
   });
-  const c = await hub.ask({ text: "Does it crash?", rule: "$x = 1", probe: `${head}raise SystemExit(2)\nprint("WITNESS_RESULT", "{}")` });
-  const d = await hub.ask({ text: "Is the saved total above 100?", rule: "$total > 100", inputs: [`${b.id}/n.json`], probe: `${head}n=json.load(open("${b.id}/n.json"))\nprint("WITNESS_RESULT", json.dumps({"total": sum(n)}))` });
+  const c = await hub.ask({ goal: complete.id, text: "Does it crash?", rule: "$x = 1", probe: `${head}raise SystemExit(2)\nprint("WITNESS_RESULT", "{}")` });
+  const d = await hub.ask({ accepts: incomplete.id, text: "Is the saved total above 100?", rule: "$total > 100", inputs: [`${b.id}/n.json`], probe: `${head}n=json.load(open("${b.id}/n.json"))\nprint("WITNESS_RESULT", json.dumps({"total": sum(n)}))` });
   Object.assign(ids, { a: a.id, b: b.id, c: c.id, d: d.id });
   await hub.idle();
   hub.close();
@@ -83,6 +89,15 @@ test("the recorded page supports manual question navigation and WebMCP", async (
       ["show_question", true, true],
       ["navigate", true, true],
     ]);
+    expect(await view.evaluate("[...document.querySelectorAll('.goal-completion')].map(e => e.textContent)")).toEqual(["Complete", "Incomplete", "Incomplete"]);
+    expect(await call("query", { cypher: "MATCH (g:Goal) OPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question) RETURN g.id AS id, g.id IN $complete AS complete, q.id AS acceptance ORDER BY g.seq" }))
+      .toMatchObject({ rows: [{ id: ids.complete, complete: true, acceptance: ids.a }, { id: ids.open, complete: false, acceptance: null }, { id: ids.incomplete, complete: false, acceptance: ids.d }] });
+    await view.evaluate(`document.querySelector('[data-goal="${ids.complete}"] button').click()`);
+    expect(await view.evaluate("document.querySelector('#question .goal-context').textContent")).toContain("Acceptance forThe data holds numbers.");
+    expect(await call("show_question", { id: ids.b })).toMatchObject({ explores: [{ id: ids.complete, text: "The data holds numbers." }], accepts: [] });
+    expect(await view.evaluate("document.querySelector('#question .goal-context').textContent")).toContain("Does not determine completion");
+    // Reset visit history before testing navigation from scratch below.
+    await view.evaluate(`(() => { const seek = document.getElementById('tour-seek'); seek.value = '1'; seek.dispatchEvent(new Event('input')); })()`);
     const yes = "MATCH (q:Question) WHERE q.id IN $yes RETURN q.id AS id";
     expect(await call("query", { cypher: yes })).toEqual({ columns: ["id"], rows: [{ id: ids.a }], truncated: false });
     expect(await view.evaluate("[document.getElementById('cypher').value, document.getElementById('query').hidden]")).toEqual([yes, false]);

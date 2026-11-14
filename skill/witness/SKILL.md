@@ -1,6 +1,6 @@
 ---
 name: witness
-description: Use Witness to record findings as tested answers, not notes. Ask a yes/no question with a rule and a probe. The probe is a uv Python script that measures. The rule is a Cypher expression that decides yes or no from the measurements. Witness runs the probe on its declared files only, and runs the question again when a file changes. All agents in the workspace share the answers. Use when the witness MCP tools (ask, query, look) are available, before you claim that something works or does not, and before you build on the result of another agent.
+description: Use Witness to record findings as tested answers, not notes. Ask a yes/no question with a rule and a probe. The probe is a uv Python script that measures. The rule is a Cypher expression that decides yes or no from the measurements. Witness runs the probe on its declared files only, and runs the question again when a file changes. All agents in the workspace share the answers. Use when the witness MCP tools (goal, ask, query, look) are available, before you claim that something works or does not, and before you build on the result of another agent.
 ---
 
 # Witness
@@ -9,6 +9,7 @@ Witness keeps the tested answers of all agents in this workspace in one graph. N
 
 | Term | Meaning |
 |---|---|
+| **Goal** | An immutable solved condition. Complete only while its one acceptance question currently answers yes. |
 | **Question** | One yes/no question, with its rule, probe and inputs. You cannot edit a question. A changed question is a new question. |
 | **Rule** | A Cypher expression over the measurements. True gives yes. False gives no. |
 | **Probe** | A Python script that uv runs. It prints measurements. It does not give an answer. |
@@ -22,6 +23,26 @@ Witness keeps the tested answers of all agents in this workspace in one graph. N
 2. Run the probe yourself on a small case. This shows that the probe works. It is not evidence.
 3. Call `ask` with the question, the rule, the probe and all inputs. Give `asker` your name or role.
 4. Read the answer, the measurements and the saved files.
+
+## Goals and acceptance
+
+Call `query` to find the goal before creating one. `goal({text: "…"})` creates a new goal every time, even for identical text. Its id starts with `g-`. An unbound goal is open and incomplete.
+
+- Use `ask` with `goal: "g-…"` for exploratory questions. Their answers never determine completion, whether yes, no or failed.
+- Use `ask` with `accepts: "g-…"` for the goal’s acceptance question. Use either `goal` or `accepts`, never both. Leave both out for questions without a goal.
+- Write the acceptance contract before executing it. Witness writes the question and binding atomically before the probe starts. You can bind only one acceptance question per goal. An identical retry is allowed; a different contract requires a new goal.
+- Goal and role are part of a question’s identity. An exploratory question cannot be promoted in place.
+- Only the acceptance question’s **current** yes completes the goal. No, failed, pending, running and waiting all mean incomplete. Input changes invalidate completion; restoring the inputs restores the cached answer. Completion is never stored.
+- `ask` returns the associated goal’s completion alongside the question’s answer. Query `$complete` and `$incomplete` for goal ids. They never include exploratory question ids.
+
+An acceptance question can read a candidate file directly or consume `q-…/name`. Its rule tests the solved condition. Exploration can keep producing negative answers while the goal is complete.
+
+```cypher
+MATCH (g:Goal)
+OPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question)
+RETURN g.id AS goal, g.text, g.id IN $complete AS complete, q.id AS acceptance
+ORDER BY g.seq
+```
 
 ## The rule
 
@@ -95,7 +116,7 @@ For more syntax, see [Relate's Cypher guide](https://github.com/relatedb/relate/
 
 ## Reporting
 
-Report question ids and answers:
+Report the goal id, its completion and acceptance question, then question ids and answers. Do not infer completion from the number of exploratory yes answers:
 
 ```
 q-3f9a1c0b7e2d yes      the total is exact (2,000 cases)

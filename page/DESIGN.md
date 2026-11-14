@@ -100,7 +100,7 @@ components:
 
 ## Overview
 
-The page shows a record of evidence, not a dashboard. A person comes to it to answer two questions: how did the agents get here, and why does each answer stand. The lanes answer the first. The rule check answers the second.
+The page shows a record of evidence, not a dashboard. A person comes to it to answer two questions: how did the agents get here, and why does each answer stand. The lanes answer the first. The rule check answers the second. Goal rows above them state the solved conditions and whether their acceptance questions currently answer yes.
 
 The tone is a lab notebook kept by a careful clerk: plain, legible, and exact. Nothing on the page is decoration. Every mark is a question, a link between questions, or a measurement.
 
@@ -143,9 +143,10 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 └──────────────────────────────────────────────────────────┴─────────────────────┘
 ```
 
+- **Goals.** Flat rows above the graph, separated by rules. Each shows the solved condition, Complete or Incomplete, and its acceptance state and question. An unbound goal shows No acceptance question. Clicking the acceptance question opens its evidence. Goal rows scroll within 30vh; they never crowd out the graph. Only complete uses green; incomplete stays neutral so it cannot be confused with a negative answer.
 - **Lanes.** The x position is the order a question was asked. Each row is one direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. The layout never moves on its own, so a person can learn it.
 - **Links.** A solid curve runs from a question to each question that reads its output.
-- **Evidence panel.** A fixed column on the right. It opens on the answer, the question and the rule check, then the saved pictures, then what the question rests on, then the raw record.
+- **Evidence panel.** A fixed column on the right. It opens on the answer, the question and the rule check, with goal context (Acceptance for or Explores goal), then the saved pictures, then what the question rests on, then the raw record.
 - **Back.** A quiet control beside the Evidence tab, visible after following another question. It restores the previous reading position. Previous and Next follow question order.
 - **Question navigation.** A bar under the lanes, never over them. Previous, Next and the timeline select questions immediately. The position follows the selected question, including selections made through WebMCP.
 - Content is left aligned. Below 860px the panel moves under the lanes.

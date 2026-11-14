@@ -7,7 +7,7 @@
 // DESIGN.md gives the tokens and the reasons.
 import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
-import { answerParams, clauses, type GNode, type GRel, measurements, named, type State, type Status, statements } from "../src/graph.ts";
+import { answerParams, clauses, type Goal, GOALS, goalStatuses, type GNode, type GRel, measurements, named, type State, type Status, statements } from "../src/graph.ts";
 import { type Navigation, register, webTools } from "./tools.ts";
 
 type Msg =
@@ -51,6 +51,8 @@ const questionHistory: QuestionVisit[] = [];
 const linkId = (l: QLink) => `${l.source}:${l.target}`;
 const stateOf = (q: string): State => statuses.get(q)?.state ?? "waiting";
 const colour = (s: State) => `var(--${s === "pending" ? "running" : s})`;
+const goals = () => cypher(GOALS) as Goal[];
+const completion = () => goalStatuses(goals(), [...statuses.values()]);
 
 // ---------------------------------------------------------------------------------------------------------------
 // Elements
@@ -337,7 +339,7 @@ function scheduleDisplay(lanes = false, evidence = false) {
     displayFrame = null;
     const drawLanes = lanesDirty, drawEvidence = evidenceDirty;
     lanesDirty = evidenceDirty = false;
-    if (drawLanes) { render(); counts(); }
+    if (drawLanes) { renderGoals(); render(); counts(); }
     if (drawEvidence && selected) showQuestion(selected);
   });
 }
@@ -358,6 +360,8 @@ function apply(m: Msg) {
     for (const st of statements(m.nodes, m.rels)) cypher(st.cypher, st.params);
     evidence = selected !== null && m.rels.some((r) =>
       (r.type === "OF" && r.to === selected) ||
+      (r.type === "FOR" && r.from === selected) ||
+      (r.type === "ACCEPTED_BY" && r.to === selected) ||
       (r.type === "NEEDS" && (r.from === selected || r.to === selected)));
     for (const n of m.nodes)
       if (n.label === "Question" && !nodes.has(n.id))
@@ -387,6 +391,21 @@ function connect(delay = 500) {
 
 // ---------------------------------------------------------------------------------------------------------------
 // The header: answers by kind.
+
+/** Goals stay separate from the question lanes: only the acceptance question determines completion. */
+function renderGoals() {
+  const box = document.getElementById("goals")!;
+  const all = completion();
+  box.hidden = !all.length;
+  box.replaceChildren(...all.map((g) => {
+    const acceptance = g.acceptance ? h("button", { class: "goal-acceptance", title: g.acceptance }, `Acceptance: ${g.state}`, h("span", {}, nodes.get(g.acceptance)?.text ?? g.acceptance)) : h("span", { class: "hint" }, "No acceptance question");
+    if (g.acceptance) acceptance.onclick = () => select(g.acceptance!);
+    return h("div", { class: "goal", "data-goal": g.id },
+      h("strong", { class: "goal-completion", style: g.complete ? "color: var(--yes)" : "" }, g.complete ? "Complete" : "Incomplete"),
+      h("div", { class: "goal-copy" }, h("div", { class: "goal-text" }, g.text), acceptance),
+      h("span", { class: "id" }, g.id));
+  }));
+}
 
 function counts() {
   const all = [...statuses.values()];
@@ -454,6 +473,8 @@ function details(qid: string) {
     probe: String(q.probe),
     inputs: ids(q.inputs),
     asker: (q.asker as string | null) ?? null,
+    explores: cypher("MATCH (:Question {id: $id})-[:FOR]->(g:Goal) RETURN g.id AS id, g.text AS text", { id: qid }),
+    accepts: cypher("MATCH (g:Goal)-[:ACCEPTED_BY]->(:Question {id: $id}) RETURN g.id AS id, g.text AS text", { id: qid }),
     status: st,
     restsOn: ids(l?.needs),
     usedBy: ids(l?.neededBy),
@@ -518,6 +539,8 @@ function showQuestion(qid: string) {
   const parts: (HTMLElement | null)[] = [
     h("div", { class: "verdict" }, badge(st), st?.was ? h("span", {}, `was ${st.was}`) : null, h("span", { class: "id" }, qid), d.asker ? h("span", {}, d.asker) : null),
     h("h2", {}, d.text),
+    ...d.accepts.map((g) => h("p", { class: "goal-context" }, h("strong", {}, "Acceptance for"), String(g.text), h("span", { class: "id" }, String(g.id)))),
+    ...d.explores.map((g) => h("p", { class: "goal-context" }, h("strong", {}, "Explores goal"), String(g.text), h("small", {}, "Does not determine completion"), h("span", { class: "id" }, String(g.id)))),
     ruleCheck(d.rule, d.results, d.ran),
     reason ? h("p", { class: "reason" }, reason) : null,
     ...(pictures.length
@@ -585,6 +608,7 @@ function select(qid: string, previous?: QuestionVisit) {
 // Queries
 
 const PRESETS: [string, string][] = [
+  ["Which goals are complete?", "MATCH (g:Goal)\nOPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question)\nRETURN g.id AS goal, g.text AS text, g.id IN $complete AS complete, q.id AS acceptance ORDER BY g.seq"],
   ["What does the selected question use?", "MATCH (q:Question {id: $selected})-[:NEEDS*0..]->(u:Question)\nRETURN DISTINCT u.id AS id, u.text AS text, u.seq AS seq ORDER BY seq"],
   ["Which questions answer yes?", "MATCH (q:Question)\nWHERE q.id IN $yes\nRETURN q.id AS id, q.text AS text ORDER BY q.seq"],
   ["What is each rule?", "MATCH (q:Question)\nRETURN q.id AS id, q.rule AS rule, q.id IN $yes AS yes ORDER BY q.seq"],
@@ -608,7 +632,7 @@ const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.flatMap(idsIn) : t
 
 /** The parameters every query in the page gets: the answers now, and the selected question and its current run. */
 const params = () => ({
-  ...answerParams([...statuses.values()]),
+  ...answerParams([...statuses.values()], goals()),
   selected,
   run: (selected && statuses.get(selected)?.run) ?? null,
 });

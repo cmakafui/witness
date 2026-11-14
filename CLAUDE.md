@@ -5,7 +5,8 @@ AI agents do research together. Each finding is a yes/no question with a rule. A
 ## Rules
 
 - Nothing writes an answer. An answer comes only from a run: the question's rule on the run's measurements. A probe never answers.
-- The graph holds questions and their evidence. It does not hold agents.
+- The graph holds Goal, Question, Run and File nodes. It does not hold agents. A goal has at most one ACCEPTED_BY question, bound atomically before execution; exploratory FOR edges never vote on completion. Goals and bindings are immutable. A different acceptance contract requires a new goal.
+- A goal is complete only while its acceptance question currently answers yes. Completion is derived, never stored; changed inputs invalidate it and restored inputs restore it. An unbound goal is open and incomplete.
 - The hub never changes or deletes a record. It only creates records. The answer to a question comes from its runs and from the inputs as they are now.
 - The hub is the only process that writes to Relate. Probes never touch the store.
 - Keep it small. Build what the task needs and nothing more.
@@ -26,8 +27,8 @@ Use Bun for dependency installation, scripts, tests and builds. Bundle the page 
 - `src/hub.ts`: the only writer. It evaluates each rule with Relate on an empty in-memory store, writes a run once when it ends, works out each answer from the runs and the inputs now, and reruns what changed.
 - `src/probe.ts`: runs one probe with uv in a folder that holds only its declared inputs.
 - Probes use one asynchronous `uv run --script`. Keep structured measurements and a bounded diagnostic tail for failures. Archive only declared inputs and saved outputs.
-- `src/graph.ts`: the two records (Question, Run) and the Cypher that writes them, and what a rule may be. The hub (ffi) and the page (WASM) both use it.
-- `src/mcp.ts`, `src/server.ts`, `src/main.ts`: the three tools, one `Bun.serve`, the CLI.
+- `src/graph.ts`: the four node types (Goal, Question, Run, File) and the Cypher that writes them, and what a rule may be. The hub (ffi) and the page (WASM) both use it.
+- `src/mcp.ts`, `src/server.ts`, `src/main.ts`: the four tools (goal, ask, query, look), one `Bun.serve`, the CLI.
 - `src/connect.ts`: finds or starts a workspace's hub, and bridges stdio MCP to it. `src/setup.ts`: `witness setup`.
 - `src/replay.ts`: `witness replay` loads a recorded store into the page, read-only. It sends the whole graph and each question’s latest recorded run immediately. The page provides manual question navigation.
 - A recorded session for the hackathon judges goes in `examples/`. Never write to a recorded store: a new session goes in a new folder.
@@ -36,7 +37,7 @@ Use Bun for dependency installation, scripts, tests and builds. Bundle the page 
 - `page/DESIGN.md`: the page's tokens and rules (Google's DESIGN.md format). Change it with the page. Page text is labels, not sentences.
 - `page/tools.ts`: the page's WebMCP tools for a browser agent, `query`, `show_question` and `navigate`. Navigation immediately shows the question, its dependencies and its evidence; overview clears the focus. They only read: a query whose plan has any operator outside `READS` is refused. `ask` never goes in the page.
 - `SCHEMA` in `src/graph.ts` describes the graph to agents. The MCP `query` tool and the page's `query` tool both use it.
-- An answer is never stored. Queries get the answers as parameters (`answerParams` in `src/graph.ts`).
+- Current question answers and goal completion are never stored. Queries get the answers and `$complete`/`$incomplete` goal ids as parameters (`answerParams` in `src/graph.ts`).
 - `bun check`: type check. Run both before you commit.
 
 ## Relate

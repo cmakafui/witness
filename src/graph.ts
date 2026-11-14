@@ -2,19 +2,22 @@
 // and the web page runs the same statements on its copy (WASM), so the two graphs stay the same.
 // Every statement is a MERGE by id: writing a record twice is the same as writing it once.
 //
-// Two records hold everything. A Question is what was asked: its text, its rule, its probe and its inputs. A Run is
+// A Goal states the solved condition and names at most one acceptance question. A Question is what was asked:
+// its text, its rule, its probe and its inputs. A Run is
 // one execution of the probe, written once, when it ends: what it measured, what it read and saved, and the answer
 // the rule gave on its measurements. The answer of a question now is never stored: it is the answer of the run on the
 // question's inputs as they are now.
 
-export type Label = "Question" | "Run" | "File";
-export type RelType = "NEEDS" | "OF" | "READ" | "SAVED";
+export type Label = "Goal" | "Question" | "Run" | "File";
+export type RelType = "ACCEPTED_BY" | "FOR" | "NEEDS" | "OF" | "READ" | "SAVED";
 
 export type GNode = { label: Label; id: string; props: Record<string, string | number | boolean | string[] | null> };
 export type GRel = { type: RelType; from: string; to: string; name?: string };
 
 /** The label at each end of each relationship type. schema.cypher declares the same. */
 export const ENDS: Record<RelType, [Label, Label]> = {
+  ACCEPTED_BY: ["Goal", "Question"],
+  FOR: ["Question", "Goal"],
   NEEDS: ["Question", "Question"],
   OF: ["Run", "Question"],
   READ: ["Run", "File"],
@@ -44,13 +47,16 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
 
 /** The graph, as agents read it: in the MCP query tool and in the page's WebMCP query tool. */
 export const SCHEMA = `The graph:
+(:Goal {id, text, seq})-[:ACCEPTED_BY]->(:Question)  the goal's only acceptance question, bound before it runs
+(:Question)-[:FOR]->(:Goal)           exploratory purpose; never votes on completion
 (:Question {id, text, rule, probe, inputs, asker, seq})
 (:Question)-[:NEEDS]->(:Question)      reads a file the other question saved
 (:Run {id, key, seq, started, ms, answer, reason, measured, results})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File {id, bytes})    the inputs the run read; a File's id is its SHA-256
 (:Run)-[:SAVED {name}]->(:File)               the files the run saved for other questions
 rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is the measurements as JSON. measured is true when the probe measured, even if the rule could not decide: then other questions can read the files it saved. started is when the run began, in milliseconds since 1970. ms is how long it took.
-Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now.`;
+Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now.
+$complete and $incomplete are goal ids. A goal is complete only when its acceptance question currently answers yes. No acceptance question means open and incomplete. All other acceptance states mean incomplete. Exploratory questions never determine completion. Goals and acceptance bindings cannot be edited; changing the acceptance contract requires a new goal.`;
 
 /** A question's answer as the hub works it out. It is never stored: it comes from the runs and the inputs now. */
 export type State = "yes" | "no" | "failed" | "running" | "pending" | "waiting";
@@ -63,12 +69,29 @@ export type Status = {
   reason: string | null; // why it failed, or what it waits for
 };
 
+export type Goal = { id: string; text: string; acceptance: string | null };
+export type GoalStatus = Goal & { state: State | "open"; complete: boolean; reason: string | null };
+
+/** The same goal records feed derived completion in the hub and in the browser. */
+export const GOALS = `MATCH (g:Goal) OPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question)
+RETURN g.id AS id, g.text AS text, q.id AS acceptance ORDER BY g.seq`;
+
+export function goalStatuses(goals: Goal[], statuses: Status[]): GoalStatus[] {
+  const byId = new Map(statuses.map((s) => [s.id, s]));
+  return goals.map((g) => {
+    const status = g.acceptance ? byId.get(g.acceptance) : undefined;
+    return { ...g, state: g.acceptance ? status?.state ?? "waiting" : "open", complete: status?.state === "yes", reason: status?.reason ?? null };
+  });
+}
+
 /**
  * The parameters every query gets, so a query can use the answers: $yes, $no, $failed, $running, $pending and
  * $waiting are lists of question ids, and $current is the list of runs that give the current answers.
+ * $complete and $incomplete are goal ids, derived only from acceptance questions.
  */
-export function answerParams(statuses: Status[]): Record<State | "current", string[]> {
+export function answerParams(statuses: Status[], goals: Goal[] = []): Record<State | "current" | "complete" | "incomplete", string[]> {
   const ids = (s: State) => statuses.filter((x) => x.state === s).map((x) => x.id);
+  const completion = goalStatuses(goals, statuses);
   return {
     yes: ids("yes"),
     no: ids("no"),
@@ -77,6 +100,8 @@ export function answerParams(statuses: Status[]): Record<State | "current", stri
     pending: ids("pending"),
     waiting: ids("waiting"),
     current: statuses.flatMap((x) => (x.run && (x.state === "yes" || x.state === "no" || x.state === "failed") ? [x.run] : [])),
+    complete: completion.filter((g) => g.complete).map((g) => g.id),
+    incomplete: completion.filter((g) => !g.complete).map((g) => g.id),
   };
 }
 

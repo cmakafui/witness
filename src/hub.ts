@@ -10,7 +10,7 @@
 // measurements: true is yes, false is no, and anything else is failed. Then the hub writes the run, once.
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, normalize, sep } from "node:path";
-import { answerParams, clauses, type GNode, type GRel, measurements, ruleProblem, ruleStatement, type State, type Status, statements } from "./graph.ts";
+import { answerParams, clauses, type GNode, type GRel, type Goal, type GoalStatus, GOALS, goalStatuses, measurements, ruleProblem, ruleStatement, type State, type Status, statements } from "./graph.ts";
 import { isFile, runProbe, type ProbeOutcome, RESULT } from "./probe.ts";
 import { type Param, Relate, RelateError, type Row } from "./relate.ts";
 import { applySchema } from "./schema.ts";
@@ -28,6 +28,8 @@ export type Ask = {
   rule: string;
   probe: string;
   inputs?: string[];
+  goal?: string;
+  accepts?: string;
   asker?: string;
   timeoutS?: number;
   waitS?: number;
@@ -326,13 +328,33 @@ export class Hub {
   }
 
   // ---------------------------------------------------------------------------------------------------------------
-  // The three tools
+  // The tools
+
+  /** Creates a new immutable goal, even when another goal has the same text. */
+  goal(text: string): GoalStatus {
+    if (!text.trim()) throw new Refusal("The goal has no solved condition. State what a successful result must satisfy.");
+    const id = contentId("g", crypto.randomUUID());
+    this.write([{ label: "Goal", id, props: { text: text.trim(), seq: ++this.seq } }], []);
+    return { id, text: text.trim(), acceptance: null, state: "open", complete: false, reason: null };
+  }
+
+  goals(): GoalStatus[] {
+    return goalStatuses(this.db.query(GOALS) as Goal[], this.statuses());
+  }
 
   /** Asks a question and waits for its answer, up to waitS seconds. Asking the same question twice is one question. */
-  async ask(a: Ask): Promise<Status & { question: string; results: unknown[]; saved: string[] }> {
+  async ask(a: Ask): Promise<Status & { question: string; results: unknown[]; saved: string[]; goal: GoalStatus | null }> {
     const inputs = [...new Set(a.inputs ?? [])].sort();
     this.refuse(a, inputs);
-    const id = contentId("q", a.text, a.rule, sha256(a.probe), JSON.stringify(inputs));
+    const id = contentId("q", a.text, a.rule, sha256(a.probe), JSON.stringify(inputs), a.goal ?? "", a.accepts ?? "");
+    if (a.goal !== undefined && a.accepts !== undefined) throw new Refusal("Use goal for exploration or accepts for acceptance, not both.");
+    const goal = a.goal ?? a.accepts;
+    if (goal !== undefined) {
+      const g = (this.db.query(GOALS) as Goal[]).find((g) => g.id === goal);
+      if (!g) throw new Refusal(`There is no goal ${goal}. Call goal first, or query existing goals.`);
+      if (a.accepts && g.acceptance && g.acceptance !== id)
+        throw new Refusal(`${goal} already has acceptance question ${g.acceptance}. Its contract cannot change. Create a new goal.`);
+    }
     if (!this.db.query("MATCH (q:Question {id: $id}) RETURN q.id AS id", { id }).length) {
       const needs = [...new Set(inputs.flatMap((i) => OUTPUT_REF.exec(i)?.[1] ?? []))];
       this.write(
@@ -343,7 +365,11 @@ export class Hub {
             props: { text: a.text, rule: a.rule, probe: a.probe, inputs, timeout: a.timeoutS ?? 600, asker: a.asker ?? null, seq: ++this.seq },
           },
         ],
-        needs.map((n) => ({ type: "NEEDS" as const, from: id, to: n })),
+        [
+          ...needs.map((n) => ({ type: "NEEDS" as const, from: id, to: n })),
+          ...(a.goal ? [{ type: "FOR" as const, from: id, to: a.goal }] : []),
+          ...(a.accepts ? [{ type: "ACCEPTED_BY" as const, from: a.accepts, to: id }] : []),
+        ],
       );
     }
     this.check();
@@ -358,7 +384,7 @@ export class Hub {
     }
     const done = s.state === "yes" || s.state === "no" || s.state === "failed";
     const results = done ? JSON.parse(String(this.db.query("MATCH (r:Run {id: $run}) RETURN r.results AS r", { run: s.run! })[0]?.r ?? "[]")) : [];
-    return { ...s, question: a.text, results, saved: done ? this.saved(s.run!).map((x) => `${id}/${x.name}`) : [] };
+    return { ...s, question: a.text, results, saved: done ? this.saved(s.run!).map((x) => `${id}/${x.name}`) : [], goal: goal ? this.goals().find((g) => g.id === goal)! : null };
   }
 
   /** Answered, or nothing is left that could change it. */
@@ -402,7 +428,7 @@ export class Hub {
   query(cypher: string, params: Record<string, Param> = {}, limit = 200): { rows: Row[]; truncated: boolean } {
     const reader = Relate.open(this.graphDir, { readOnly: true });
     try {
-      const rows = reader.query(cypher, { ...answerParams(this.statuses()), ...params });
+      const rows = reader.query(cypher, { ...answerParams(this.statuses(), this.db.query(GOALS) as Goal[]), ...params });
       return { rows: rows.slice(0, limit), truncated: rows.length > limit };
     } finally {
       reader.close();
