@@ -8,7 +8,7 @@ Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 �
 
 `witness replay DIR` opens a recorded session from its store alone. It needs only [Bun](https://bun.com) 1.4 or later. It needs no AI agent, no API key and no uv. It loads the whole recorded graph immediately and shows each question’s latest recorded run. Replay derives goal completion from those recorded answers; it does not check today’s workspace inputs.
 
-Choose a goal from the selector to open its acceptance question. A goal without one shows “No acceptance question”. The graph highlights the acceptance question’s upstream artifact dependencies and keeps surrounding exploration visible. Each row is one direction of work; labeled questions follow creation order, with space for their text. Connections name the files read from another question.
+Choose a goal from the selector to open its acceptance question. A goal without one shows “No acceptance question”. The graph highlights the selected question’s upstream artifact dependencies and keeps surrounding exploration visible. Selecting a goal simply selects its acceptance question. Each row is one direction of work; labeled questions follow creation order, with space for their text. Connections name the files read from another question.
 
 The evidence panel shows the selected question’s answer, actual rule clauses and their values, followed by measurements and files. Measurement names and values come directly from the current committed run, without inferred labels, units or rounding. Multiple result records show the last value per name and can be expanded under All measurements. Files distinguish declared inputs from saved outputs; input links open the archived bytes that the displayed run read. Pending work shows no old measurements as current. The Query tab runs Cypher on the page's own copy of the graph:
 
@@ -20,7 +20,7 @@ RETURN q.text, q.rule ORDER BY q.seq
 
 Choose All questions for the whole record. Start from a goal’s acceptance question, then follow **Depends on** and **Used by** to inspect its evidence. Click any question in the graph to inspect it, and use **Back** to return to the previous reading position. The Query tab can list questions and runs by `seq` when you need their recorded order.
 
-Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the browser's agent three tools: `query`, `show_question` and `navigate`. Turn it on at `chrome://flags/#enable-webmcp-testing`. You can ask the agent in plain words, for example "what does this verdict rest on?". It answers with Cypher on the page's copy of the graph. It shows you the query and the questions it found. These tools only read, and they mark what they return as untrusted. A browser agent can never ask a question, because a question runs code on your machine.
+Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the browser's agent two tools: `query` and `show_question`. Turn it on at `chrome://flags/#enable-webmcp-testing`. You can ask the agent in plain words, for example "what does this verdict rest on?". It answers with Cypher on the page's copy of the graph. It shows you the query and the questions it found. Selecting a question through the graph, a link or `show_question` uses the same upstream highlight; Back restores the previous question and reading position. These tools only read, and they mark what they return as untrusted. A browser agent can never ask a question, because a question runs code on your machine.
 
 ## Use case
 
@@ -54,7 +54,7 @@ Witness is not a sandbox. It does not stop an agent from acting outside it. It m
 
 A `File` is named by its SHA-256. The answer of a run is stored with that run. The answer of a question is never stored. The hub finds the run on the question's inputs as they are now. It passes the answers to queries as `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` and `$current`. Relate enforces the schema in [`schema.cypher`](schema.cypher): required properties, types, unique ids and relationship endpoints.
 
-Goals and their bindings are immutable. A goal can start without an acceptance question: it is open and incomplete. Bind at most one acceptance question, before it runs. An identical retry reuses that question. A different contract requires a new goal, which may use the same text. A goal is complete only while its acceptance question currently answers `yes`; `no`, `failed`, `pending`, `running` and `waiting` all mean incomplete. Input changes can invalidate completion. Restoring inputs restores the cached answer and completion. Exploratory answers never vote. Queries get `$complete` and `$incomplete` as goal-id lists; completion is never stored.
+Goals and acceptance bindings are immutable. Exploratory `FOR` associations can be added to an existing question; one question may serve several goals. A goal can start without an acceptance question: it is open and incomplete. Bind at most one acceptance question, before it runs. An identical retry reuses that question. A different contract requires a new goal, which may use the same text. A goal is complete only while its acceptance question currently answers `yes`; `no`, `failed`, `pending`, `running` and `waiting` all mean incomplete. Input changes can invalidate completion. Restoring inputs restores the cached answer and completion. Exploratory answers never vote. Queries get `$complete` and `$incomplete` as goal-id lists; completion is never stored.
 
 The page holds its own copy of the graph in Relate's WASM build. It applies each new record with the same Cypher as the hub ([`src/graph.ts`](src/graph.ts)). Its panels and query box run Cypher in the browser. The page's query tool for a browser agent asks Relate for the plan of the query. It refuses any plan that writes.
 
@@ -80,7 +80,7 @@ witness replay [DIR]   # inspect a recorded session
 Agents get four tools:
 
 - `goal`: create a new immutable goal from its solved condition. Query first to reuse a goal.
-- `ask`: a question, its rule, its probe and its inputs. Add `goal: "g-…"` for exploration, or `accepts: "g-…"` to bind the acceptance question. These fields are mutually exclusive and part of the question’s identity. `ask` also returns the associated goal’s current completion.
+- `ask`: a question, its rule, its probe and its inputs. Add `goal: "g-…"` for exploration, or `accepts: "g-…"` to bind the acceptance question. These fields are mutually exclusive. Exploratory `goal` associations do not affect question identity: adding another goal reuses the question and its runs, including an execution already in progress. The first asker stays on the original question. `accepts` is part of identity and binds a separate acceptance question before execution; it cannot promote an existing exploratory run. `ask` also returns the associated goal’s current completion.
 - `query`: read-only Cypher.
 - `look`: a saved file. Images come back as images.
 

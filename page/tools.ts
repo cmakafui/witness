@@ -4,12 +4,8 @@
 // asking runs code on this machine, so `ask` stays with the agents on /mcp.
 import { SCHEMA, type Status } from "../src/graph.ts";
 
-export type Navigation = { id?: string; relation: "dependencies" | "dependents" | "overview"; depth?: number };
-
 /** What the tools need from the page. */
 export type Page = {
-  /** Shows the question neighborhood and its evidence. */
-  navigate(args: Navigation): unknown;
   /** The operators of a query's plan. */
   operators(cypher: string): string[];
   /** Shows the query in the Query tab, runs it there, and returns its rows or its error. */
@@ -67,7 +63,7 @@ export function webTools(page: Page): Tool[] {
     {
       name: "show_question",
       description:
-        "Select a question in the Witness graph and show it to the person. Returns its text, rule, answer now, the goals it explores or accepts, dependencies and consumers, measurements of its current run, archived inputs, saved files, and runs. File URLs refer to the bytes that run read or saved. Exploratory questions never determine goal completion.",
+        "Select a question in the Witness graph, highlight its upstream artifact dependencies, and show its evidence. Returns its text, rule, answer now, the goals it explores or accepts, dependencies and consumers, measurements of its current run, archived inputs, saved files, and runs. File URLs refer to the bytes that run read or saved. Exploratory questions never determine goal completion.",
       inputSchema: { type: "object", properties: { id: { type: "string", description: "The question's id: q- and 12 hex digits." } }, required: ["id"] },
       annotations: hints,
       execute: reply(({ id }) => {
@@ -84,28 +80,6 @@ export function webTools(page: Page): Tool[] {
           read: urls(read),
           saved: urls(saved),
         };
-      }),
-    },
-    {
-      name: "navigate",
-      description: "Show a question's neighborhood and evidence immediately. dependencies follows NEEDS toward inputs; dependents follows NEEDS backward toward consumers. Depth is the number of links to follow, default 1, at most 10. Omit id to start from the selected question. overview clears the focus and scrolls to the start. Returns focused questions with current answers and links. Only questions present in the page can be visited.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          id: { type: "string", description: "Starting question; defaults to the selected question. Not needed for overview." },
-          relation: { type: "string", enum: ["dependencies", "dependents", "overview"] },
-          depth: { type: "integer", minimum: 1, maximum: 10, default: 1 },
-        },
-        required: ["relation"],
-      },
-      annotations: hints,
-      execute: reply(({ id, relation, depth }) => {
-        if (!["dependencies", "dependents", "overview"].includes(String(relation)))
-          throw new Error("Choose dependencies, dependents or overview.");
-        if (id !== undefined && typeof id !== "string") throw new Error("Give a question id.");
-        if (depth !== undefined && (typeof depth !== "number" || !Number.isInteger(depth) || depth < 1 || depth > 10))
-          throw new Error("Depth must be an integer from 1 to 10.");
-        return page.navigate({ id: id as string | undefined, relation: relation as Navigation["relation"], depth: depth as number | undefined });
       }),
     },
   ];

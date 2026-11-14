@@ -85,6 +85,53 @@ test("competing contracts cannot replace a binding, retries reuse it, and a new 
   await expect(hub.ask({ ...testQuestion, rule: "$x > 2", accepts: g.id })).rejects.toThrow(/contract cannot change/);
 }, 30_000);
 
+test("one tested exploration can serve several goals without repeating execution or changing its record", async () => {
+  const a = hub.goal("Goal A"), b = hub.goal("Goal B");
+  const original = await hub.ask({ ...testQuestion, asker: "first" });
+  const associations: string[] = [];
+  const off = hub.on((e) => {
+    if (e.type === "graph") associations.push(...e.rels.filter((r) => r.type === "FOR").map((r) => r.to));
+  });
+  const underA = await hub.ask({ ...testQuestion, goal: a.id, asker: "other" });
+  const underB = await hub.ask({ ...testQuestion, goal: b.id });
+  const retry = await hub.ask({ ...testQuestion, goal: a.id });
+  const standalone = await hub.ask(testQuestion);
+  off();
+  for (const answer of [underA, underB, retry, standalone]) {
+    expect([answer.id, answer.run]).toEqual([original.id, original.run]);
+  }
+  expect(underA.goal).toMatchObject({ id: a.id, acceptance: null, complete: false });
+  expect(underB.goal).toMatchObject({ id: b.id, acceptance: null, complete: false });
+  expect(associations).toEqual([a.id, b.id]);
+  expect(hub.query("MATCH (q:Question) RETURN q.asker AS asker, q.rule AS rule").rows).toEqual([{ asker: "first", rule: testQuestion.rule }]);
+  expect(hub.query("MATCH (r:Run) RETURN count(r) AS n").rows).toEqual([{ n: 1 }]);
+  await hub.idle();
+  hub.close();
+  hub = await Hub.open(root, { pollMs: 0 });
+  expect(hub.query("MATCH (:Question {id: $id})-[:FOR]->(g:Goal) RETURN g.id AS id ORDER BY id", { id: original.id }).rows)
+    .toEqual([a.id, b.id].sort().map((id) => ({ id })));
+  // Acceptance stays a separately bound, newly executed question; association cannot promote the old run.
+  const acceptance = await hub.ask({ ...testQuestion, accepts: a.id });
+  expect(acceptance.id).not.toBe(original.id);
+  expect(acceptance.run).not.toBe(original.run);
+  expect(goal(b.id).complete).toBe(false);
+}, 30_000);
+
+test("concurrent goals share an exploration that is already running", async () => {
+  const a = hub.goal("Goal A"), b = hub.goal("Goal B");
+  const question = { ...testQuestion, waitS: 0, probe: testQuestion.probe + "\nimport time\ntime.sleep(0.2)" };
+  const [underA, underB, standalone] = await Promise.all([
+    hub.ask({ ...question, goal: a.id }), hub.ask({ ...question, goal: b.id }), hub.ask(question),
+  ]);
+  expect([underA.state, underB.state, standalone.state]).toEqual(["running", "running", "running"]);
+  expect(new Set([underA.id, underB.id, standalone.id]).size).toBe(1);
+  expect(new Set([underA.run, underB.run, standalone.run]).size).toBe(1);
+  await hub.idle();
+  expect(hub.query("MATCH (q:Question) RETURN count(q) AS n").rows).toEqual([{ n: 1 }]);
+  expect(hub.query("MATCH (r:Run) RETURN count(r) AS n").rows).toEqual([{ n: 1 }]);
+  expect(hub.query("MATCH (:Question)-[:FOR]->(:Goal) RETURN count(*) AS n").rows).toEqual([{ n: 2 }]);
+}, 30_000);
+
 test("completion follows pending, running, no, failed and restored inputs without storing a completion flag", async () => {
   writeFileSync(join(root, "candidate.txt"), "1");
   const g = hub.goal("The candidate is positive");

@@ -96,24 +96,10 @@ main.sidebar-collapsed aside { visibility: hidden; }
 
 /* The lanes: one row per direction of work, questions in the order they were asked. */
 #graph-stage { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
-#navigation {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--line);
-  font-size: 13px;
-}
-#navigation[hidden] { display: none; }
-#navigation-summary { font-weight: 600; }
-
-/* Neighborhood focus floats over the lanes' top margin, so the lanes stay still. */
-#navigation { position: absolute; z-index: 1; top: 0; left: 132px; right: 0; background: var(--surface); }
 .reason { max-height: 180px; overflow: auto; }
 #graph { position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: 132px minmax(0, 1fr); align-content: start; overflow-y: auto; }
 #graph .empty { grid-column: 1 / -1; padding: 40px 24px; color: var(--muted); max-width: 44ch; }
-.lane-names { padding-top: 44px; border-right: 1px solid var(--line); }
+.lane-names { padding-top: 24px; border-right: 1px solid var(--line); }
 .lane-names div {
   height: var(--lane);
   display: flex;

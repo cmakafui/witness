@@ -100,7 +100,7 @@ components:
 
 ## Overview
 
-The page shows a record of evidence, not a dashboard. A person comes to it to answer two questions: how did the agents get here, and why does each answer stand. The lanes answer the first. The rule check answers the second. A compact goal selector opens the acceptance question and highlights its input chain. The evidence panel shows what the current test measured.
+The page shows a record of evidence, not a dashboard. A person comes to it to answer two questions: how did the agents get here, and why does each answer stand. The lanes answer the first. The rule check answers the second. A compact goal selector opens the acceptance question. Every selection highlights that question’s input chain. The evidence panel shows what the current test measured.
 
 The tone is a lab notebook kept by a careful clerk: plain, legible, and exact. Nothing on the page is decoration. Every mark is a question, a link between questions, or a measurement.
 
@@ -143,12 +143,12 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 └──────────────────────────────────────────────────────────┴─────────────────────┘
 ```
 
-- **Goal selector.** A compact select below the header names the work. It opens the acceptance question; a goal without one shows No acceptance question in the panel. All questions clears goal context. First load opens the first goal when there is no selection. Live arrivals preserve the reader’s choice. There are no completion banners.
+- **Goal selector.** A compact select below the header names the work. It opens the acceptance question; a goal without one shows No acceptance question in the panel. All questions clears the selection. First load opens the first goal when there is no selection. Live arrivals preserve the reader’s choice. There are no completion banners.
 - **Lanes.** Questions follow creation order. Horizontal spacing leaves room for up to three lines of question text beside each glyph. Each row is one direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. The layout never moves on its own, so a person can learn it.
-- **Links.** A curve runs from a question to each question that reads its output, labeled with the artifact names. Selecting a goal highlights the upstream chain of its acceptance question; other exploration stays readable. Links record artifact reads.
+- **Links.** A curve runs from a question to each question that reads its output, labeled with the artifact names. Selecting any question highlights its upstream chain; choosing a goal selects its acceptance question. Other exploration stays readable. There is no separate neighborhood or depth mode. Links record artifact reads.
 - **Evidence panel.** A fixed column on the right. It opens on the answer, question, asker and rule check, then the exact measurements, input and saved file links, dependencies, images, probe and run records. No goal summary repeats the selector.
-- **Back.** A quiet control beside the Evidence tab, visible after following another question. It restores the previous reading position.
-- **Evidence navigation.** Choose a goal to open its acceptance question, then follow dependency and consumer chips. Graph selection, query results and WebMCP also open evidence directly. The lanes use the full available height.
+- **Back.** A quiet control beside the Evidence tab, visible after following another question. It restores the previous question, reading position and expanded probe. Its dependency highlight is derived again from that question.
+- **Evidence navigation.** Choose a goal to open its acceptance question, then follow dependency and consumer chips. Graph selection, query results and WebMCP show_question also open evidence directly and use the same selection-derived highlight. The lanes use the full available height.
 - Content is left aligned. Below 860px the panel moves under the lanes.
 
 ## Elevation & Depth

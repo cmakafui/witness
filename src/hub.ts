@@ -346,7 +346,7 @@ export class Hub {
   async ask(a: Ask): Promise<Status & { question: string; results: unknown[]; saved: string[]; goal: GoalStatus | null }> {
     const inputs = [...new Set(a.inputs ?? [])].sort();
     this.refuse(a, inputs);
-    const id = contentId("q", a.text, a.rule, sha256(a.probe), JSON.stringify(inputs), a.goal ?? "", a.accepts ?? "");
+    const id = contentId("q", a.text, a.rule, sha256(a.probe), JSON.stringify(inputs), a.accepts ?? "");
     if (a.goal !== undefined && a.accepts !== undefined) throw new Refusal("Use goal for exploration or accepts for acceptance, not both.");
     const goal = a.goal ?? a.accepts;
     if (goal !== undefined) {
@@ -371,6 +371,9 @@ export class Hub {
           ...(a.accepts ? [{ type: "ACCEPTED_BY" as const, from: a.accepts, to: id }] : []),
         ],
       );
+    } else if (a.goal && !this.db.query("MATCH (:Question {id: $id})-[:FOR]->(:Goal {id: $goal}) RETURN 1 AS found", { id, goal: a.goal }).length) {
+      // Purpose can be added without changing the tested question or repeating its execution.
+      this.write([], [{ type: "FOR", from: id, to: a.goal }]);
     }
     this.check();
     const deadline = Date.now() + (a.waitS ?? 120) * 1000;

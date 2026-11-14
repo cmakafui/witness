@@ -48,7 +48,7 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
 /** The graph, as agents read it: in the MCP query tool and in the page's WebMCP query tool. */
 export const SCHEMA = `The graph:
 (:Goal {id, text, seq})-[:ACCEPTED_BY]->(:Question)  the goal's only acceptance question, bound before it runs
-(:Question)-[:FOR]->(:Goal)           exploratory purpose; never votes on completion
+(:Question)-[:FOR]->(:Goal)           exploratory purpose; one question may serve several goals; never votes on completion
 (:Question {id, text, rule, probe, inputs, asker, seq})
 (:Question)-[:NEEDS]->(:Question)      reads a file the other question saved
 (:Run {id, key, seq, started, ms, answer, reason, measured, results})-[:OF]->(:Question)

@@ -31,7 +31,8 @@ Call `query` to find the goal before creating one. `goal({text: "…"})` creates
 - Use `ask` with `goal: "g-…"` for exploratory questions. Their answers never determine completion, whether yes, no or failed.
 - Use `ask` with `accepts: "g-…"` for the goal’s acceptance question. Use either `goal` or `accepts`, never both. Leave both out for questions without a goal.
 - Write the acceptance contract before executing it. Witness writes the question and binding atomically before the probe starts. You can bind only one acceptance question per goal. An identical retry is allowed; a different contract requires a new goal.
-- Goal and role are part of a question’s identity. An exploratory question cannot be promoted in place.
+- Exploratory goal membership is not part of question identity. Repeat the same question with another `goal` to add a `FOR` association and reuse its runs, including a run already in progress. Omitting `goal` also reuses that question. The original question and first asker stay unchanged.
+- Acceptance binding is part of identity. `accepts` creates a distinct question bound before execution; an existing exploratory run cannot be promoted in place.
 - Only the acceptance question’s **current** yes completes the goal. No, failed, pending, running and waiting all mean incomplete. Input changes invalidate completion; restoring the inputs restores the cached answer. Completion is never stored.
 - `ask` returns the associated goal’s completion alongside the question’s answer. Query `$complete` and `$incomplete` for goal ids. They never include exploratory question ids.
 
@@ -114,7 +115,7 @@ For more syntax, see [Relate's Cypher guide](https://github.com/relatedb/relate/
 
 `look` shows a saved file. Images come back as images.
 
-In the live page and replay, choose a goal to open its acceptance question and highlight the input chain. All questions clears this context. Follow Depends on and Used by, or select any graph question; Back restores the previous reading position. The panel shows the actual rule, clause values and measurements from the current committed run. Values retain their full recorded precision. With several result records, the table shows the last value per name; All measurements shows every record. File links marked input open the archived bytes read by that run; saved links open its outputs. Pending work does not display old measurements as current. Use Cypher with `ORDER BY q.seq` or `ORDER BY r.seq` to inspect recorded order. Goal completion remains available through queries and tool replies.
+In the live page and replay, choose a goal to open its acceptance question. Every selected question highlights its own upstream artifact dependencies. All questions clears the selection. Follow Depends on and Used by, or select any graph question; Back restores the previous reading position. The panel shows the actual rule, clause values and measurements from the current committed run. Values retain their full recorded precision. With several result records, the table shows the last value per name; All measurements shows every record. File links marked input open the archived bytes read by that run; saved links open its outputs. Pending work does not display old measurements as current. Use Cypher with `ORDER BY q.seq` or `ORDER BY r.seq` to inspect recorded order. Goal completion remains available through queries and tool replies. Browser agents use `query` and `show_question`; `show_question` selects and highlights the same way as a person clicking a question.
 
 ## Reporting
 

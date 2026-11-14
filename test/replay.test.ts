@@ -87,7 +87,6 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     expect(await view.evaluate("window.witness.tools.map((t) => [t.name, t.annotations.readOnlyHint, t.annotations.untrustedContentHint])")).toEqual([
       ["query", true, true],
       ["show_question", true, true],
-      ["navigate", true, true],
     ]);
     const choose = (id: string) => view.evaluate(`(() => { const goal = document.getElementById('goal'); goal.value = ${JSON.stringify(id)}; goal.dispatchEvent(new Event('change')); })()`);
     expect(await view.evaluate("document.getElementById('goal').value")).toBe(ids.complete);
@@ -145,45 +144,30 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     const inputUrl = await view.evaluate("document.querySelector('#question .files a').href") as string;
     expect(await (await fetch(inputUrl)).json()).toEqual([4, 5, 6]);
 
-    const neighborhood = (relation: string, id?: string, depth?: number) => call("navigate", { relation, ...(id ? { id } : {}), ...(depth === undefined ? {} : { depth }) });
-    // Navigation immediately shows evidence without changing an open panel's width.
+    // Every entry point derives the same upstream highlight from the selected question.
+    const lit = () => view.evaluate("[...document.querySelectorAll('.q:not(.dim)')].map(q => q.dataset.id)");
+    expect(await lit()).toEqual([ids.a, ids.b]);
+    expect(await view.evaluate("document.querySelectorAll('.link.lit').length")).toBe(1);
     const openWidths = await view.evaluate("[document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]");
-    const dependencies = await neighborhood("dependencies", ids.b, 2) as { questions: { id: string; text: string; answer: string }[]; links: object[] };
+    await call("show_question", { id: ids.d });
+    expect(await lit()).toEqual([ids.a, ids.b, ids.d]);
+    expect(await view.evaluate("document.querySelectorAll('.link.lit').length")).toBe(2);
     expect(await view.evaluate("[document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]")).toEqual(openWidths);
-    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the total above 100?");
-    expect(dependencies.questions).toEqual([{ id: ids.b!, text: "Is the total above 100?", answer: "no" }, { id: ids.a!, text: "Does data.txt hold numbers?", answer: "yes" }]);
-    expect(dependencies.links).toEqual([{ from: ids.b, to: ids.a, type: "NEEDS" }]);
-    expect(await view.evaluate("document.getElementById('navigation-summary').textContent")).toBe("Dependencies: 2 questions, 1 link, depth 2");
-    expect(await view.evaluate("document.getElementById('question').hidden")).toBe(false);
     await view.evaluate("document.querySelector('#question button.chip').click()");
+    expect(await lit()).toEqual([ids.a, ids.b]);
     await view.evaluate("document.getElementById('evidence-back').click()");
-    expect(await view.evaluate("document.getElementById('navigation').hidden")).toBe(false);
-    expect(await view.evaluate("document.getElementById('navigation-summary').textContent")).toBe("Dependencies: 2 questions, 1 link, depth 2");
+    expect(await lit()).toEqual([ids.a, ids.b, ids.d]);
 
-    // Neighborhood navigation opens a hidden panel again, at its full width, and leaves the lanes alone.
+    // Browser-agent selection opens the evidence panel with the same derived highlight.
     const lanesWidth = await view.evaluate("document.getElementById('graph').clientWidth");
     await view.evaluate("document.getElementById('sidebar-toggle').click()");
-    await neighborhood("dependencies", ids.b, 1);
+    await call("show_question", { id: ids.b });
+    expect(await lit()).toEqual([ids.a, ids.b]);
     expect(await view.evaluate("[document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]")).toEqual([lanesWidth, 440]);
     expect(await view.evaluate("document.getElementById('sidebar-toggle').getAttribute('aria-expanded')")).toBe("true");
-
-    // A later navigation wins immediately; there is no delayed panel to reopen.
-    await neighborhood("dependencies", ids.a);
-    await neighborhood("overview");
-    expect(await view.evaluate("document.getElementById('navigation').hidden")).toBe(true);
-
-    expect(await neighborhood("dependencies", ids.d, 1)).toMatchObject({ questions: [{ id: ids.d }, { id: ids.b }] });
-    expect(await neighborhood("dependencies", ids.d, 2)).toMatchObject({ questions: [{ id: ids.d }, { id: ids.b }, { id: ids.a }] });
-    // A missing id uses the current selection. Reverse traversal reaches the consumer.
-    expect(await neighborhood("dependents", ids.a)).toMatchObject({ questions: [{ id: ids.a }, { id: ids.b }] });
-    expect(await neighborhood("dependents", ids.a, 2)).toMatchObject({ questions: [{ id: ids.a }, { id: ids.b }, { id: ids.d }] });
-    expect(await neighborhood("dependencies")).toMatchObject({ id: ids.a, questions: [{ id: ids.a }], links: [] });
-    expect(await neighborhood("dependencies", ids.c)).toMatchObject({ questions: [{ id: ids.c, answer: "failed" }], links: [] });
-    expect(await neighborhood("dependencies", "q-ffffffffffff")).toHaveProperty("refused");
-    for (const depth of [0, 1.5, 11]) expect(await neighborhood("dependencies", ids.a, depth)).toHaveProperty("refused");
-    expect(await neighborhood("invented", ids.a)).toHaveProperty("refused");
-    expect(await neighborhood("overview")).toMatchObject({ relation: "overview", questions: 4 });
-    expect(await view.evaluate("document.getElementById('navigation').hidden")).toBe(true);
+    await choose("");
+    expect(await lit()).toHaveLength(4);
+    expect(await view.evaluate("document.querySelectorAll('.link.lit').length")).toBe(0);
 
     // Goal selection and graph selections open evidence directly, including no and failed answers.
     await choose(ids.incomplete!);
@@ -192,6 +176,7 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     await view.evaluate(`document.querySelector('[data-id="${ids.c}"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does it crash?");
     expect(await view.evaluate("document.querySelector('#question .badge').textContent")).toBe("failed");
+    expect(await lit()).toEqual([ids.c]);
     await view.evaluate("document.getElementById('evidence-back').click()");
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the saved total above 100?");
   } finally {

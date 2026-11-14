@@ -8,7 +8,7 @@
 import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
 import { answerParams, clauses, type Goal, GOALS, type GNode, type GRel, measurements, named, type State, type Status, statements } from "../src/graph.ts";
-import { type Navigation, register, webTools } from "./tools.ts";
+import { register, webTools } from "./tools.ts";
 
 type Msg =
   | { type: "graph"; nodes: GNode[]; rels: GRel[] }
@@ -47,8 +47,7 @@ let selectedGoal = "";
 let goalInitialized = false;
 let marked = new Set<string>();
 type Neighborhood = { nodes: Set<string>; links: Set<string> };
-let focus: Neighborhood | null = null;
-type QuestionVisit = { id: string; scroll: number; lanes: number; probeOpen: boolean; focus: Neighborhood | null; marked: Set<string>; summary: string };
+type QuestionVisit = { id: string; scroll: number; lanes: number; probeOpen: boolean; marked: Set<string> };
 const questionHistory: QuestionVisit[] = [];
 const linkId = (l: QLink) => `${l.source}:${l.target}`;
 const stateOf = (q: string): State => statuses.get(q)?.state ?? "waiting";
@@ -68,11 +67,6 @@ function upstream(roots: string[]): Neighborhood {
     frontier = next;
   }
   return { nodes: found, links: followed };
-}
-
-function goalFocus() {
-  const g = goals().find((g) => g.id === selectedGoal);
-  return g?.acceptance ? upstream([g.acceptance]) : null;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -122,7 +116,7 @@ const svg = s("svg", { role: "group", "aria-label": "Questions by direction of w
 scroller.append(svg);
 const empty = h("p", { class: "empty" }, "No questions yet.");
 
-const TOP = 44; // Room for the neighborhood focus bar.
+const TOP = 24;
 const PAD = 28;
 const LABEL = 220;
 /** Where each question sits, from the last render. */
@@ -157,7 +151,7 @@ function render() {
     lastX = x;
   }
   const width = Math.max(scroller.clientWidth, lastX + LABEL + PAD);
-  const highlight = focus ?? goalFocus();
+  const highlight = selected ? upstream([selected]) : null;
 
   names.replaceChildren(...lanes.map((name) => h("div", { title: name }, name)));
   svg.setAttribute("width", String(width));
@@ -209,7 +203,7 @@ function render() {
     g.append(s("text", { class: "question-label", x: 22, y: -(lines.length - 1) * 8 },
       ...lines.map((line, i) => s("tspan", { x: 22, dy: i ? 16 : 0 }, document.createTextNode(line)))));
     if (q.id === selected) g.append(s("circle", { class: "ring selected", r: 13.5 }));
-    else if (marked.has(q.id) || focus?.nodes.has(q.id)) g.append(s("circle", { class: "ring marked", r: 13.5 }));
+    else if (marked.has(q.id)) g.append(s("circle", { class: "ring marked", r: 13.5 }));
     g.addEventListener("click", () => select(q.id));
     g.addEventListener("keydown", (e) => {
       if ((e as KeyboardEvent).key === "Enter" || (e as KeyboardEvent).key === " ") {
@@ -256,23 +250,13 @@ function setSidebar(open: boolean) {
 }
 sidebarToggle.onclick = () => setSidebar(sidebarToggle.getAttribute("aria-expanded") !== "true");
 
-/** The scroll position that puts these questions in the middle of the lanes. */
-function centre(ids: Set<string>) {
-  const xs = [...ids].flatMap((q) => place.get(q)?.x ?? []);
-  if (!xs.length) return scroller.scrollLeft;
-  const mid = (Math.min(...xs) + Math.max(...xs)) / 2;
-  return Math.max(0, Math.min(scroller.scrollWidth - scroller.clientWidth, mid - scroller.clientWidth / 2));
-}
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
 function rememberQuestion(next: string) {
   if (!selected || selected === next) return;
   const panel = document.getElementById("question")!;
   questionHistory.push({
     id: selected, scroll: panel.scrollTop, lanes: scroller.scrollLeft,
     probeOpen: panel.querySelector<HTMLDetailsElement>("details.probe")?.open ?? false,
-    focus, marked: new Set(marked), summary: document.getElementById("navigation-summary")!.textContent ?? "",
+    marked: new Set(marked),
   });
 }
 
@@ -285,64 +269,6 @@ evidenceBack.onclick = () => {
   const previous = questionHistory.pop();
   if (previous) select(previous.id, previous);
 };
-
-function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Navigation) {
-  if (relation === "overview") {
-    selectedGoal = "";
-    goalSelect.value = "";
-    focus = null;
-    marked.clear();
-    document.getElementById("navigation")!.hidden = true;
-    render();
-    scroller.scrollLeft = 0;
-    return { relation, questions: nodes.size, selected };
-  }
-  if (!start) throw new Error("Select a question or give its id first.");
-  if (!nodes.has(start)) throw new Error(`There is no question ${start}. Call query to list the questions already in the page.`);
-  const found = new Set([start]);
-  const followed = new Map<string, QLink>();
-  let frontier = new Set([start]);
-  for (let step = 0; step < depth && frontier.size; step++) {
-    const next = new Set<string>();
-    for (const l of links) {
-      const { source: from, target: to } = l;
-      const targets = [relation === "dependencies" ? (frontier.has(from) ? to : null) : frontier.has(to) ? from : null];
-      for (const target of targets)
-        if (target) {
-          followed.set(linkId(l), l);
-          if (!found.has(target)) {
-            found.add(target);
-            next.add(target);
-          }
-        }
-    }
-    frontier = next;
-  }
-  rememberQuestion(start);
-  selected = start;
-  updateEvidenceBack();
-  marked.clear();
-  focus = { nodes: found, links: new Set(followed.keys()) };
-  document.getElementById("navigation")!.hidden = false;
-  document.getElementById("navigation-summary")!.textContent =
-    `${relation[0]!.toUpperCase() + relation.slice(1)}: ${plural(found.size, "question")}, ${plural(followed.size, "link")}, depth ${depth}`;
-
-  tab("question", false);
-  showQuestion(start);
-  document.getElementById("question")!.scrollTop = 0;
-  setSidebar(true);
-  // Opening the panel can change the lane viewport. Use its final dimensions.
-  render();
-  scroller.scrollLeft = centre(found);
-  return {
-    id: start,
-    relation,
-    depth,
-    questions: [...found].map((qid) => ({ id: qid, text: nodes.get(qid)!.text, answer: stateOf(qid) })),
-    links: [...followed.values()].map((l) => ({ from: l.source, to: l.target, type: "NEEDS" })),
-  };
-}
-document.getElementById("overview")!.onclick = () => navigate({ relation: "overview" });
 
 // ---------------------------------------------------------------------------------------------------------------
 // Messages from the hub
@@ -443,11 +369,9 @@ function chooseGoal(id: string) {
   goalSelect.value = id;
   goalInitialized = true;
   selected = null;
-  focus = null;
   marked.clear();
   questionHistory.length = 0;
   updateEvidenceBack();
-  document.getElementById("navigation")!.hidden = true;
   const g = goals().find((g) => g.id === id);
   if (g?.acceptance) select(g.acceptance);
   else {
@@ -626,10 +550,7 @@ function showQuestion(qid: string) {
 
 function select(qid: string, previous?: QuestionVisit) {
   if (!previous) rememberQuestion(qid);
-  focus = previous?.focus ?? null;
   if (previous) marked = new Set(previous.marked);
-  document.getElementById("navigation")!.hidden = !focus;
-  if (previous) document.getElementById("navigation-summary")!.textContent = previous.summary;
   selected = qid;
   updateEvidenceBack();
   tab("question");
@@ -737,7 +658,6 @@ connect();
 
 // The page's tools for a browser agent (WebMCP), on the page's own functions.
 const tools = webTools({
-  navigate,
   operators(query) {
     const { plan } = execute(`EXPLAIN ${query}`, params());
     if (!plan) throw new Error("Relate gave no plan for this query, so the page cannot tell that it only reads.");

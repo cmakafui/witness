@@ -12,7 +12,7 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 
 - goal: create an immutable goal that states the solved condition. It starts open and incomplete. Each call creates a new goal.
 - ask: give a yes/no question, a rule, a probe, and the files that the probe reads. Witness runs the probe and returns the answer.
-- Set goal to a goal id for exploratory work. Exploratory answers never vote on completion. Set accepts instead to bind a goal's only acceptance question before it runs. The goal is complete only while that question currently answers yes. Changing the acceptance contract requires a new goal.
+- Set goal to a goal id for exploratory work. The same exploratory question can serve several goals: adding an association reuses its question and runs. Exploratory answers never vote on completion. Set accepts instead to bind a goal's only acceptance question before it runs. The goal is complete only while that question currently answers yes. Changing the acceptance contract requires a new goal.
 - The rule is a Cypher expression over the measurements, for example $p < 0.01 AND $gain >= 0.1. $name is a measurement. $results is the list of all measurements. True gives yes. False gives no. All other results give failed.
 - The probe is a Python script with a PEP 723 header. uv runs it in an empty folder that holds the declared inputs only. It prints each measurement as WITNESS_RESULT and one JSON object. It saves files for other questions in $WITNESS_OUT.
 - An input is a workspace path, or q-…/name for a file that another question saved.
@@ -55,7 +55,7 @@ function server(hub: Hub): McpServer {
           .describe("A Cypher expression over the measurements. True gives yes. $name is a measurement. $results is the list of all measurements. Example: $p < 0.01 AND $gain >= 0.1."),
         probe: z.string().describe('A Python script with a PEP 723 header. It prints each measurement as WITNESS_RESULT and one JSON object, for example {"p": 0.003}.'),
         inputs: z.array(z.string()).default([]).describe("The files that the probe reads: workspace paths, or q-…/name for a file that another question saved."),
-        goal: z.string().optional().describe("An existing goal id for exploratory work. Its answer never determines goal completion. Use either goal or accepts."),
+        goal: z.string().optional().describe("Associate this exploratory question with an existing goal. The same question can serve several goals without another execution. Its answer never determines goal completion. Use either goal or accepts."),
         accepts: z.string().optional().describe("An existing goal id whose only acceptance question this will be. Binds before execution. Only its current yes completes the goal. An identical retry is allowed; a different acceptance question requires a new goal."),
         asker: z.string().optional().describe("Your name or role. Witness shows it and does not use it."),
         timeout_s: z.number().int().positive().max(3600).optional().describe("The time limit of one run, in seconds. Default 600."),
