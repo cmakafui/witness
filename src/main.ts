@@ -13,7 +13,7 @@ const USAGE = `witness ${VERSION}: tested answers for a team of agents, in a Rel
 
   witness setup          once: link the skill into Claude Code, add the MCP server to Claude Code and Codex
   witness open [DIR]     open the workspace's graph in the browser (starts its hub when none runs)
-  witness replay [DIR]   play a recorded session back in the browser, from its store alone
+  witness replay [DIR]   inspect a recorded session in the browser, from its store alone
 
 DIR is the workspace (default: this folder). Its store is DIR/.witness.
 A hub exits by itself after ${600 / 60} minutes without use.
@@ -58,7 +58,7 @@ switch (values.version ? "version" : values.help ? "help" : command) {
   }
   case "replay": {
     const server = replay(root, { port: Number(values.port ?? 4748), hostname: values.host });
-    console.log(`Witness replay of ${root}\n  page: ${server.url.href}\n  press Play to tour the recorded questions`);
+    console.log(`Witness replay of ${root}\n  page: ${server.url.href}\n  use Previous, Next or the timeline to inspect the recorded questions`);
     browse(server.url);
     break;
   }

@@ -139,15 +139,15 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 │                                                          │ $margin < -1e-8     │
 │                                                          │   −0.0501  true     │
 ├──────────────────────────────────────────────────────────┤                     │
-│ ◀  ▶  ▶▶   3 of 17   Question text…   ───●────────────── │ picture, links …    │
+│ Previous  Next   3 of 17   Question…   ───●────────────── │ picture, links …    │
 └──────────────────────────────────────────────────────────┴─────────────────────┘
 ```
 
 - **Lanes.** The x position is the order a question was asked. Each row is one direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. The layout never moves on its own, so a person can learn it.
 - **Links.** A solid curve runs from a question to each question that reads its output.
 - **Evidence panel.** A fixed column on the right. It opens on the answer, the question and the rule check, then the saved pictures, then what the question rests on, then the raw record.
-- **Back.** A quiet control beside the Evidence tab, visible after following another question. It restores the previous reading position. Playback uses its own Previous and Next controls.
-- **Tour.** A bar under the lanes, never over them.
+- **Back.** A quiet control beside the Evidence tab, visible after following another question. It restores the previous reading position. Previous and Next follow question order.
+- **Question navigation.** A bar under the lanes, never over them. Previous, Next and the timeline select questions immediately. The position follows the selected question, including selections made through WebMCP.
 - Content is left aligned. Below 860px the panel moves under the lanes.
 
 ## Elevation & Depth
@@ -171,7 +171,7 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 
 - Do show a measurement next to the clause that uses it.
 - Do encode every answer by shape as well as colour.
-- Show navigation and evidence immediately. Playback pauses five seconds at each answered question.
+- Show navigation and evidence immediately. A question stays selected until the reader or browser agent chooses another.
 - Don't use cards, shadows or gradients.
 - Don't add labels that repeat what the content already says.
 - Don't explain the page in sentences. Labels are one to three words. A legend draws the mark it names.

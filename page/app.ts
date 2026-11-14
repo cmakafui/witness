@@ -48,13 +48,6 @@ type Neighborhood = { nodes: Set<string>; links: Set<string> };
 let focus: Neighborhood | null = null;
 type QuestionVisit = { id: string; scroll: number; lanes: number; probeOpen: boolean; focus: Neighborhood | null; marked: Set<string>; summary: string };
 const questionHistory: QuestionVisit[] = [];
-let tourPlaying = false;
-let tourIndex = -1;
-let tourReady = false;
-let tourTimer: ReturnType<typeof setTimeout> | undefined;
-let tourDeadline = 0;
-let tourRemaining = 5000;
-let tourPreview: number | null = null;
 const linkId = (l: QLink) => `${l.source}:${l.target}`;
 const stateOf = (q: string): State => statuses.get(q)?.state ?? "waiting";
 const colour = (s: State) => `var(--${s === "pending" ? "running" : s})`;
@@ -119,6 +112,7 @@ const laneOf = (asker: string | null) => {
 };
 
 function render() {
+  updateTour();
   const questions = [...nodes.values()].sort((a, b) => a.seq - b.seq);
   if (!questions.length) {
     el.replaceChildren(empty);
@@ -194,8 +188,7 @@ function curve(a: { x: number; y: number }, b: { x: number; y: number }, lane: n
 
 new ResizeObserver(() => scheduleDisplay(true)).observe(el);
 
-function setSidebar(open: boolean, interrupt = true) {
-  if (interrupt) pauseTour();
+function setSidebar(open: boolean) {
   if (!open && sidebar.contains(document.activeElement)) sidebarToggle.focus();
   main.classList.toggle("sidebar-collapsed", !open);
   sidebar.inert = !open;
@@ -204,8 +197,6 @@ function setSidebar(open: boolean, interrupt = true) {
   sidebarToggle.textContent = open ? "Hide evidence" : "Show evidence";
 }
 sidebarToggle.onclick = () => setSidebar(sidebarToggle.getAttribute("aria-expanded") !== "true");
-scroller.addEventListener("pointerdown", () => pauseTour());
-scroller.addEventListener("wheel", () => pauseTour(), { passive: true });
 
 /** The scroll position that puts these questions in the middle of the lanes. */
 function centre(ids: Set<string>) {
@@ -237,8 +228,7 @@ evidenceBack.onclick = () => {
   if (previous) select(previous.id, previous);
 };
 
-function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Navigation, fromTour = false) {
-  if (!fromTour) pauseTour();
+function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Navigation, fromSequence = false) {
   if (relation === "overview") {
     focus = null;
     marked.clear();
@@ -268,8 +258,8 @@ function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Na
     }
     frontier = next;
   }
-  // Playback has its own Previous/Next controls. Back follows manual exploration.
-  if (fromTour) questionHistory.length = 0;
+  // Previous/Next follow question order. Back follows links between questions.
+  if (fromSequence) questionHistory.length = 0;
   else rememberQuestion(start);
   selected = start;
   updateEvidenceBack();
@@ -282,7 +272,7 @@ function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Na
   tab("question", false);
   showQuestion(start);
   document.getElementById("question")!.scrollTop = 0;
-  setSidebar(true, false);
+  setSidebar(true);
   // Opening the panel can change the lane viewport. Use its final dimensions.
   render();
   scroller.scrollLeft = centre(found);
@@ -297,104 +287,39 @@ function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Na
 document.getElementById("overview")!.onclick = () => navigate({ relation: "overview" });
 
 // ---------------------------------------------------------------------------------------------------------------
-// The tour visits every question in asking order, including negative answers and failed measurements.
+// Manual navigation visits every question in asking order, including negative answers and failed measurements.
 
-const tourPlay = document.getElementById("tour-play") as HTMLButtonElement;
 const tourPrevious = document.getElementById("tour-previous") as HTMLButtonElement;
 const tourNext = document.getElementById("tour-next") as HTMLButtonElement;
 const tourSeek = document.getElementById("tour-seek") as HTMLInputElement;
 const tourQuestions = () => [...nodes.values()].sort((a, b) => a.seq - b.seq);
+const tourIndex = () => tourQuestions().findIndex((q) => q.id === selected);
 
 function updateTour() {
   const questions = tourQuestions();
-  const position = tourPreview ?? tourIndex;
+  const position = questions.findIndex((q) => q.id === selected);
   const current = questions[position];
-  const finished = tourReady && tourIndex === questions.length - 1;
-  const where = `${position + 1} of ${questions.length}`;
   document.getElementById("tour-progress")!.textContent = !questions.length
     ? "No questions yet"
-    : !current
-      ? plural(questions.length, "question")
-      : tourPreview !== null
-        ? `Go to ${where}`
-        : tourPlaying
-          ? `Playing ${where}`
-          : finished
-            ? `Finished ${where}`
-            : `Paused at ${where}`;
+    : current ? `${position + 1} of ${questions.length}` : plural(questions.length, "question");
   document.getElementById("tour-title")!.textContent = current?.text ?? "";
-  tourPlay.disabled = !questions.length;
-  tourPlay.textContent = tourPlaying ? "Pause" : finished ? "Replay" : "Play";
-  tourPlay.setAttribute("aria-label", `${tourPlay.textContent} investigation`);
-  tourPrevious.disabled = tourIndex <= 0;
-  tourNext.disabled = tourIndex >= questions.length - 1;
+  tourPrevious.disabled = position <= 0;
+  tourNext.disabled = position >= questions.length - 1;
   tourSeek.disabled = !questions.length;
   tourSeek.max = String(Math.max(0, questions.length - 1));
   tourSeek.value = String(Math.max(0, position));
   tourSeek.setAttribute("aria-valuetext", current ? `Question ${position + 1} of ${questions.length}: ${current.text}` : "No questions yet");
 }
 
-function pauseTour() {
-  if (!tourPlaying) return;
-  tourPlaying = false;
-  if (tourTimer !== undefined) tourRemaining = Math.max(0, tourDeadline - performance.now());
-  clearTimeout(tourTimer);
-  tourTimer = undefined;
-  updateTour();
-}
-
-/** Give the viewer five seconds with each completed result before moving on. */
-function continueTour() {
-  updateTour();
-  if (!tourPlaying || !tourReady || tourTimer !== undefined) return;
-  const questions = tourQuestions();
-  const current = questions[tourIndex];
-  if (!current || !["yes", "no", "failed"].includes(stateOf(current.id))) return;
-  if (tourIndex === questions.length - 1) {
-    tourPlaying = false;
-    updateTour();
-    return;
-  }
-  tourDeadline = performance.now() + tourRemaining;
-  tourTimer = setTimeout(() => {
-    tourTimer = undefined;
-    void visitTour(tourIndex + 1);
-  }, tourRemaining);
-}
-
 function visitTour(index: number) {
   const question = tourQuestions()[index];
   if (!question) return;
-  clearTimeout(tourTimer);
-  tourTimer = undefined;
-  tourIndex = index;
-  tourPreview = null;
-  tourReady = false;
-  tourRemaining = 5000;
-  updateTour();
   navigate({ id: question.id, relation: "dependencies", depth: 1 }, true);
-  tourReady = true;
-  continueTour();
 }
 
-tourPlay.onclick = () => {
-  if (tourPlaying) {
-    pauseTour();
-    return;
-  }
-  tourPlaying = true;
-  if (tourIndex < 0 || (tourReady && tourIndex === nodes.size - 1)) void visitTour(0);
-  else if (!tourReady) void visitTour(tourIndex);
-  else continueTour();
-};
-tourPrevious.onclick = () => void visitTour(tourIndex - 1);
-tourNext.onclick = () => void visitTour(tourIndex + 1);
-tourSeek.oninput = () => {
-  pauseTour();
-  tourPreview = Number(tourSeek.value);
-  updateTour();
-};
-tourSeek.onchange = () => void visitTour(Number(tourSeek.value));
+tourPrevious.onclick = () => visitTour(tourIndex() - 1);
+tourNext.onclick = () => visitTour(tourIndex() + 1);
+tourSeek.oninput = () => visitTour(Number(tourSeek.value));
 
 // ---------------------------------------------------------------------------------------------------------------
 // Messages from the hub
@@ -414,7 +339,6 @@ function scheduleDisplay(lanes = false, evidence = false) {
     lanesDirty = evidenceDirty = false;
     if (drawLanes) { render(); counts(); }
     if (drawEvidence && selected) showQuestion(selected);
-    continueTour();
   });
 }
 
@@ -630,7 +554,6 @@ function showQuestion(qid: string) {
 }
 
 function select(qid: string, previous?: QuestionVisit) {
-  pauseTour();
   if (!previous) rememberQuestion(qid);
   focus = previous?.focus ?? null;
   if (previous) marked = new Set(previous.marked);
@@ -738,7 +661,6 @@ function tab(name: string, open = true) {
 for (const b of document.querySelectorAll<HTMLButtonElement>("nav button[data-tab]")) b.onclick = () => tab(b.dataset.tab!);
 
 render();
-updateTour();
 connect();
 
 // The page's tools for a browser agent (WebMCP), on the page's own functions.

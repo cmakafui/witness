@@ -6,7 +6,7 @@ Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 �
 
 ## See it
 
-`witness replay DIR` plays a recorded session from its store alone. It needs only [Bun](https://bun.com) 1.4 or later. It needs no AI agent, no API key and no uv. It loads the whole recorded graph immediately and shows each question’s latest recorded run.
+`witness replay DIR` opens a recorded session from its store alone. It needs only [Bun](https://bun.com) 1.4 or later. It needs no AI agent, no API key and no uv. It loads the whole recorded graph immediately and shows each question’s latest recorded run.
 
 In the page, each row is one direction of work, and questions appear left to right in the order they were asked. Each takes the shape and color of its answer. Click a question to see each part of its rule next to the measurement that decided it, then its plots, inputs and the questions it reads from. The Query tab runs Cypher on the page's own copy of the graph:
 
@@ -16,7 +16,7 @@ MATCH (q:Question) WHERE q.id IN $yes
 RETURN q.text, q.rule ORDER BY q.seq
 ```
 
-Press **Play** below the graph for a guided tour of every question, in the order asked. Each stop selects a question, highlights dependencies, and shows the evidence. You get five seconds to read each result. **Pause**, **Previous**, **Next** and the question timeline let you move by hand.
+Use **Previous**, **Next** or the timeline below the graph to inspect questions in the order asked. Each selection highlights dependencies and shows the evidence. Clicking a question or following a link also updates the position in the timeline.
 
 Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the browser's agent three tools: `query`, `show_question` and `navigate`. Turn it on at `chrome://flags/#enable-webmcp-testing`. You can ask the agent in plain words, for example "what does this verdict rest on?". It answers with Cypher on the page's copy of the graph. It shows you the query and the questions it found. These tools only read, and they mark what they return as untrusted. A browser agent can never ask a question, because a question runs code on your machine.
 
@@ -68,7 +68,7 @@ Start an agent in any folder. Its first Witness call starts the hub for that fol
 
 ```bash
 witness open [DIR]     # watch a workspace's graph live
-witness replay [DIR]   # play back a recorded session
+witness replay [DIR]   # inspect a recorded session
 ```
 
 Agents get three tools:

@@ -1,4 +1,4 @@
-// witness replay: loads a recorded store read-only. The page's tour controls playback. No agent, hub or uv.
+// witness replay: loads a recorded store read-only for manual inspection. No agent, hub or uv.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import page from "../page/index.html";

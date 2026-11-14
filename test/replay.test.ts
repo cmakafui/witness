@@ -62,7 +62,7 @@ test("a viewer receives the whole recorded graph and answers immediately, withou
   }
 });
 
-test("the page plays the session back into its own Relate copy", async () => {
+test("the recorded page supports manual question navigation and WebMCP", async () => {
   const server = replay(root, { port: 0 });
   try {
     await using view = new Bun.WebView({ width: 1000, height: 700 });
@@ -150,11 +150,13 @@ test("the page plays the session back into its own Relate copy", async () => {
     await neighborhood("overview");
     expect(await view.evaluate("document.getElementById('navigation').hidden")).toBe(true);
 
-    // Pause stops the reading timer and resumes on the same question.
-    await view.evaluate("document.getElementById('tour-play').click()");
-    await view.evaluate("document.getElementById('tour-play').click()");
+    // Manual sequence navigation resets link history and visits the first question.
+    await view.evaluate(`(() => {
+      const seek = document.getElementById('tour-seek');
+      seek.value = '0'; seek.dispatchEvent(new Event('input'));
+    })()`);
     expect(await view.evaluate("document.getElementById('evidence-back').hidden")).toBe(true);
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Paused at 1 of 4");
+    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("1 of 4");
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
     expect(await neighborhood("dependencies", ids.d, 1)).toMatchObject({ questions: [{ id: ids.d }, { id: ids.b }] });
     expect(await neighborhood("dependencies", ids.d, 2)).toMatchObject({ questions: [{ id: ids.d }, { id: ids.b }, { id: ids.a }] });
@@ -169,51 +171,39 @@ test("the page plays the session back into its own Relate copy", async () => {
     expect(await neighborhood("overview")).toMatchObject({ relation: "overview", questions: 4 });
     expect(await view.evaluate("document.getElementById('navigation').hidden")).toBe(true);
 
-    // Previous/next work while paused, and autoplay visits all questions (including the failure) in order.
+    // Next, Previous and immediate seeking include negative answers and failures.
+    await view.evaluate(`(() => {
+      const seek = document.getElementById('tour-seek');
+      seek.value = '0'; seek.dispatchEvent(new Event('input'));
+    })()`);
+    expect(await view.evaluate("document.getElementById('tour-play')")).toBeNull();
+    expect(await view.evaluate("document.getElementById('tour-previous').disabled")).toBe(true);
     await view.evaluate("document.getElementById('tour-next').click()");
-    await Bun.sleep(50);
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the total above 100?");
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Paused at 2 of 4");
+    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("2 of 4");
     await view.evaluate("document.getElementById('tour-previous').click()");
-    await Bun.sleep(50);
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
     expect(await view.evaluate("document.getElementById('tour-previous').disabled")).toBe(true);
     await view.evaluate(`(() => {
       const seek = document.getElementById('tour-seek');
       seek.value = '2'; seek.dispatchEvent(new Event('input'));
     })()`);
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Go to 3 of 4");
-    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
-    await view.evaluate("document.getElementById('tour-seek').dispatchEvent(new Event('change'))");
-    await Bun.sleep(50);
+    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("3 of 4");
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does it crash?");
     expect(await view.evaluate("document.querySelector('#question .badge').textContent")).toBe("failed");
-    await view.evaluate(`(() => {
-      const seek = document.getElementById('tour-seek');
-      seek.value = '0'; seek.dispatchEvent(new Event('input')); seek.dispatchEvent(new Event('change'));
-    })()`);
-    await Bun.sleep(50);
-    await view.evaluate(`(() => {
-      const timeout = window.setTimeout.bind(window);
-      window.setTimeout = (fn, ms, ...args) => timeout(fn, ms >= 4900 && ms <= 5000 ? 30 : ms, ...args);
-      window.tourStops = [];
-      new MutationObserver(() => {
-        const text = document.getElementById('tour-progress').textContent;
-        if (!window.tourStops.includes(text)) window.tourStops.push(text);
-      }).observe(document.getElementById('tour-progress'), {childList:true});
-      document.getElementById('tour-play').click();
-    })()`);
-    for (let i = 0; i < 100; i++) {
-      if (await view.evaluate("document.getElementById('tour-progress').textContent === 'Finished 4 of 4'")) break;
-      await Bun.sleep(50);
-    }
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Finished 4 of 4");
-    expect(await view.evaluate("window.tourStops.includes('Playing 3 of 4')")).toBe(true);
+    await view.evaluate("document.getElementById('tour-next').click()");
+    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("4 of 4");
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the saved total above 100?");
-    expect(await view.evaluate("[document.getElementById('tour-next').disabled,document.getElementById('tour-play').textContent]")).toEqual([true, "Replay"]);
-    await view.evaluate("document.getElementById('tour-play').click()");
-    await view.evaluate("document.getElementById('tour-play').click()");
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("Paused at 1 of 4");
+    expect(await view.evaluate("document.getElementById('tour-next').disabled")).toBe(true);
+
+    // Browser-agent selections and graph clicks share the same sequence position.
+    await call("show_question", { id: ids.b });
+    expect(await view.evaluate("[document.getElementById('tour-progress').textContent, document.getElementById('tour-seek').value]")).toEqual(["2 of 4", "1"]);
+    await view.evaluate(`document.querySelector('[data-id="${ids.a}"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("1 of 4");
+    await view.evaluate("document.getElementById('tour-next').click()");
+    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("2 of 4");
+    expect(await view.evaluate("document.getElementById('evidence-back').hidden")).toBe(true);
   } finally {
     server.stop(true);
   }
