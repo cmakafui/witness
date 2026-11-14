@@ -55,7 +55,7 @@ export const SCHEMA = `The graph:
 (:Run)-[:READ {name}]->(:File {id, bytes})    the inputs the run read; a File's id is its SHA-256
 (:Run)-[:SAVED {name}]->(:File)               the files the run saved for other questions
 rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is the measurements as JSON. measured is true when the probe measured, even if the rule could not decide: then other questions can read the files it saved. started is when the run began, in milliseconds since 1970. ms is how long it took.
-Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now.
+Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now. Several runs can share a key: the latest finished run by seq on the current inputs supplies the cached answer. ask with rerun: true appends another execution without changing the question or rule; queued or running executions are shared.
 $complete and $incomplete are goal ids. A goal is complete only when its acceptance question currently answers yes. No acceptance question means open and incomplete. All other acceptance states mean incomplete. Exploratory questions never determine completion. Goals and acceptance bindings cannot be edited; changing the acceptance contract requires a new goal.`;
 
 /** A question's answer as the hub works it out. It is never stored: it comes from the runs and the inputs now. */

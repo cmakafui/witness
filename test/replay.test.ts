@@ -17,13 +17,16 @@ beforeAll(async () => {
   const incomplete = hub.goal("The saved total exceeds 100.");
   Object.assign(ids, { complete: complete.id, open: open.id, incomplete: incomplete.id });
   const head = "# /// script\n# dependencies = []\n# ///\nimport json, os\n";
-  const a = await hub.ask({
+  const inspect = {
     accepts: complete.id,
     text: "Does data.txt hold numbers?",
     rule: "$count >= 1",
     inputs: ["data.txt"],
     probe: `${head}n=[int(x) for x in open("data.txt").read().split()]\nassert n\njson.dump(n, open(os.path.join(os.environ["WITNESS_OUT"], "n.json"), "w"))\nprint("WITNESS_RESULT", json.dumps({"count": len(n)}))`,
-  });
+  };
+  const first = await hub.ask(inspect);
+  const a = await hub.ask({ ...inspect, rerun: true });
+  Object.assign(ids, { oldRun: first.run, latestRun: a.run });
   const b = await hub.ask({
     goal: complete.id,
     text: "Is the total above 100?",
@@ -55,9 +58,11 @@ test("a viewer receives the whole recorded graph and answers immediately, withou
     });
     expect(messages.map((m) => m.type)).toEqual(["graph", "states"]);
     expect(messages[0].nodes.filter((n: any) => n.label === "Question")).toHaveLength(4);
-    expect(messages[0].nodes.filter((n: any) => n.label === "Run")).toHaveLength(4);
+    expect(messages[0].nodes.filter((n: any) => n.label === "Run")).toHaveLength(5);
     expect(Object.fromEntries(messages[1].states.map((s: any) => [s.id, s.state])))
       .toEqual({ [ids.a!]: "yes", [ids.b!]: "no", [ids.c!]: "failed", [ids.d!]: "no" });
+    expect(messages[1].states.find((s: any) => s.id === ids.a).run).toBe(ids.latestRun);
+    expect(messages[0].nodes.some((n: any) => n.id === ids.oldRun)).toBe(true);
     const run = messages[0].rels.find((r: any) => r.type === "OF" && r.to === ids.a).from;
     const file = messages[0].rels.find((r: any) => r.type === "SAVED" && r.from === run).to;
     const output = await fetch(new URL(`/files/${file}?name=n.json`, server.url));

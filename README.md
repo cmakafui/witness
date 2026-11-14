@@ -54,7 +54,7 @@ Witness is not a sandbox. It does not stop an agent from acting outside it. It m
 
 A `File` is named by its SHA-256. The answer of a run is stored with that run. The answer of a question is never stored. The hub finds the run on the question's inputs as they are now. It passes the answers to queries as `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` and `$current`. Relate enforces the schema in [`schema.cypher`](schema.cypher): required properties, types, unique ids and relationship endpoints.
 
-Goals and acceptance bindings are immutable. Exploratory `FOR` associations can be added to an existing question; one question may serve several goals. A goal can start without an acceptance question: it is open and incomplete. Bind at most one acceptance question, before it runs. An identical retry reuses that question. A different contract requires a new goal, which may use the same text. A goal is complete only while its acceptance question currently answers `yes`; `no`, `failed`, `pending`, `running` and `waiting` all mean incomplete. Input changes can invalidate completion. Restoring inputs restores the cached answer and completion. Exploratory answers never vote. Queries get `$complete` and `$incomplete` as goal-id lists; completion is never stored.
+Goals and acceptance bindings are immutable. Exploratory `FOR` associations can be added to an existing question; one question may serve several goals. A goal can start without an acceptance question: it is open and incomplete. Bind at most one acceptance question, before it runs. An identical retry reuses that question. A different contract requires a new goal, which may use the same text. A goal is complete only while its acceptance question currently answers `yes`; `no`, `failed`, `pending`, `running` and `waiting` all mean incomplete. Input changes can invalidate completion. Restoring inputs restores their most recent recorded answer and its derived completion. Exploratory answers never vote. Queries get `$complete` and `$incomplete` as goal-id lists; completion is never stored.
 
 The page holds its own copy of the graph in Relate's WASM build. It applies each new record with the same Cypher as the hub ([`src/graph.ts`](src/graph.ts)). Its panels and query box run Cypher in the browser. The page's query tool for a browser agent asks Relate for the plan of the query. It refuses any plan that writes.
 
@@ -92,6 +92,12 @@ OPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question)
 RETURN g.id, g.text, g.id IN $complete AS complete, q.id AS acceptance
 ORDER BY g.seq
 ```
+
+To measure again, send the same `ask` arguments with `rerun: true`. Keep the text, rule, probe, inputs and acceptance binding the same. The question stays unchanged and a new Run is appended, even for unchanged inputs or a cached failure. Ordinary asks then reuse the latest finished run on those inputs, including a failed result. Previous runs and files remain available. A rerun of a shared exploratory question is shared across its goals.
+
+If the question is already queued or running, the call joins that execution. To request another measurement, wait for it to finish before calling again. Reruns use the normal worker limit and wait for upstream inputs. On a new question, `rerun: true` simply requests its first execution. `wait_s: 0` returns immediately while queued or running work continues.
+
+The live page shows pending, running or waiting until the new run finishes; an acceptance goal is incomplete during that time. Consumers rerun automatically when saved input bytes change, and reuse their cached runs when the bytes stay the same. Replay retains every run and displays the latest recorded execution. The cache key still covers the probe and declared input hashes, not the full environment; explicit rerun permits remeasurement, not a reproducibility guarantee.
 
 A probe is a uv script. It prints what it measured. It does not answer:
 

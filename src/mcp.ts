@@ -12,11 +12,12 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 
 - goal: create an immutable goal that states the solved condition. It starts open and incomplete. Each call creates a new goal.
 - ask: give a yes/no question, a rule, a probe, and the files that the probe reads. Witness runs the probe and returns the answer.
+- Set rerun: true on the same ask to request another execution with the question and rule unchanged. It appends a Run, even on unchanged inputs or after a failure. Concurrent calls join a queued or running execution. Ordinary asks reuse the latest cached run on the current inputs.
 - Set goal to a goal id for exploratory work. The same exploratory question can serve several goals: adding an association reuses its question and runs. Exploratory answers never vote on completion. Set accepts instead to bind a goal's only acceptance question before it runs. The goal is complete only while that question currently answers yes. Changing the acceptance contract requires a new goal.
 - The rule is a Cypher expression over the measurements, for example $p < 0.01 AND $gain >= 0.1. $name is a measurement. $results is the list of all measurements. True gives yes. False gives no. All other results give failed.
 - The probe is a Python script with a PEP 723 header. uv runs it in an empty folder that holds the declared inputs only. It prints each measurement as WITNESS_RESULT and one JSON object. It saves files for other questions in $WITNESS_OUT.
 - An input is a workspace path, or q-…/name for a file that another question saved.
-- When an input changes, the question runs again. When the inputs change back, the old answer comes back. So a probe must not act: do not send, deploy, or use a budget in a probe.
+- When an input changes, the question runs again. When the inputs change back, their latest recorded answer comes back. So a probe must not act: do not send, deploy, or use a budget in a probe.
 - query: read the graph with Cypher. look: show a file that a run saved.`;
 
 const text = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
@@ -47,7 +48,7 @@ function server(hub: Hub): McpServer {
     "ask",
     {
       description:
-        "Ask a yes/no question and run its probe. The rule gives the answer from the measurements. Returns the answer, the measurements and the saved files. The same question asked again is the same question.",
+        "Ask a yes/no question and run its probe. The rule gives the answer from the measurements. Returns the answer, the measurements and the saved files. The same question asked again is the same question. Set rerun: true to append a fresh execution instead of returning a cached run.",
       inputSchema: {
         text: z.string().describe('The question, as one yes/no sentence with its conditions: "At 8 workers, is …?"'),
         rule: z
@@ -60,6 +61,7 @@ function server(hub: Hub): McpServer {
         asker: z.string().optional().describe("Your name or role. Witness shows it and does not use it."),
         timeout_s: z.number().int().positive().max(3600).optional().describe("The time limit of one run, in seconds. Default 600."),
         wait_s: z.number().int().min(0).max(240).optional().describe("The time to wait for the answer, in seconds, at most 240. Default 120. After that, the run continues."),
+        rerun: z.boolean().default(false).describe("Request a new execution of this unchanged question, including after a cached failure. Appends a Run; the latest finished run on the current inputs becomes the cached answer. If this question is queued or running, join that execution. Default false."),
       },
     },
     (a) => tool(() => hub.ask({ ...a, timeoutS: a.timeout_s, waitS: a.wait_s })),

@@ -33,7 +33,7 @@ Call `query` to find the goal before creating one. `goal({text: "…"})` creates
 - Write the acceptance contract before executing it. Witness writes the question and binding atomically before the probe starts. You can bind only one acceptance question per goal. An identical retry is allowed; a different contract requires a new goal.
 - Exploratory goal membership is not part of question identity. Repeat the same question with another `goal` to add a `FOR` association and reuse its runs, including a run already in progress. Omitting `goal` also reuses that question. The original question and first asker stay unchanged.
 - Acceptance binding is part of identity. `accepts` creates a distinct question bound before execution; an existing exploratory run cannot be promoted in place.
-- Only the acceptance question’s **current** yes completes the goal. No, failed, pending, running and waiting all mean incomplete. Input changes invalidate completion; restoring the inputs restores the cached answer. Completion is never stored.
+- Only the acceptance question’s **current** yes completes the goal. No, failed, pending, running and waiting all mean incomplete. Input changes invalidate completion; restoring the inputs restores their latest recorded answer. Completion is never stored.
 - `ask` returns the associated goal’s completion alongside the question’s answer. Query `$complete` and `$incomplete` for goal ids. They never include exploratory question ids.
 
 An acceptance question can read a candidate file directly or consume `q-…/name`. Its rule tests the solved condition. Exploration can keep producing negative answers while the goal is complete.
@@ -44,6 +44,16 @@ OPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question)
 RETURN g.id AS goal, g.text, g.id IN $complete AS complete, q.id AS acceptance
 ORDER BY g.seq
 ```
+
+## Rerunning
+
+- Send the same `ask` arguments with `rerun: true` to measure again, including after a cached failure. Keep the text, rule, probe, inputs and `accepts` binding unchanged. Rerun is not part of question identity and does not edit its record or rule.
+- A new Run is appended. Its result becomes the cached answer for those inputs, even if it fails. Older runs and their files remain available through `query` and `look` with `r-…/name`.
+- Ordinary asks reuse the latest finished run on the current input key. Restoring previous input bytes restores the latest run on that key, including any explicit rerun.
+- Calls for a question already queued or running join that execution; they do not create extra trials. Wait for completion before requesting another trial. On a new question, `rerun: true` runs it once.
+- Reruns use the normal worker limit and wait for upstream files. `wait_s: 0` returns immediately while the work continues. Query the question's status afterward.
+- During a rerun, the question is pending, running or waiting; its old measurements are not current. Acceptance completion waits for the new answer. A shared exploratory question is rerun for all its goal associations. Consumers rerun automatically only when the saved bytes they read change.
+- Rerun allows remeasurement. It does not capture the full environment or establish independence between trials.
 
 ## The rule
 

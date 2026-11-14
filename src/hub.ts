@@ -4,7 +4,7 @@
 // An answer is never stored. For each question the hub resolves its inputs now (a workspace file by its hash; an
 // output of another question by the file that question's current run saved), and hashes them with the probe into a
 // key. The answer is the answer of the run on that key. No run on that key: the question is pending, and it runs.
-// A key runs once: a question that failed on a key never runs again on that key.
+// The latest finished run on a key gives its cached answer. An explicit rerun appends another run on that key.
 //
 // A probe only measures. When a run ends, Relate evaluates the question's rule, a Cypher expression, on the run's
 // measurements: true is yes, false is no, and anything else is failed. Then the hub writes the run, once.
@@ -33,6 +33,7 @@ export type Ask = {
   asker?: string;
   timeoutS?: number;
   waitS?: number;
+  rerun?: boolean;
 };
 
 export type Event =
@@ -46,6 +47,7 @@ type Resolved = { status: Status; question: Question; key: string | null; inputs
 
 export class Hub {
   private running = new Map<string, string>(); // question -> its run in progress
+  private reruns = new Set<string>(); // explicit requests awaiting inputs or a worker slot
   private hashes = new Map<string, { stamp: string; sha: string }>();
   private listeners = new Set<(e: Event) => void>();
   private wakers = new Set<() => void>();
@@ -191,6 +193,7 @@ export class Hub {
       const before = mine.findLast((r) => r.answer === "yes" || r.answer === "no")?.answer as "yes" | "no" | undefined;
       const running = this.running.get(q.id);
       if (running) return done({ question: q, key, inputs, status: status("running", { run: running, was: before ?? null }) });
+      if (this.reruns.has(q.id)) return done({ question: q, key, inputs, status: status("pending", { was: before ?? null }) });
       const onKey = mine.findLast((r) => r.key === key);
       if (onKey) return done({ question: q, key, inputs, status: status(onKey.answer, { run: onKey.id, reason: onKey.reason }) });
       return done({ question: q, key, inputs, status: status("pending", { was: before ?? null }) });
@@ -226,10 +229,11 @@ export class Hub {
   }
 
   private start({ question: q, key, inputs }: Resolved) {
-    // A key runs once, so the question and the key name the run.
-    const run = contentId("r", q.id, key!);
+    // Each execution is a new record, even when the question and input key are unchanged.
+    const run = contentId("r", q.id, key!, crypto.randomUUID());
     // Keep the inputs as the run reads them: a file may change while the probe runs.
     const read = inputs.map((i) => ({ name: i.name, node: this.keep(readFileSync(i.path)) }));
+    this.reruns.delete(q.id);
     this.running.set(q.id, run);
     runProbe({
       probe: q.probe,
@@ -342,7 +346,7 @@ export class Hub {
     return goalStatuses(this.db.query(GOALS) as Goal[], this.statuses());
   }
 
-  /** Asks a question and waits for its answer, up to waitS seconds. Asking the same question twice is one question. */
+  /** Reuses the question and its latest cached answer, or explicitly requests another execution. */
   async ask(a: Ask): Promise<Status & { question: string; results: unknown[]; saved: string[]; goal: GoalStatus | null }> {
     const inputs = [...new Set(a.inputs ?? [])].sort();
     this.refuse(a, inputs);
@@ -375,6 +379,8 @@ export class Hub {
       // Purpose can be added without changing the tested question or repeating its execution.
       this.write([], [{ type: "FOR", from: id, to: a.goal }]);
     }
+    // Concurrent requests join the execution already in progress; queued requests coalesce in the set.
+    if (a.rerun && !this.running.has(id)) this.reruns.add(id);
     this.check();
     const deadline = Date.now() + (a.waitS ?? 120) * 1000;
     let s = this.status(id);
