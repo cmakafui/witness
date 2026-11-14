@@ -100,7 +100,7 @@ components:
 
 ## Overview
 
-The page shows a record of evidence, not a dashboard. A person comes to it to answer two questions: how did the agents get here, and why does each answer stand. The lanes answer the first. The rule check answers the second. A compact goal selector opens the acceptance question. Every selection highlights that question’s input chain. The evidence panel shows what the current test measured.
+The page shows a record of evidence, not a dashboard. A person comes to it to answer two questions: how did the agents get here, and why does each answer stand. The lanes answer the first. The rule check answers the second. Goal tabs with live state marks open the acceptance question. Every selection highlights that question’s input chain, while hovering previews any question in a steady strip above the lanes. The evidence panel stays open on the right, even while running Cypher in the docked query drawer.
 
 The tone is a lab notebook kept by a careful clerk: plain, legible, and exact. Nothing on the page is decoration. Every mark is a question, a link between questions, or a measurement.
 
@@ -131,24 +131,27 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 
 ```
 ┌ Witness                                                       connected ┐
-│ [ Sort records without losing duplicates                         ▾ ]    │
-├─────────────────────────────────────────────────────────┬─────────────────────┤
-│ trees         ⊘  ⊘  ●───────●──●                          │ ● yes  q-…  trees   │
-│ clique_paths     ●     ●       ●──╌╌●                     │ Question text       │
-│ evolution     ●          ●             ●                  │                     │
-│ verification     ●  ●  ●──╌╌●   ●──●                      │ Rule                │
-│                                                          │ $margin < -1e-8     │
-│                                                          │   −0.0501  true     │
-│                                                          │ picture, links …    │
-└──────────────────────────────────────────────────────────┴─────────────────────┘
+│ ● Sort records without losing duplicates     ○ Memory < 64 MB     All   │
+├─────────────────────────────────────────────────────────┬───────────────┤
+│ ● yes · With warm-start B&B, all 50 ≤ 200 ms     branch │ yes  q-…      │
+├─────────────────────────────────────────────────────────┤ Question text │
+│ trees         ⊘──⊘                                      │               │
+│ clique_paths  ●──●───────●                              │ Rule          │
+│ evolution     ●──────────┘ ╲                            │ $margin < 0   │
+│ verification                ●──◎                        │   −0.05  true │
+├─────────────────────────────────────────────────────────┤               │
+│ ▸ Query                                                 │ ▸ Probe ▸ Run │
+└─────────────────────────────────────────────────────────┴───────────────┘
 ```
 
-- **Goal selector.** A compact select below the header names the work. It opens the acceptance question; a goal without one shows No acceptance question in the panel. All questions clears the selection. First load opens the first goal when there is no selection. Live arrivals preserve the reader’s choice. There are no completion banners.
-- **Lanes.** Questions follow creation order. Horizontal spacing leaves room for up to three lines of question text beside each glyph. Each row is one direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. The layout never moves on its own, so a person can learn it.
-- **Links.** A curve runs from a question to each question that reads its output, labeled with the artifact names. Selecting any question highlights its upstream chain; choosing a goal selects its acceptance question. Other exploration stays readable. There is no separate neighborhood or depth mode. Links record artifact reads.
-- **Evidence panel.** A fixed column on the right. It opens on the answer, question, asker and rule check, then the exact measurements, input and saved file links, dependencies, images, probe and run records. No goal summary repeats the selector.
-- **Back.** A quiet control beside the Evidence tab, visible after following another question. It restores the previous question, reading position and expanded probe. Its dependency highlight is derived again from that question.
-- **Evidence navigation.** Choose a goal to open its acceptance question, then follow dependency and consumer chips. Graph selection, query results and WebMCP show_question also open evidence directly and use the same selection-derived highlight. The lanes use the full available height.
+- **Goal bar.** Goal tabs below the header carry each goal’s derived state glyph (`yes`, `no`, `failed`, `running`, or hollow `waiting` when open). Selecting a goal opens its acceptance question; a goal without one shows No acceptance question in the panel. All questions clears the selection. First load opens the first goal when there is no selection. Live arrivals preserve the reader’s choice. There are no completion banners.
+- **Hover strip.** A steady single-line bar above the lanes shows the hovered or focused question’s state, full text and lane without covering nearby dots or shifting the layout.
+- **Lanes.** One row per direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. Glyphs carry no inline text labels; parallel work shares columns while preserving creation order within each lane and left-to-right causal order across dependencies. Arrow keys move across dots.
+- **Links.** A curve runs from a question to each question that reads its output. Selecting any question highlights its upstream chain; choosing a goal selects its acceptance question. Other exploration stays readable. Links carry the consumed artifact names as hover titles.
+- **Query drawer.** Docked below the lanes on the left so running Cypher and clicking result ids keeps Evidence open on the right.
+- **Evidence panel.** A fixed column on the right. It opens on the answer, question, asker and rule check, followed by saved images, any measurements not already shown in the rule clauses, input and saved file links, dependencies, and disclosures for the probe and run history. No goal summary repeats the goal bar.
+- **Back.** A quiet control in the Evidence header, visible after following another question. It restores the previous question, reading position and expanded disclosures. Its dependency highlight is derived again from that question.
+- **Evidence navigation.** Choose a goal tab to open its acceptance question, then follow dependency and consumer chips. Graph selection, query results and WebMCP show_question also open evidence directly and use the same selection-derived highlight.
 - Content is left aligned. Below 860px the panel moves under the lanes.
 
 ## Elevation & Depth
@@ -157,15 +160,16 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 
 ## Shapes
 
-- Question glyphs are 9px discs: filled for an answer, hollow for no answer yet, a slashed ring for failed.
-- The selected question gets an ink ring.
+- Exploratory question glyphs are 8.5px discs: filled for an answer, hollow for no answer yet, a slashed ring for failed.
+- Acceptance questions add an outer ring in the verdict colour (`◎`) so they stand out from exploration.
+- The selected question gets an outer ink ring; hovered questions get a muted ring; query matches get an accent ring.
 - Buttons and chips use a 4px radius. Verdict badges are fully rounded. Panels and clauses have square corners.
 
 ## Components
 
 - **Verdict badge.** The answer as a word on its colour: `yes`, `no`, `failed`. `pending`, `running` and `waiting` are outlined, because they are not answers.
 - **Rule check.** The rule split at its top-level `AND`s, one clause per row. Each row shows the clause in mono, the measured values it names, and whether it is true, false or not measured. A 4px bar on the left takes the colour of that result. The page evaluates each clause with its own Relate copy, on the run's measurements. The answer itself still comes from the run.
-- **Measurements.** A table of recorded names and exact JSON values. With multiple result records, label the values Last value and expose every record under All measurements. Never infer units, rename measurements or round them. Pending and running tests show no stale values as current.
+- **Measurements.** Measurements already displayed beside a rule clause are not repeated below. Additional recorded names and exact JSON values appear in a Measurements table. With multiple result records, label the values Last value and expose every record under All measurements. Never infer units, rename measurements or round them. Pending and running tests show no stale values as current.
 - **Files.** A table of input and saved files. Input links refer to the content hash read by the displayed run, not the mutable workspace path. Declared inputs without a committed run remain plain names.
 - **Question chip.** A link to another question: its glyph, then the start of its text. Never a bare id.
 - **Header.** The name, connection state and evidence toggle. The selected question’s result appears in evidence.

@@ -12,26 +12,29 @@
       <div id="link" class="off">Connecting</div>
       <button id="sidebar-toggle" class="button" aria-controls="sidebar" aria-expanded="true">Hide evidence</button>
     </header>
-    <div id="goal-picker">
-      <select id="goal" aria-label="Goal"><option value="">All questions</option></select>
-    </div>
+    <div id="goal-picker" role="tablist" aria-label="Goals"></div>
     <main>
       <div id="graph-stage">
+        <div id="hover-bar" aria-live="polite"></div>
         <div id="graph"></div>
+        <div id="query-dock">
+          <button id="query-toggle" type="button" aria-expanded="false" aria-controls="query">▸ Query</button>
+          <section id="query" hidden>
+            <div class="query-controls">
+              <select id="preset" aria-label="Example queries"></select>
+              <button id="run" class="button primary" type="button">Run query</button>
+            </div>
+            <textarea id="cypher" spellcheck="false" rows="4" aria-label="Cypher query"></textarea>
+            <div id="rows"></div>
+          </section>
+        </div>
       </div>
       <aside id="sidebar">
-        <nav>
-          <button id="evidence-back" aria-label="Back to previous question" hidden>← Back</button>
-          <button data-tab="question" class="on">Evidence</button>
-          <button data-tab="query">Query</button>
-        </nav>
+        <div class="sidebar-head">
+          <button id="evidence-back" type="button" aria-label="Back to previous question" hidden>← Back</button>
+          <span class="sidebar-title">Evidence</span>
+        </div>
         <section id="question"><p class="hint">Select a question.</p></section>
-        <section id="query" hidden>
-          <select id="preset" aria-label="Example queries"></select>
-          <textarea id="cypher" spellcheck="false" rows="6" aria-label="Cypher query"></textarea>
-          <button id="run" class="button primary">Run query</button>
-          <div id="rows"></div>
-        </section>
       </aside>
     </main>
     <script type="module" src="./app.ts"></script>

@@ -93,8 +93,13 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
       ["query", true, true],
       ["show_question", true, true],
     ]);
-    const choose = (id: string) => view.evaluate(`(() => { const goal = document.getElementById('goal'); goal.value = ${JSON.stringify(id)}; goal.dispatchEvent(new Event('change')); })()`);
-    expect(await view.evaluate("document.getElementById('goal').value")).toBe(ids.complete);
+    const choose = (id: string) => view.evaluate(`document.querySelector('[data-goal=${JSON.stringify(id)}]').click()`);
+    expect(await view.evaluate("document.querySelector('.goal-tab.on').dataset.goal")).toBe(ids.complete);
+    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
+    // Acceptance questions carry the ringed acceptance mark; hovering previews a question in the top bar without replacing Evidence.
+    expect(await view.evaluate("[...document.querySelectorAll('.q.accepts')].map(q => q.dataset.id).sort()")).toEqual([ids.a, ids.d].sort());
+    await view.evaluate(`document.querySelector('[data-id="${ids.b}"]').dispatchEvent(new PointerEvent('pointerenter'))`);
+    expect(await view.evaluate("document.getElementById('hover-bar').textContent")).toContain("Is the total above 100?");
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
     await choose(ids.open!);
     expect(await view.evaluate("document.getElementById('question').textContent")).toContain("No acceptance question.");
@@ -103,7 +108,8 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
       .toMatchObject({ rows: [{ id: ids.complete, complete: true, acceptance: ids.a }, { id: ids.open, complete: false, acceptance: null }, { id: ids.incomplete, complete: false, acceptance: ids.d }] });
     const yes = "MATCH (q:Question) WHERE q.id IN $yes RETURN q.id AS id";
     expect(await call("query", { cypher: yes })).toEqual({ columns: ["id"], rows: [{ id: ids.a }], truncated: false });
-    expect(await view.evaluate("[document.getElementById('cypher').value, document.getElementById('query').hidden]")).toEqual([yes, false]);
+    // The docked Query drawer opens on the left while Evidence remains visible on the right.
+    expect(await view.evaluate("[document.getElementById('cypher').value, document.getElementById('query').hidden, document.getElementById('question').hidden]")).toEqual([yes, false, false]);
 
     for (const cypher of ["MATCH (q:Question) SET q.text = 'forged'", "CREATE (:Question {id: 'q-000000000000'})", "MATCH (q) CALL { CREATE (:Run) } RETURN q"])
       expect(((await call("query", { cypher })) as { refused: string }).refused).toStartWith("Only reads run here");
@@ -123,6 +129,7 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     await call("show_question", { id: ids.d });
     const readingPosition = await view.evaluate(`(() => {
       document.querySelector('#question details.probe').open = true;
+      document.querySelector('#question details.runs-disclosure').open = true;
       const panel = document.getElementById('question'); panel.scrollTop = 120;
       return panel.scrollTop;
     })()`);
@@ -144,7 +151,8 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     await choose(ids.complete!);
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
     expect(await call("show_question", { id: ids.b })).toMatchObject({ explores: [{ id: ids.complete, text: "The data holds numbers." }], accepts: [] });
-    expect(await view.evaluate("document.querySelector('#question .measurements tbody').textContent")).toContain("total15");
+    expect(await view.evaluate("document.querySelector('#question .clause .values').textContent")).toContain("total15");
+    expect(await view.evaluate("document.querySelector('#question .measurements')")).toBeNull();
     expect(await view.evaluate("[...document.querySelectorAll('.q')].map(q => q.dataset.id)")).toContain(ids.c);
     const inputUrl = await view.evaluate("document.querySelector('#question .files a').href") as string;
     expect(await (await fetch(inputUrl)).json()).toEqual([4, 5, 6]);

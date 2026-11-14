@@ -2,9 +2,9 @@
 // The live page. It keeps its own copy of the graph in Relate (WASM), built by the same statements the hub runs,
 // and answers every panel and query with Cypher in the page. The hub sends new records and states.
 //
-// The lanes show how the agents got here: one row per direction of work, questions in the order they were asked.
-// The rule check shows why an answer stands: each part of the rule, the measurements it names, and whether it held.
-// DESIGN.md gives the tokens and the reasons.
+// The lanes show how the agents got here: one row per direction of work, compact glyphs packed left-to-right by
+// causal and lane order, with a steady top preview strip on hover. The rule check on the right shows why an answer
+// stands: each part of the rule, the measurements it names, and whether it held. DESIGN.md gives the tokens.
 import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
 import { answerParams, clauses, type Goal, GOALS, type GNode, type GRel, measurements, named, type State, type Status, statements } from "../src/graph.ts";
@@ -43,11 +43,12 @@ const nodes = new Map<string, QNode>();
 const links: QLink[] = [];
 let statuses = new Map<string, Status>();
 let selected: string | null = null;
+let hovered: string | null = null;
 let selectedGoal = "";
 let goalInitialized = false;
 let marked = new Set<string>();
 type Neighborhood = { nodes: Set<string>; links: Set<string> };
-type QuestionVisit = { id: string; scroll: number; lanes: number; probeOpen: boolean; marked: Set<string> };
+type QuestionVisit = { id: string; scroll: number; lanes: number; probeOpen: boolean; runsOpen: boolean; marked: Set<string> };
 const questionHistory: QuestionVisit[] = [];
 const linkId = (l: QLink) => `${l.source}:${l.target}`;
 const stateOf = (q: string): State => statuses.get(q)?.state ?? "waiting";
@@ -96,31 +97,40 @@ function glyph(state: State, r: number): SVGElement {
   return g;
 }
 
-/** A glyph on its own, for chips and refs. */
-function mark(state: State, size = 12) {
+/** A glyph on its own, for tabs, hover bar, chips and refs. */
+function mark(state: State, size = 12, accepts = false) {
   const half = size / 2;
+  if (accepts) {
+    return s(
+      "svg",
+      { width: size + 4, height: size + 4, viewBox: `${-(half + 2)} ${-(half + 2)} ${size + 4} ${size + 4}`, "aria-hidden": "true" },
+      s("circle", { r: half + 0.5, class: "accept-ring", style: `--c: ${colour(state)}` }),
+      glyph(state, Math.max(2.5, half - 2.5)),
+    );
+  }
   return s("svg", { width: size, height: size, viewBox: `${-half} ${-half} ${size} ${size}`, "aria-hidden": "true" }, glyph(state, half - 1.5));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// The lanes
+// Hover bar & lanes
 
 const main = document.querySelector("main")!;
+const hoverBar = document.getElementById("hover-bar")!;
 const el = document.getElementById("graph")!;
 const sidebar = document.getElementById("sidebar")!;
 const sidebarToggle = document.getElementById("sidebar-toggle")!;
 const evidenceBack = document.getElementById("evidence-back") as HTMLButtonElement;
 const names = h("div", { class: "lane-names", "aria-hidden": "true" });
 const scroller = h("div", { class: "lanes" });
-const svg = s("svg", { role: "group", "aria-label": "Questions by direction of work, in the order they were asked" }) as SVGSVGElement;
+const svg = s("svg", { role: "group", "aria-label": "Questions by direction of work" }) as SVGSVGElement;
 scroller.append(svg);
 const empty = h("p", { class: "empty" }, "No questions yet.");
 
-const TOP = 24;
-const PAD = 28;
-const LABEL = 220;
+const TOP = 20;
+const PAD = 40;
+const STEP = 68;
 /** Where each question sits, from the last render. */
-const place = new Map<string, { x: number; y: number }>();
+const place = new Map<string, { x: number; y: number; lane: number }>();
 
 /** The lane of an asker: the part after the last /, before the first -. orchestrator/evolution and evolution-tools share one. */
 const laneOf = (asker: string | null) => {
@@ -128,87 +138,146 @@ const laneOf = (asker: string | null) => {
   return (last.split("-")[0] || last || "unnamed").replaceAll("_", " ");
 };
 
+function renderHover() {
+  const activeId = hovered && nodes.has(hovered) ? hovered : selected && nodes.has(selected) ? selected : null;
+  if (!activeId) {
+    hoverBar.replaceChildren(nodes.size ? h("span", { class: "hint" }, "All questions") : "");
+    return;
+  }
+  const q = nodes.get(activeId)!;
+  const st = stateOf(activeId);
+  const accepts = goals().some((g) => g.acceptance === activeId);
+  hoverBar.replaceChildren(
+    mark(st, 12, accepts),
+    h("span", { class: "hover-state", style: `--c: ${colour(st)}` }, st),
+    h("span", { class: "hover-text" }, q.text),
+    h("span", { class: "hover-lane" }, laneOf(q.asker)),
+  );
+}
+
+/** Updates hover state without rebuilding the lane SVG, so clicks and frame observers stay clean. */
+function setHovered(id: string | null) {
+  if (hovered === id) return;
+  if (hovered) svg.querySelector(`[data-id="${hovered}"] .hover-ring`)?.setAttribute("opacity", "0");
+  hovered = id;
+  if (hovered && hovered !== selected) svg.querySelector(`[data-id="${hovered}"] .hover-ring`)?.setAttribute("opacity", "1");
+  renderHover();
+}
+svg.addEventListener("pointerleave", () => setHovered(null));
+
+function focusNeighbor(fromId: string, key: string) {
+  const cur = place.get(fromId);
+  if (!cur) return;
+  const candidates = [...place.entries()].filter(([id]) => id !== fromId);
+  let target: string | undefined;
+  if (key === "ArrowRight" || key === "ArrowLeft") {
+    const dir = key === "ArrowRight" ? 1 : -1;
+    const sameLane = candidates
+      .filter(([, p]) => p.lane === cur.lane && (p.x - cur.x) * dir > 0)
+      .sort((a, b) => Math.abs(a[1].x - cur.x) - Math.abs(b[1].x - cur.x));
+    target = sameLane[0]?.[0];
+  } else if (key === "ArrowDown" || key === "ArrowUp") {
+    const nextLane = cur.lane + (key === "ArrowDown" ? 1 : -1);
+    const adj = candidates
+      .filter(([, p]) => p.lane === nextLane)
+      .sort((a, b) => Math.abs(a[1].x - cur.x) - Math.abs(b[1].x - cur.x));
+    target = adj[0]?.[0];
+  }
+  if (target) (svg.querySelector(`[data-id="${target}"]`) as HTMLElement | null)?.focus();
+}
+
 function render() {
   const questions = [...nodes.values()].sort((a, b) => a.seq - b.seq);
+  renderHover();
   if (!questions.length) {
     el.replaceChildren(empty);
     return;
   }
   if (!scroller.isConnected) el.replaceChildren(names, scroller);
   const lanes = [...new Set(questions.map((q) => laneOf(q.asker)))];
-  // Lanes share the height there is, within limits that keep them readable.
-  const lane = Math.round(Math.max(88, Math.min(120, (el.clientHeight - TOP - 24) / lanes.length)));
+  const lane = Math.round(Math.max(48, Math.min(72, (el.clientHeight - TOP - 20) / lanes.length)));
   el.style.setProperty("--lane", `${lane}px`);
-  const height = TOP + lane * lanes.length + 24;
+  const height = TOP + lane * lanes.length + 20;
+
+  // Pack parallel work into shared columns while keeping each lane chronological and every dependency left-to-right.
   place.clear();
-  const ends = new Map<string, number>();
-  let lastX = PAD - 32;
+  const colOf = new Map<string, number>();
+  const laneEnd = new Map<string, number>();
+  let maxCol = 0;
   for (const q of questions) {
     const name = laneOf(q.asker);
-    const x = Math.max(lastX + 32, ends.get(name) ?? PAD);
-    place.set(q.id, { x, y: TOP + lane * (lanes.indexOf(name) + 0.5) });
-    ends.set(name, x + LABEL + 24);
-    lastX = x;
+    const laneIdx = lanes.indexOf(name);
+    const deps = links.filter((l) => l.source === q.id).map((l) => (colOf.get(l.target) ?? -1) + 1);
+    const col = Math.max((laneEnd.get(name) ?? -1) + 1, ...deps, 0);
+    colOf.set(q.id, col);
+    laneEnd.set(name, col);
+    if (col > maxCol) maxCol = col;
+    place.set(q.id, { x: PAD + col * STEP, y: TOP + lane * (laneIdx + 0.5), lane: laneIdx });
   }
-  const width = Math.max(scroller.clientWidth, lastX + LABEL + PAD);
+  const width = Math.max(scroller.clientWidth, PAD * 2 + maxCol * STEP);
   const highlight = selected ? upstream([selected]) : null;
+  const acceptedIds = new Set(goals().flatMap((g) => (g.acceptance ? [g.acceptance] : [])));
 
   names.replaceChildren(...lanes.map((name) => h("div", { title: name }, name)));
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
   const rails = lanes.map((_, i) => s("line", { class: "rail", x1: 0, x2: width, y1: TOP + lane * (i + 0.5), y2: TOP + lane * (i + 0.5) }));
-  const captions: { x: number; y: number; width: number }[] = [];
   const paths = links.flatMap((l) => {
     // Evidence flows forward: from the question that saved a file to the one that reads it.
     const [from, to] = [place.get(l.target), place.get(l.source)];
     if (!from || !to) return [];
     const lit = highlight?.links.has(linkId(l));
     const files = nodes.get(l.source)!.inputs.filter((i) => i.startsWith(`${l.target}/`)).map((i) => i.slice(l.target.length + 1));
-    const full = files.join(", ");
-    const caption = full.length > 40 ? `${full.slice(0, 37)}…` : full;
-    const x = (from.x + to.x) / 2, captionWidth = caption.length * 7;
-    const baseline = (from.y + to.y) / 2 - (from.y === to.y ? lane * 0.42 : 10);
-    const y = [0, -26, 26, -52, 52].map((offset) => baseline + offset).find((y) =>
-      y > 14 && ![...place.values()].some((p) => x < p.x + LABEL && x + captionWidth > p.x - 16 && y > p.y - 30 && y - 14 < p.y + 30) &&
-      !captions.some((c) => x < c.x + c.width && x + captionWidth > c.x && Math.abs(y - c.y) < 18));
-    const label = (lit || !highlight) && files.length && y !== undefined;
-    if (label) captions.push({ x, y, width: captionWidth });
     return [
-      s("path", {
-        d: curve(from, to, lane),
-        class: `link needs${highlight ? (lit ? " lit" : " dim") : ""}`,
-      }),
-      ...(label ? [s("text", { class: "artifact-label", x, y },
-        s("title", {}, document.createTextNode(full)), document.createTextNode(caption))] : []),
+      s(
+        "path",
+        {
+          d: curve(from, to, lane),
+          class: `link needs${highlight ? (lit ? " lit" : " dim") : ""}`,
+        },
+        files.length ? s("title", {}, document.createTextNode(files.join(", "))) : null,
+      ),
     ];
   });
   const glyphs = questions.map((q) => {
     const p = place.get(q.id)!;
     const state = stateOf(q.id);
+    const isAccepts = acceptedIds.has(q.id);
     const g = s(
       "g",
       {
-        class: `q${highlight && !highlight.nodes.has(q.id) && q.id !== selected ? " dim" : ""}`,
+        class: `q${isAccepts ? " accepts" : ""}${highlight && !highlight.nodes.has(q.id) && q.id !== selected ? " dim" : ""}`,
         transform: `translate(${p.x} ${p.y})`,
         tabindex: 0,
         role: "button",
-        "aria-label": `${state}: ${q.text}`,
+        "aria-label": `${state}${isAccepts ? " (acceptance)" : ""}: ${q.text}`,
         "data-id": q.id,
+        ...(isAccepts ? { "data-accepts": "true" } : {}),
       },
       s("title", {}, document.createTextNode(q.text)),
-      s("circle", { class: "hit", r: 15 }),
+      s("circle", { class: "hit", r: 18 }),
+      s("circle", { class: "ring hover hover-ring", r: 16.5, opacity: hovered === q.id && selected !== q.id ? 1 : 0 }),
     );
-    g.append(glyph(state, 9));
-    const lines = questionLines(q.text);
-    g.append(s("text", { class: "question-label", x: 22, y: -(lines.length - 1) * 8 },
-      ...lines.map((line, i) => s("tspan", { x: 22, dy: i ? 16 : 0 }, document.createTextNode(line)))));
-    if (q.id === selected) g.append(s("circle", { class: "ring selected", r: 13.5 }));
-    else if (marked.has(q.id)) g.append(s("circle", { class: "ring marked", r: 13.5 }));
+    if (isAccepts) {
+      g.append(s("circle", { class: "accept-ring", r: 12.5, style: `--c: ${colour(state)}` }));
+      g.append(glyph(state, 6.5));
+    } else {
+      g.append(glyph(state, 8.5));
+    }
+    if (q.id === selected) g.append(s("circle", { class: "ring selected", r: 16.5 }));
+    else if (marked.has(q.id)) g.append(s("circle", { class: "ring marked", r: 16.5 }));
+    g.addEventListener("pointerenter", () => setHovered(q.id));
+    g.addEventListener("focus", () => setHovered(q.id));
+    g.addEventListener("blur", () => { if (hovered === q.id) setHovered(null); });
     g.addEventListener("click", () => select(q.id));
     g.addEventListener("keydown", (e) => {
-      if ((e as KeyboardEvent).key === "Enter" || (e as KeyboardEvent).key === " ") {
+      const key = (e as KeyboardEvent).key;
+      if (key === "Enter" || key === " ") {
         e.preventDefault();
         select(q.id);
+      } else if (key.startsWith("Arrow")) {
+        e.preventDefault();
+        focusNeighbor(q.id, key);
       }
     });
     return g;
@@ -216,25 +285,13 @@ function render() {
   svg.replaceChildren(s("g", {}, ...rails), s("g", {}, ...paths), s("g", {}, ...glyphs));
 }
 
-/** Keep node labels readable; the full question is available on hover and in evidence. */
-function questionLines(text: string) {
-  const lines: string[] = [];
-  let line = "";
-  for (const word of text.split(/\s+/)) {
-    if (line && `${line} ${word}`.length > 28) { lines.push(line); line = word; }
-    else line = line ? `${line} ${word}` : word;
-  }
-  if (line) lines.push(line);
-  return lines.length > 3 ? [...lines.slice(0, 2), `${lines[2]!.slice(0, 25)}…`] : lines;
-}
-
 /** An artifact dependency. Within one lane it arcs above the questions between. */
 function curve(a: { x: number; y: number }, b: { x: number; y: number }, lane: number) {
   if (a.y === b.y) {
-    const lift = Math.min(lane * 0.42, 10 + Math.abs(b.x - a.x) * 0.18);
+    const lift = Math.min(lane * 0.44, 12 + Math.abs(b.x - a.x) * 0.16);
     return `M ${a.x} ${a.y} Q ${(a.x + b.x) / 2} ${a.y - lift * 2} ${b.x} ${b.y}`;
   }
-  const dx = Math.max(24, (b.x - a.x) / 2);
+  const dx = Math.max(22, (b.x - a.x) / 2);
   return `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`;
 }
 
@@ -254,8 +311,11 @@ function rememberQuestion(next: string) {
   if (!selected || selected === next) return;
   const panel = document.getElementById("question")!;
   questionHistory.push({
-    id: selected, scroll: panel.scrollTop, lanes: scroller.scrollLeft,
+    id: selected,
+    scroll: panel.scrollTop,
+    lanes: scroller.scrollLeft,
     probeOpen: panel.querySelector<HTMLDetailsElement>("details.probe")?.open ?? false,
+    runsOpen: panel.querySelector<HTMLDetailsElement>("details.runs-disclosure")?.open ?? false,
     marked: new Set(marked),
   });
 }
@@ -339,20 +399,42 @@ function connect(delay = 500) {
 // ---------------------------------------------------------------------------------------------------------------
 // Goals
 
-const goalSelect = document.getElementById("goal") as HTMLSelectElement;
-let goalOptions = "";
+const goalPicker = document.getElementById("goal-picker")!;
+let goalSignature = "";
 
-/** The selector names the work. Question answers and measurements remain in evidence. */
+/** Each goal tab shows its derived state glyph beside its condition. */
 function renderGoals() {
   const all = goals();
-  const signature = JSON.stringify(all.map((g) => [g.id, g.text]));
-  if (signature !== goalOptions) {
-    goalOptions = signature;
-    goalSelect.replaceChildren(h("option", { value: "" }, "All questions"), ...all.map((g) => h("option", { value: g.id, title: g.id },
-      all.filter((other) => other.text === g.text).length > 1 ? `${g.text} (${g.id})` : g.text)));
-    goalSelect.value = selectedGoal;
+  const goalState = (g: Goal): State => (g.acceptance ? stateOf(g.acceptance) : "waiting");
+  const signature = JSON.stringify([selectedGoal, all.map((g) => [g.id, g.text, g.acceptance, goalState(g)])]);
+  if (signature !== goalSignature) {
+    goalSignature = signature;
+    const tabBtn = (id: string, label: string, state?: State) => {
+      const active = selectedGoal === id;
+      const b = h(
+        "button",
+        {
+          type: "button",
+          role: "tab",
+          class: `goal-tab${active ? " on" : ""}`,
+          "aria-selected": String(active),
+          "data-goal": id,
+          title: id ? `${label} (${id})` : label,
+        },
+        state ? mark(state, 11) : null,
+        h("span", {}, label),
+      );
+      b.onclick = () => chooseGoal(id);
+      return b;
+    };
+    goalPicker.replaceChildren(
+      ...all.map((g) => {
+        const dup = all.filter((other) => other.text === g.text).length > 1;
+        return tabBtn(g.id, dup ? `${g.text} (${g.id})` : g.text, goalState(g));
+      }),
+      tabBtn("", "All questions"),
+    );
   }
-  goalSelect.disabled = !all.length;
   if (!goalInitialized && all.length) {
     goalInitialized = true;
     if (!selected) { chooseGoal(all[0]!.id); return; }
@@ -366,22 +448,23 @@ function renderGoals() {
 
 function chooseGoal(id: string) {
   selectedGoal = id;
-  goalSelect.value = id;
   goalInitialized = true;
   selected = null;
   marked.clear();
   questionHistory.length = 0;
   updateEvidenceBack();
+  renderGoals();
   const g = goals().find((g) => g.id === id);
   if (g?.acceptance) select(g.acceptance);
   else {
-    tab("question");
+    if (!id) scroller.scrollLeft = 0;
     document.getElementById("question")!.replaceChildren(
-      ...(g ? [h("h2", {}, g.text)] : []), h("p", { class: "hint" }, g ? "No acceptance question." : "Select a question."));
+      ...(g ? [h("h2", {}, g.text)] : []),
+      h("p", { class: "hint" }, g ? "No acceptance question." : "Select a question."),
+    );
     render();
   }
 }
-goalSelect.onchange = () => chooseGoal(goalSelect.value);
 
 // ---------------------------------------------------------------------------------------------------------------
 // The evidence panel
@@ -394,14 +477,16 @@ function badge(st: Status | undefined) {
 
 /** An id in a table: clickable, with its answer's glyph. */
 function ref(q: string) {
-  const a = h("span", { class: "ref id" }, mark(stateOf(q), 10), q);
+  const accepts = goals().some((g) => g.acceptance === q);
+  const a = h("span", { class: "ref id" }, mark(stateOf(q), 10, accepts), q);
   a.onclick = () => select(q);
   return a;
 }
 
 /** Another question, by its text. */
 function chip(q: string) {
-  const b = h("button", { class: "chip", title: q }, mark(stateOf(q)), h("span", {}, nodes.get(q)?.text ?? q));
+  const accepts = goals().some((g) => g.acceptance === q);
+  const b = h("button", { type: "button", class: "chip", title: q }, mark(stateOf(q), 12, accepts), h("span", {}, nodes.get(q)?.text ?? q));
   b.onclick = () => select(q);
   return b;
 }
@@ -464,6 +549,7 @@ function show(v: unknown): string {
 function ruleCheck(rule: string, results: unknown[], ran: boolean) {
   const m = measurements(results as Record<string, unknown>[]);
   const parts = clauses(rule);
+  const shownNames = new Set<string>();
   const rows = parts.map((clause) => {
     let verdict: { word: string; state: State };
     if (!ran) verdict = { word: "not run yet", state: "waiting" };
@@ -476,6 +562,7 @@ function ruleCheck(rule: string, results: unknown[], ran: boolean) {
         verdict = { word: /ParameterMissing/.test((e as Error).message) ? "not measured" : "cannot be checked", state: "failed" };
       }
     const values = named(clause).filter((n) => n !== "results" && n in m);
+    for (const n of values) shownNames.add(n);
     return h(
       "li",
       { class: "clause", style: `--c: ${colour(verdict.state)}` },
@@ -484,68 +571,105 @@ function ruleCheck(rule: string, results: unknown[], ran: boolean) {
       values.length ? h("div", { class: "values" }, ...values.map((n) => h("span", {}, h("small", {}, n), show(m[n])))) : null,
     );
   });
-  return h("div", { class: "rule-check" }, h("h3", {}, "Rule"), h("ul", { class: "clauses" }, ...rows));
+  return { element: h("div", { class: "rule-check" }, h("h3", {}, "Rule"), h("ul", { class: "clauses" }, ...rows)), shownNames };
 }
 
-function measurementTable(results: unknown[]) {
-  const latest = Object.assign({}, ...results) as Record<string, unknown>;
-  return h("table", { class: "measurements", "aria-label": "Measurements" },
-    h("thead", {}, h("tr", {}, h("th", {}, "Measurement"), h("th", {}, results.length > 1 ? "Last value" : "Value"))),
-    h("tbody", {}, ...Object.entries(latest).map(([key, value]) => h("tr", {}, h("th", { scope: "row" }, key), h("td", {}, h("code", {}, show(value)))))));
+function measurementTable(entries: [string, unknown][], multipleRecords: boolean) {
+  return h(
+    "table",
+    { class: "measurements", "aria-label": "Measurements" },
+    h("thead", {}, h("tr", {}, h("th", {}, "Measurement"), h("th", {}, multipleRecords ? "Last value" : "Value"))),
+    h("tbody", {}, ...entries.map(([key, value]) => h("tr", {}, h("th", { scope: "row" }, key), h("td", {}, h("code", {}, show(value)))))),
+  );
 }
 
 function showQuestion(qid: string) {
   const d = details(qid);
   if (!d) return;
+  const panel = document.getElementById("question")!;
+  const keepProbeOpen = panel.querySelector<HTMLDetailsElement>("details.probe")?.open ?? false;
+  const keepRunsOpen = panel.querySelector<HTMLDetailsElement>("details.runs-disclosure")?.open ?? false;
   const st = d.status;
   const pictures = d.saved.filter((f) => IMAGE.test(f.name));
   // Why it failed, or what it waits for. A replay's states leave it out, so fall back to the current run's.
   const reason = st?.reason ?? d.runs.find((r) => r.current)?.reason ?? null;
   const list = (title: string, qs: string[]) => (qs.length ? [h("h3", {}, title), h("div", {}, ...qs.map(chip))] : []);
+  const { element: ruleEl, shownNames } = ruleCheck(d.rule, d.results, d.ran);
+  const latest = Object.assign({}, ...(d.results as Record<string, unknown>[])) as Record<string, unknown>;
+  // Measurements already printed inside Rule clauses are not repeated in a second table right below.
+  const extraEntries = Object.entries(latest).filter(([k]) => !shownNames.has(k));
+  const probeDetails = h("details", { class: "probe" }, h("summary", {}, "Probe"), h("pre", {}, d.probe)) as HTMLDetailsElement;
+  probeDetails.open = keepProbeOpen;
+  const runsCount = d.runs.length;
+  const runsDetails = runsCount
+    ? (h(
+        "details",
+        { class: "runs-disclosure" },
+        h("summary", {}, `${runsCount} ${runsCount === 1 ? "run" : "runs"}`),
+        h(
+          "ul",
+          { class: "runs" },
+          ...d.runs.map((r) =>
+            h(
+              "li",
+              {},
+              h("span", { class: "badge", style: `--c: ${colour(r.answer as State)}` }, r.answer),
+              h("span", { class: "id", title: `#${r.seq}` }, r.run),
+              h("span", { class: "hint" }, `${r.ms} ms`),
+              r.current ? h("span", { class: "hint" }, "current") : null,
+              r.reason ? h("span", { class: "reason-line" }, r.reason.split("\n")[0]!) : null,
+            ),
+          ),
+        ),
+      ) as HTMLDetailsElement)
+    : null;
+  if (runsDetails) runsDetails.open = keepRunsOpen;
+
   const parts: (HTMLElement | null)[] = [
-    h("div", { class: "verdict" }, badge(st), st?.was ? h("span", {}, `was ${st.was}`) : null, h("span", { class: "id" }, qid)),
+    h(
+      "div",
+      { class: "verdict" },
+      badge(st),
+      st?.was ? h("span", {}, `was ${st.was}`) : null,
+      d.accepts.length ? h("span", {}, "acceptance") : null,
+      h("span", { class: "id" }, qid),
+    ),
     h("h2", {}, d.text),
     d.asker ? h("p", { class: "provenance" }, "Asked by ", h("span", {}, d.asker)) : null,
-    ruleCheck(d.rule, d.results, d.ran),
+    ruleEl,
     reason ? h("p", { class: "reason" }, reason) : null,
-    h("h3", {}, "Measurements"),
-    d.results.length ? measurementTable(d.results) : h("p", { class: "hint" }, "No current measurements."),
-    ...(d.results.length > 1 ? [h("details", { class: "raw-measurements" }, h("summary", {}, "All measurements"), h("pre", {}, d.results.map((x) => JSON.stringify(x)).join("\n")))] : []),
-    ...(d.inputs.length || d.saved.length ? [h("h3", {}, "Files"), h("table", { class: "files", "aria-label": "Files" },
-      h("tbody", {},
-        ...d.inputs.map((name) => {
-          const f = d.read.find((f) => f.name === name);
-          return h("tr", {}, h("td", {}, f ? h("a", { href: f.url, target: "_blank" }, name) : h("code", {}, name)), h("td", {}, "input"));
-        }),
-        ...d.saved.map((f) => h("tr", {}, h("td", {}, h("a", { href: f.url, target: "_blank" }, f.name)), h("td", {}, "saved")))))] : []),
-    ...list("Depends on", d.restsOn),
-    ...list("Used by", d.usedBy),
     ...(pictures.length
       ? [h("h3", {}, "Images"), ...pictures.map((f) => h("figure", {}, h("img", { src: f.url, alt: f.name }), h("figcaption", {}, h("a", { href: f.url, target: "_blank" }, f.name))))]
       : []),
-    h("details", { class: "probe" }, h("summary", {}, "Probe"), h("pre", {}, d.probe)),
-    ...(d.runs.length
+    ...(extraEntries.length
+      ? [h("h3", {}, "Measurements"), measurementTable(extraEntries, d.results.length > 1)]
+      : []),
+    ...(d.results.length > 1
+      ? [h("details", { class: "raw-measurements" }, h("summary", {}, "All measurements"), h("pre", {}, d.results.map((x) => JSON.stringify(x)).join("\n")))]
+      : []),
+    ...(d.inputs.length || d.saved.length
       ? [
-          h("h3", {}, "Runs"),
+          h("h3", {}, "Files"),
           h(
-            "ul",
-            { class: "runs" },
-            ...d.runs.map((r) =>
-              h(
-                "li",
-                {},
-                h("span", { class: "badge", style: `--c: ${colour(r.answer as State)}` }, r.answer),
-                h("span", { class: "id", title: `#${r.seq}` }, r.run),
-                h("span", { class: "hint" }, `${r.ms} ms`),
-                r.current ? h("span", { class: "hint" }, "current") : null,
-                r.reason ? h("span", { class: "reason-line" }, r.reason.split("\n")[0]!) : null,
-              ),
+            "table",
+            { class: "files", "aria-label": "Files" },
+            h(
+              "tbody",
+              {},
+              ...d.inputs.map((name) => {
+                const f = d.read.find((f) => f.name === name);
+                return h("tr", {}, h("td", {}, f ? h("a", { href: f.url, target: "_blank" }, name) : h("code", {}, name)), h("td", {}, "input"));
+              }),
+              ...d.saved.map((f) => h("tr", {}, h("td", {}, h("a", { href: f.url, target: "_blank" }, f.name)), h("td", {}, "saved"))),
             ),
           ),
         ]
       : []),
+    ...list("Depends on", d.restsOn),
+    ...list("Used by", d.usedBy),
+    h("div", { class: "disclosures" }, probeDetails, runsDetails),
   ];
-  document.getElementById("question")!.replaceChildren(...parts.filter((x) => x !== null));
+  panel.replaceChildren(...parts.filter((x) => x !== null));
 }
 
 function select(qid: string, previous?: QuestionVisit) {
@@ -553,11 +677,13 @@ function select(qid: string, previous?: QuestionVisit) {
   if (previous) marked = new Set(previous.marked);
   selected = qid;
   updateEvidenceBack();
-  tab("question");
+  setSidebar(true);
   showQuestion(qid);
   const panel = document.getElementById("question")!;
   const probe = panel.querySelector<HTMLDetailsElement>("details.probe");
+  const runs = panel.querySelector<HTMLDetailsElement>("details.runs-disclosure");
   if (probe && previous) probe.open = previous.probeOpen;
+  if (runs && previous) runs.open = previous.runsOpen;
   panel.scrollTop = previous?.scroll ?? 0;
   render();
   if (previous) {
@@ -570,11 +696,12 @@ function select(qid: string, previous?: QuestionVisit) {
     return;
   }
   const x = place.get(qid)?.x;
-  if (x !== undefined && (x < scroller.scrollLeft || x + LABEL > scroller.scrollLeft + scroller.clientWidth)) scroller.scrollLeft = x + LABEL - scroller.clientWidth;
+  if (x !== undefined && (x - PAD < scroller.scrollLeft || x + PAD > scroller.scrollLeft + scroller.clientWidth))
+    scroller.scrollLeft = Math.max(0, x + PAD - scroller.clientWidth);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Queries
+// Queries (docked under the lanes so Evidence stays visible)
 
 const PRESETS: [string, string][] = [
   ["What is each goal’s acceptance question?", "MATCH (g:Goal)\nOPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question)\nRETURN g.id AS goal, g.text AS text, q.id AS acceptance, q.id IN $yes AS yes ORDER BY g.seq"],
@@ -587,8 +714,18 @@ const PRESETS: [string, string][] = [
   ["What did each asker ask?", "MATCH (q:Question)\nRETURN q.asker AS asker, count(*) AS questions,\n  sum(CASE WHEN q.id IN $yes THEN 1 ELSE 0 END) AS yes,\n  sum(CASE WHEN q.id IN $no THEN 1 ELSE 0 END) AS no\nORDER BY questions DESC"],
 ];
 
+const queryToggle = document.getElementById("query-toggle") as HTMLButtonElement;
+const querySection = document.getElementById("query")!;
 const preset = document.getElementById("preset") as HTMLSelectElement;
 const text = document.getElementById("cypher") as HTMLTextAreaElement;
+
+function setQueryOpen(open: boolean) {
+  querySection.hidden = !open;
+  queryToggle.setAttribute("aria-expanded", String(open));
+  queryToggle.textContent = open ? "▾ Query" : "▸ Query";
+}
+queryToggle.onclick = () => setQueryOpen(Boolean(querySection.hidden));
+
 preset.replaceChildren(...PRESETS.map(([name], i) => h("option", { value: String(i) }, name)));
 preset.onchange = () => {
   text.value = PRESETS[Number(preset.value)]![1];
@@ -606,7 +743,7 @@ const params = () => ({
   run: (selected && statuses.get(selected)?.run) ?? null,
 });
 
-/** Runs the Query tab's Cypher, shows the rows, and marks the questions they name. Returns the rows, or the error. */
+/** Runs the Query drawer's Cypher, shows the rows, and marks the questions they name. Returns the rows, or the error. */
 function runQuery(): { columns: string[]; rows: Row[] } | Error {
   const out = document.getElementById("rows")!;
   if (text.value.includes("$selected") && !selected) {
@@ -638,21 +775,15 @@ function runQuery(): { columns: string[]; rows: Row[] } | Error {
 }
 document.getElementById("run")!.onclick = () => runQuery();
 
-/** Puts a query in the Query tab and runs it there. The menu names it when it is a preset, and shows nothing else. */
+/** Opens the Query drawer, puts a query there, and runs it while Evidence stays open on the right. */
 function showQuery(query: string) {
   text.value = query;
   preset.selectedIndex = PRESETS.findIndex(([, q]) => q === query);
-  tab("query");
+  setQueryOpen(true);
   return runQuery();
 }
 
-function tab(name: string, open = true) {
-  if (open) setSidebar(true);
-  for (const b of document.querySelectorAll<HTMLButtonElement>("nav button[data-tab]")) b.classList.toggle("on", b.dataset.tab === name);
-  for (const sec of document.querySelectorAll<HTMLElement>("aside section")) sec.hidden = sec.id !== name;
-}
-for (const b of document.querySelectorAll<HTMLButtonElement>("nav button[data-tab]")) b.onclick = () => tab(b.dataset.tab!);
-
+renderGoals();
 render();
 connect();
 
