@@ -58,7 +58,7 @@ switch (values.version ? "version" : values.help ? "help" : command) {
   }
   case "replay": {
     const server = replay(root, { port: Number(values.port ?? 4748), hostname: values.host });
-    console.log(`Witness replay of ${root}\n  page: ${server.url.href}\n  use Previous, Next or the timeline to inspect the recorded questions`);
+    console.log(`Witness replay of ${root}\n  page: ${server.url.href}\n  select a goal’s acceptance question or any graph question to inspect its evidence`);
     browse(server.url);
     break;
   }

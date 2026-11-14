@@ -114,6 +114,8 @@ For more syntax, see [Relate's Cypher guide](https://github.com/relatedb/relate/
 
 `look` shows a saved file. Images come back as images.
 
+In the live page and replay, start from a goal’s acceptance link, follow Depends on and Used by, or select a graph question. Back restores the previous reading position. Use Cypher with `ORDER BY q.seq` or `ORDER BY r.seq` to inspect recorded order. Goal completion is shown on each goal; question totals do not measure completion.
+
 ## Reporting
 
 Report the goal id, its completion and acceptance question, then question ids and answers. Do not infer completion from the number of exploratory yes answers:

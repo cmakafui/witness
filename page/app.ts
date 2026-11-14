@@ -81,7 +81,7 @@ function glyph(state: State, r: number): SVGElement {
   return g;
 }
 
-/** A glyph on its own, for text: the header, chips and refs. */
+/** A glyph on its own, for chips and refs. */
 function mark(state: State, size = 12) {
   const half = size / 2;
   return s("svg", { width: size, height: size, viewBox: `${-half} ${-half} ${size} ${size}`, "aria-hidden": "true" }, glyph(state, half - 1.5));
@@ -102,7 +102,7 @@ const legend = (kind: string, words: string) => h("span", {}, s("svg", { width: 
 scroller.append(svg, h("p", { class: "caption" }, legend("needs", "depends on")));
 const empty = h("p", { class: "empty" }, "No questions yet.");
 
-const TOP = 44; // Room for the walkthrough bar.
+const TOP = 44; // Room for the neighborhood focus bar.
 const PAD = 28;
 /** Where each question sits, from the last render. */
 const place = new Map<string, { x: number; y: number }>();
@@ -114,7 +114,6 @@ const laneOf = (asker: string | null) => {
 };
 
 function render() {
-  updateTour();
   const questions = [...nodes.values()].sort((a, b) => a.seq - b.seq);
   if (!questions.length) {
     el.replaceChildren(empty);
@@ -230,7 +229,7 @@ evidenceBack.onclick = () => {
   if (previous) select(previous.id, previous);
 };
 
-function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Navigation, fromSequence = false) {
+function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Navigation) {
   if (relation === "overview") {
     focus = null;
     marked.clear();
@@ -260,9 +259,7 @@ function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Na
     }
     frontier = next;
   }
-  // Previous/Next follow question order. Back follows links between questions.
-  if (fromSequence) questionHistory.length = 0;
-  else rememberQuestion(start);
+  rememberQuestion(start);
   selected = start;
   updateEvidenceBack();
   marked.clear();
@@ -289,41 +286,6 @@ function navigate({ id: start = selected ?? undefined, relation, depth = 1 }: Na
 document.getElementById("overview")!.onclick = () => navigate({ relation: "overview" });
 
 // ---------------------------------------------------------------------------------------------------------------
-// Manual navigation visits every question in asking order, including negative answers and failed measurements.
-
-const tourPrevious = document.getElementById("tour-previous") as HTMLButtonElement;
-const tourNext = document.getElementById("tour-next") as HTMLButtonElement;
-const tourSeek = document.getElementById("tour-seek") as HTMLInputElement;
-const tourQuestions = () => [...nodes.values()].sort((a, b) => a.seq - b.seq);
-const tourIndex = () => tourQuestions().findIndex((q) => q.id === selected);
-
-function updateTour() {
-  const questions = tourQuestions();
-  const position = questions.findIndex((q) => q.id === selected);
-  const current = questions[position];
-  document.getElementById("tour-progress")!.textContent = !questions.length
-    ? "No questions yet"
-    : current ? `${position + 1} of ${questions.length}` : plural(questions.length, "question");
-  document.getElementById("tour-title")!.textContent = current?.text ?? "";
-  tourPrevious.disabled = position <= 0;
-  tourNext.disabled = position >= questions.length - 1;
-  tourSeek.disabled = !questions.length;
-  tourSeek.max = String(Math.max(0, questions.length - 1));
-  tourSeek.value = String(Math.max(0, position));
-  tourSeek.setAttribute("aria-valuetext", current ? `Question ${position + 1} of ${questions.length}: ${current.text}` : "No questions yet");
-}
-
-function visitTour(index: number) {
-  const question = tourQuestions()[index];
-  if (!question) return;
-  navigate({ id: question.id, relation: "dependencies", depth: 1 }, true);
-}
-
-tourPrevious.onclick = () => visitTour(tourIndex() - 1);
-tourNext.onclick = () => visitTour(tourIndex() + 1);
-tourSeek.oninput = () => visitTour(Number(tourSeek.value));
-
-// ---------------------------------------------------------------------------------------------------------------
 // Messages from the hub
 
 let displayFrame: number | null = null;
@@ -339,7 +301,7 @@ function scheduleDisplay(lanes = false, evidence = false) {
     displayFrame = null;
     const drawLanes = lanesDirty, drawEvidence = evidenceDirty;
     lanesDirty = evidenceDirty = false;
-    if (drawLanes) { renderGoals(); render(); counts(); }
+    if (drawLanes) { renderGoals(); render(); }
     if (drawEvidence && selected) showQuestion(selected);
   });
 }
@@ -390,7 +352,7 @@ function connect(delay = 500) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// The header: answers by kind.
+// Goals
 
 /** Goals stay separate from the question lanes: only the acceptance question determines completion. */
 function renderGoals() {
@@ -405,18 +367,6 @@ function renderGoals() {
       h("div", { class: "goal-copy" }, h("div", { class: "goal-text" }, g.text), acceptance),
       h("span", { class: "id" }, g.id));
   }));
-}
-
-function counts() {
-  const all = [...statuses.values()];
-  const box = document.getElementById("counts")!;
-  if (!all.length) return box.replaceChildren();
-  box.replaceChildren(
-    ...(["yes", "no", "failed", "running", "pending", "waiting"] as State[])
-      .map((st) => [st, all.filter((x) => x.state === st).length] as const)
-      .filter(([, n]) => n)
-      .map(([st, n]) => h("span", { class: "count" }, mark(st), h("b", {}, String(n)), ` ${st}`)),
-  );
 }
 
 // ---------------------------------------------------------------------------------------------------------------

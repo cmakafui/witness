@@ -1,4 +1,4 @@
-// A recorded store loads immediately; the page tours the questions and their committed evidence.
+// A recorded store loads immediately; goals and evidence links open its committed answers.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -68,7 +68,7 @@ test("a viewer receives the whole recorded graph and answers immediately, withou
   }
 });
 
-test("the recorded page supports manual question navigation and WebMCP", async () => {
+test("the recorded page supports goal and evidence navigation and WebMCP", async () => {
   const server = replay(root, { port: 0 });
   try {
     await using view = new Bun.WebView({ width: 1000, height: 700 });
@@ -92,12 +92,6 @@ test("the recorded page supports manual question navigation and WebMCP", async (
     expect(await view.evaluate("[...document.querySelectorAll('.goal-completion')].map(e => e.textContent)")).toEqual(["Complete", "Incomplete", "Incomplete"]);
     expect(await call("query", { cypher: "MATCH (g:Goal) OPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question) RETURN g.id AS id, g.id IN $complete AS complete, q.id AS acceptance ORDER BY g.seq" }))
       .toMatchObject({ rows: [{ id: ids.complete, complete: true, acceptance: ids.a }, { id: ids.open, complete: false, acceptance: null }, { id: ids.incomplete, complete: false, acceptance: ids.d }] });
-    await view.evaluate(`document.querySelector('[data-goal="${ids.complete}"] button').click()`);
-    expect(await view.evaluate("document.querySelector('#question .goal-context').textContent")).toContain("Acceptance forThe data holds numbers.");
-    expect(await call("show_question", { id: ids.b })).toMatchObject({ explores: [{ id: ids.complete, text: "The data holds numbers." }], accepts: [] });
-    expect(await view.evaluate("document.querySelector('#question .goal-context').textContent")).toContain("Does not determine completion");
-    // Reset visit history before testing navigation from scratch below.
-    await view.evaluate(`(() => { const seek = document.getElementById('tour-seek'); seek.value = '1'; seek.dispatchEvent(new Event('input')); })()`);
     const yes = "MATCH (q:Question) WHERE q.id IN $yes RETURN q.id AS id";
     expect(await call("query", { cypher: yes })).toEqual({ columns: ["id"], rows: [{ id: ids.a }], truncated: false });
     expect(await view.evaluate("[document.getElementById('cypher').value, document.getElementById('query').hidden]")).toEqual([yes, false]);
@@ -138,6 +132,11 @@ test("the recorded page supports manual question navigation and WebMCP", async (
     expect(await view.evaluate("document.getElementById('evidence-back').hidden")).toBe(true);
     expect(await view.evaluate("document.activeElement === document.querySelector('#question h2')")).toBe(true);
 
+    await view.evaluate(`document.querySelector('[data-goal="${ids.complete}"] button').click()`);
+    expect(await view.evaluate("document.querySelector('#question .goal-context').textContent")).toContain("Acceptance forThe data holds numbers.");
+    expect(await call("show_question", { id: ids.b })).toMatchObject({ explores: [{ id: ids.complete, text: "The data holds numbers." }], accepts: [] });
+    expect(await view.evaluate("document.querySelector('#question .goal-context').textContent")).toContain("Does not determine completion");
+
     const neighborhood = (relation: string, id?: string, depth?: number) => call("navigate", { relation, ...(id ? { id } : {}), ...(depth === undefined ? {} : { depth }) });
     // Navigation immediately shows evidence without changing an open panel's width.
     const openWidths = await view.evaluate("[document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]");
@@ -153,7 +152,7 @@ test("the recorded page supports manual question navigation and WebMCP", async (
     expect(await view.evaluate("document.getElementById('navigation').hidden")).toBe(false);
     expect(await view.evaluate("document.getElementById('navigation-summary').textContent")).toBe("Dependencies: 2 questions, 1 link, depth 2");
 
-    // A walkthrough opens a hidden panel again, at its full width, and leaves the lanes alone.
+    // Neighborhood navigation opens a hidden panel again, at its full width, and leaves the lanes alone.
     const lanesWidth = await view.evaluate("document.getElementById('graph').clientWidth");
     await view.evaluate("document.getElementById('sidebar-toggle').click()");
     await neighborhood("dependencies", ids.b, 1);
@@ -165,14 +164,6 @@ test("the recorded page supports manual question navigation and WebMCP", async (
     await neighborhood("overview");
     expect(await view.evaluate("document.getElementById('navigation').hidden")).toBe(true);
 
-    // Manual sequence navigation resets link history and visits the first question.
-    await view.evaluate(`(() => {
-      const seek = document.getElementById('tour-seek');
-      seek.value = '0'; seek.dispatchEvent(new Event('input'));
-    })()`);
-    expect(await view.evaluate("document.getElementById('evidence-back').hidden")).toBe(true);
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("1 of 4");
-    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
     expect(await neighborhood("dependencies", ids.d, 1)).toMatchObject({ questions: [{ id: ids.d }, { id: ids.b }] });
     expect(await neighborhood("dependencies", ids.d, 2)).toMatchObject({ questions: [{ id: ids.d }, { id: ids.b }, { id: ids.a }] });
     // A missing id uses the current selection. Reverse traversal reaches the consumer.
@@ -186,39 +177,15 @@ test("the recorded page supports manual question navigation and WebMCP", async (
     expect(await neighborhood("overview")).toMatchObject({ relation: "overview", questions: 4 });
     expect(await view.evaluate("document.getElementById('navigation').hidden")).toBe(true);
 
-    // Next, Previous and immediate seeking include negative answers and failures.
-    await view.evaluate(`(() => {
-      const seek = document.getElementById('tour-seek');
-      seek.value = '0'; seek.dispatchEvent(new Event('input'));
-    })()`);
-    expect(await view.evaluate("document.getElementById('tour-play')")).toBeNull();
-    expect(await view.evaluate("document.getElementById('tour-previous').disabled")).toBe(true);
-    await view.evaluate("document.getElementById('tour-next').click()");
-    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the total above 100?");
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("2 of 4");
-    await view.evaluate("document.getElementById('tour-previous').click()");
-    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
-    expect(await view.evaluate("document.getElementById('tour-previous').disabled")).toBe(true);
-    await view.evaluate(`(() => {
-      const seek = document.getElementById('tour-seek');
-      seek.value = '2'; seek.dispatchEvent(new Event('input'));
-    })()`);
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("3 of 4");
+    // Goal links and graph selections open evidence directly, including no and failed answers.
+    await view.evaluate(`document.querySelector('[data-goal="${ids.incomplete}"] button').click()`);
+    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the saved total above 100?");
+    expect(await view.evaluate("document.querySelector('#question .badge').textContent")).toBe("no");
+    await view.evaluate(`document.querySelector('[data-id="${ids.c}"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does it crash?");
     expect(await view.evaluate("document.querySelector('#question .badge').textContent")).toBe("failed");
-    await view.evaluate("document.getElementById('tour-next').click()");
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("4 of 4");
+    await view.evaluate("document.getElementById('evidence-back').click()");
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the saved total above 100?");
-    expect(await view.evaluate("document.getElementById('tour-next').disabled")).toBe(true);
-
-    // Browser-agent selections and graph clicks share the same sequence position.
-    await call("show_question", { id: ids.b });
-    expect(await view.evaluate("[document.getElementById('tour-progress').textContent, document.getElementById('tour-seek').value]")).toEqual(["2 of 4", "1"]);
-    await view.evaluate(`document.querySelector('[data-id="${ids.a}"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("1 of 4");
-    await view.evaluate("document.getElementById('tour-next').click()");
-    expect(await view.evaluate("document.getElementById('tour-progress').textContent")).toBe("2 of 4");
-    expect(await view.evaluate("document.getElementById('evidence-back').hidden")).toBe(true);
   } finally {
     server.stop(true);
   }

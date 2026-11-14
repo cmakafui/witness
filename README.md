@@ -16,7 +16,7 @@ MATCH (q:Question) WHERE q.id IN $yes
 RETURN q.text, q.rule ORDER BY q.seq
 ```
 
-Use **Previous**, **Next** or the timeline below the graph to inspect questions in the order asked. Each selection highlights dependencies and shows the evidence. Clicking a question or following a link also updates the position in the timeline.
+Start from a goal’s acceptance question, then follow **Depends on** and **Used by** to inspect its evidence. Click any question in the graph to inspect it, and use **Back** to return to the previous reading position. The Query tab can list questions and runs by `seq` when you need their recorded order.
 
 Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the browser's agent three tools: `query`, `show_question` and `navigate`. Turn it on at `chrome://flags/#enable-webmcp-testing`. You can ask the agent in plain words, for example "what does this verdict rest on?". It answers with Cypher on the page's copy of the graph. It shows you the query and the questions it found. These tools only read, and they mark what they return as untrusted. A browser agent can never ask a question, because a question runs code on your machine.
 

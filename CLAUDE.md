@@ -30,9 +30,9 @@ Use Bun for dependency installation, scripts, tests and builds. Bundle the page 
 - `src/graph.ts`: the four node types (Goal, Question, Run, File) and the Cypher that writes them, and what a rule may be. The hub (ffi) and the page (WASM) both use it.
 - `src/mcp.ts`, `src/server.ts`, `src/main.ts`: the four tools (goal, ask, query, look), one `Bun.serve`, the CLI.
 - `src/connect.ts`: finds or starts a workspace's hub, and bridges stdio MCP to it. `src/setup.ts`: `witness setup`.
-- `src/replay.ts`: `witness replay` loads a recorded store into the page, read-only. It sends the whole graph and each question’s latest recorded run immediately. The page provides manual question navigation.
+- `src/replay.ts`: `witness replay` loads a recorded store into the page, read-only. It sends the whole graph and each question’s latest recorded run immediately. The page provides goal acceptance links, graph selection and evidence navigation.
 - A recorded session for the hackathon judges goes in `examples/`. Never write to a recorded store: a new session goes in a new folder.
-- The page’s Previous, Next and timeline controls visit all questions by seq, including no and failed answers. Their position follows the selected question, including graph clicks and WebMCP navigation. Keep navigation manual.
+- Goals show completion and link to their acceptance questions. Follow dependencies and consumers, select graph nodes, and use Back to restore reading position. Keep question and run order available through seq and Cypher.
 - `page/`: the live page. It answers its panels with Cypher on its own Relate WASM copy. Lanes: one row per asker direction, questions left to right by seq. The evidence panel splits the rule at its top-level ANDs (`clauses` in `src/graph.ts`) and shows each part true, false or not measured. The answer still comes from the run.
 - `page/DESIGN.md`: the page's tokens and rules (Google's DESIGN.md format). Change it with the page. Page text is labels, not sentences.
 - `page/tools.ts`: the page's WebMCP tools for a browser agent, `query`, `show_question` and `navigate`. Navigation immediately shows the question, its dependencies and its evidence; overview clears the focus. They only read: a query whose plan has any operator outside `READS` is refused. `ask` never goes in the page.

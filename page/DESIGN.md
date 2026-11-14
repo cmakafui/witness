@@ -130,7 +130,8 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 ## Layout
 
 ```
-┌ Witness   ● 10 yes  ● 5 no  ⊘ 2 failed                         connected ┐
+┌ Witness                                                       connected ┐
+│ Complete    Goal text · Acceptance: yes                                  │
 ├─────────────────────────────────────────────────────────┬─────────────────────┤
 │ trees         ⊘  ⊘  ●───────●──●                          │ ● yes  q-…  trees   │
 │ clique_paths     ●     ●       ●──╌╌●                     │ Question text       │
@@ -138,8 +139,7 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 │ verification     ●  ●  ●──╌╌●   ●──●                      │ Yes when            │
 │                                                          │ $margin < -1e-8     │
 │                                                          │   −0.0501  true     │
-├──────────────────────────────────────────────────────────┤                     │
-│ Previous  Next   3 of 17   Question…   ───●────────────── │ picture, links …    │
+│                                                          │ picture, links …    │
 └──────────────────────────────────────────────────────────┴─────────────────────┘
 ```
 
@@ -147,8 +147,8 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 - **Lanes.** The x position is the order a question was asked. Each row is one direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. The layout never moves on its own, so a person can learn it.
 - **Links.** A solid curve runs from a question to each question that reads its output.
 - **Evidence panel.** A fixed column on the right. It opens on the answer, the question and the rule check, with goal context (Acceptance for or Explores goal), then the saved pictures, then what the question rests on, then the raw record.
-- **Back.** A quiet control beside the Evidence tab, visible after following another question. It restores the previous reading position. Previous and Next follow question order.
-- **Question navigation.** A bar under the lanes, never over them. Previous, Next and the timeline select questions immediately. The position follows the selected question, including selections made through WebMCP.
+- **Back.** A quiet control beside the Evidence tab, visible after following another question. It restores the previous reading position.
+- **Evidence navigation.** Start at a goal’s acceptance question, then follow dependency and consumer chips. Graph selection, query results and WebMCP also open evidence directly. The lanes use the full available height.
 - Content is left aligned. Below 860px the panel moves under the lanes.
 
 ## Elevation & Depth
@@ -166,7 +166,7 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 - **Verdict badge.** The answer as a word on its colour: `yes`, `no`, `failed`. `pending`, `running` and `waiting` are outlined, because they are not answers.
 - **Rule check.** The rule split at its top-level `AND`s, one clause per row. Each row shows the clause in mono, the measured values it names, and whether it is true, false or not measured. A 4px bar on the left takes the colour of that result. The page evaluates each clause with its own Relate copy, on the run's measurements. The answer itself still comes from the run.
 - **Question chip.** A link to another question: its glyph, then the start of its text. Never a bare id.
-- **Headline.** Counts by answer.
+- **Header.** The name, connection state and evidence toggle. Completion appears on each goal.
 
 ## Do's and Don'ts
 

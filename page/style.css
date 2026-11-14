@@ -50,7 +50,7 @@ body {
 code, pre, textarea, .id { font-family: var(--mono); font-size: 13px; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Header: the name, the answers so far, and the link to the hub. */
+/* Header: the name and the link to the hub. */
 header {
   display: flex;
   align-items: center;
@@ -60,9 +60,6 @@ header {
   background: var(--surface);
 }
 h1 { font-size: 17px; font-weight: 700; margin: 0; }
-#counts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; font-size: 14px; }
-#counts .count { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
-#counts .count b { font-weight: 700; }
 #link { margin-left: auto; color: var(--muted); font-size: 13px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 #link::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--waiting); }
 #link.on::before { background: var(--yes); }
@@ -77,8 +74,7 @@ h1 { font-size: 17px; font-weight: 700; margin: 0; }
   cursor: pointer;
   white-space: nowrap;
 }
-.button:hover:not(:disabled) { border-color: var(--muted); }
-.button:disabled { opacity: 0.4; cursor: default; }
+.button:hover { border-color: var(--muted); }
 .button.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); min-width: 76px; }
 
 main {
@@ -106,7 +102,7 @@ main.sidebar-collapsed aside { visibility: hidden; }
 .goal-context strong, .goal-context small, .goal-context .id { font-size: 12px; color: var(--muted); }
 
 /* The lanes: one row per direction of work, questions in the order they were asked. */
-#graph-stage { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+#graph-stage { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
 #navigation {
   display: flex;
   align-items: center;
@@ -119,11 +115,8 @@ main.sidebar-collapsed aside { visibility: hidden; }
 #navigation[hidden] { display: none; }
 #navigation-summary { font-weight: 600; }
 
-/* The walkthrough bar floats over the lanes' top margin, so the lanes never move when it appears. */
-#graph-stage { position: relative; }
+/* Neighborhood focus floats over the lanes' top margin, so the lanes stay still. */
 #navigation { position: absolute; z-index: 1; top: 0; left: 132px; right: 0; background: var(--surface); }
-#graph { grid-row: 2; }
-#tour { grid-row: 3; }
 .reason { max-height: 180px; overflow: auto; }
 #graph { position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: 132px minmax(0, 1fr); align-content: start; overflow-y: auto; }
 #graph .empty { grid-column: 1 / -1; padding: 40px 24px; color: var(--muted); max-width: 44ch; }
@@ -164,23 +157,6 @@ main.sidebar-collapsed aside { visibility: hidden; }
 .glyph.hollow { fill: var(--surface); stroke: var(--c); stroke-width: 2; }
 .glyph.pending, .glyph.waiting { stroke-dasharray: 3 2.5; }
 .slash { stroke: var(--c); stroke-width: 2; stroke-linecap: round; }
-/* The tour bar sits under the lanes, never over them. */
-#tour {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas: "controls copy" "seek seek";
-  align-items: center;
-  gap: 10px 16px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-}
-.tour-controls { grid-area: controls; display: flex; gap: 6px; }
-.tour-copy { grid-area: copy; min-width: 0; display: flex; gap: 12px; align-items: baseline; }
-#tour-progress { font-size: 13px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
-#tour-title { color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#tour-seek { grid-area: seek; width: 100%; margin: 0; accent-color: var(--ink); cursor: pointer; }
-
 /* The evidence panel. */
 aside {
   border-left: 1px solid var(--line);
@@ -263,7 +239,7 @@ a:hover, .ref:hover { text-decoration: underline; }
 }
 .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip:hover span { text-decoration: underline; }
-.chip svg, #counts svg, .ref svg { flex: none; }
+.chip svg, .ref svg { flex: none; }
 .ref { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 13px; }
 
 pre {
@@ -309,5 +285,4 @@ th { color: var(--muted); font-weight: 600; }
   #graph { grid-template-columns: 96px minmax(0, 1fr); max-height: 60vh; }
   aside { border-left: 0; border-top: 1px solid var(--line); }
   section { overflow: visible; }
-  #tour { grid-template-columns: minmax(0, 1fr); grid-template-areas: "controls" "copy" "seek"; }
 }

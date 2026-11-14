@@ -9,7 +9,6 @@
   <body>
     <header>
       <h1>Witness</h1>
-      <div id="counts" aria-live="polite"></div>
       <div id="link" class="off">Connecting</div>
       <button id="sidebar-toggle" class="button" aria-controls="sidebar" aria-expanded="true">Hide evidence</button>
     </header>
@@ -21,17 +20,6 @@
           <button id="overview" class="button">Show all</button>
         </div>
         <div id="graph"></div>
-        <div id="tour" aria-label="Question navigation">
-          <div class="tour-controls">
-            <button id="tour-previous" class="button" aria-label="Previous question" disabled>Previous</button>
-            <button id="tour-next" class="button" aria-label="Next question" disabled>Next</button>
-          </div>
-          <div class="tour-copy">
-            <span id="tour-progress" role="status" aria-live="polite">No questions yet</span>
-            <span id="tour-title"></span>
-          </div>
-          <input id="tour-seek" type="range" min="0" max="0" step="1" value="0" aria-label="Investigation timeline" disabled />
-        </div>
       </div>
       <aside id="sidebar">
         <nav>
