@@ -100,7 +100,7 @@ components:
 
 ## Overview
 
-The page shows a record of evidence, not a dashboard. A person comes to it to answer two questions: how did the agents get here, and why does each answer stand. The lanes answer the first. The rule check answers the second. Goal tabs with live state marks open the acceptance question. Every selection highlights that question’s input chain, while hovering previews any question in a steady strip above the lanes. The evidence panel stays open on the right, even while running Cypher in the docked query drawer.
+The page shows a record of evidence, not a dashboard. A person comes to it to answer three questions: is the goal true now, why does each answer stand, and how did the agents get here. The goal line answers the first. The rule check answers the second. The trail and Changes answer the third. The question text is the main content: every row shows it. Every selection highlights that question’s input chain. The evidence panel stays open on the right, even while running Cypher in the search bar.
 
 The tone is a lab notebook kept by a careful clerk: plain, legible, and exact. Nothing on the page is decoration. Every mark is a question, a link between questions, or a measurement.
 
@@ -130,29 +130,31 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 ## Layout
 
 ```
-┌ Witness                                                       connected ┐
-│ ● Sort records without losing duplicates     ○ Memory < 64 MB     All   │
-├─────────────────────────────────────────────────────────┬───────────────┤
-│ ● yes · With warm-start B&B, all 50 ≤ 200 ms     branch │ yes  q-…      │
-├─────────────────────────────────────────────────────────┤ Question text │
-│ trees         ⊘──⊘                                      │               │
-│ clique_paths  ●──●───────●                              │ Rule          │
-│ evolution     ●──────────┘ ╲                            │ $margin < 0   │
-│ verification                ●──◎                        │   −0.05  true │
-├─────────────────────────────────────────────────────────┤               │
-│ ▸ Query                                                 │ ▸ Probe ▸ Run │
-└─────────────────────────────────────────────────────────┴───────────────┘
+┌ Witness  ◎ Policy is ranked on all 20 eval weeks …          Goals   connected ┐
+├───────────────────────────────────────────────────────────┬─────────────────┤
+│ /                                                         │ ← Back          │
+├───────────────────────────────────────────────────────────┤ no  q-…         │
+│ ┃     ◎  Policy v4 ranked, beats €12,090          checks  │ Question text   │
+│ ●━━━━━┫  Driver fee ≤ 0.6 × price                drivers  │                 │
+│ │  ⊘     OR-Tools VRP within 60 s                drivers  │ Rule            │
+│ ●━━┛     Booking log parses                         data  │ $margin > 12090 │
+├───────────────────────────────────────────────────────────┤   11482.3 false │
+│ Changes                                                   │ Depends on      │
+│ 14:33  ◎ → ◎  Policy v4 ranked …                          │ └ Driver fee …  │
+│               policy.txt 9c1e2a → 44ab01                  │ ▸ Probe ▸ Runs  │
+└───────────────────────────────────────────────────────────┴─────────────────┘
 ```
 
-- **Goal bar.** Goal tabs below the header carry each goal’s derived state glyph (`yes`, `no`, `failed`, `running`, or hollow `waiting` when open). Selecting a goal opens its acceptance question; a goal without one shows No acceptance question in the panel. All questions clears the selection. First load opens the first goal when there is no selection. Live arrivals preserve the reader’s choice. There are no completion banners.
-- **Hover strip.** A steady single-line bar above the lanes shows the hovered or focused question’s state, full text and lane without covering nearby dots or shifting the layout.
-- **Lanes.** One row per direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. Glyphs carry no inline text labels; parallel work shares columns while preserving creation order within each lane and left-to-right causal order across dependencies. Arrow keys move across dots.
-- **Links.** A curve runs from a question to each question that reads its output. Selecting any question highlights its upstream chain; choosing a goal selects its acceptance question. Other exploration stays readable. Links carry the consumed artifact names as hover titles.
-- **Query drawer.** Docked below the lanes on the left so running Cypher and clicking result ids keeps Evidence open on the right.
-- **Evidence panel.** A fixed column on the right. It opens on the answer, question, asker and rule check, followed by saved images, any measurements not already shown in the rule clauses, input and saved file links, dependencies, and disclosures for the probe and run history. No goal summary repeats the goal bar.
-- **Back.** A quiet control in the Evidence header, visible after following another question. It restores the previous question, reading position and expanded disclosures. Its dependency highlight is derived again from that question.
-- **Evidence navigation.** Choose a goal tab to open its acceptance question, then follow dependency and consumer chips. Graph selection, query results and WebMCP show_question also open evidence directly and use the same selection-derived highlight.
-- Content is left aligned. Below 860px the panel moves under the lanes.
+- **Goal line.** The chosen goal’s derived state mark (`yes`, `no`, `failed`, `running`, or hollow `waiting` when open) and its text. Clicking it opens the acceptance question; a goal without one shows No acceptance question in the panel. First load opens the first goal when there is no selection. Live arrivals preserve the reader’s choice. There are no completion banners.
+- **Goals menu.** A popover with every goal and its mark, and All questions, which clears the selection.
+- **Search bar.** Above the trail. `/` or ⌘K focuses it. Words find questions by text, id or lane and mark them in the trail; Enter opens the first. Text that starts like Cypher runs on Enter and shows a table; ids in it are links. Empty and focused, it offers three example queries. Escape clears it.
+- **Trail.** One HTML row per question, newest first, at a fixed row height: the text, then the lane. One SVG behind the rows draws one column per direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. Lanes are ordered by their first question. Up and Down move along rows; Enter selects.
+- **Links.** A curve runs from a question up to each question that reads its output. Selecting any question draws its upstream chain in ink and dims the rest, which stays readable. Links carry the consumed artifact names as titles.
+- **Changes.** Below the trail. Each run that differs from the run before it on the same question: the time it ended, the old and new answer marks, the question text, and in mono each changed input hash and each changed measurement the rule names.
+- **Evidence panel.** A fixed column on the right. It opens on the answer, asker, id, question and rule check, followed by saved images, any measurements not already shown in the rule clauses, Depends on as a tree (each question once), Used by, and for an acceptance question its goal’s exploration that answered no or failed. Then input and saved file links, and disclosures for the probe and run history.
+- **Back.** A quiet control in the Evidence header, visible after following another question. It restores the previous question, reading position, trail scroll and expanded disclosures. Its highlight is derived again from that question.
+- **Evidence navigation.** Trail rows, chips, Changes rows, query results and WebMCP show_question all open evidence directly and use the same selection-derived highlight.
+- Content is left aligned. Below 860px, Trail, Evidence and Changes become tabs, and selecting a question opens Evidence.
 
 ## Elevation & Depth
 
@@ -160,9 +162,9 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 
 ## Shapes
 
-- Exploratory question glyphs are 8.5px discs: filled for an answer, hollow for no answer yet, a slashed ring for failed.
+- Exploratory question glyphs are 5.5px-radius discs in the trail: filled for an answer, hollow for no answer yet, a slashed ring for failed.
 - Acceptance questions add an outer ring in the verdict colour (`◎`) so they stand out from exploration.
-- The selected question gets an outer ink ring; hovered questions get a muted ring; query matches get an accent ring.
+- In the trail, the selected question gets an outer ink ring and a bold row; search and query matches get an accent ring and accent text.
 - Buttons and chips use a 4px radius. Verdict badges are fully rounded. Panels and clauses have square corners.
 
 ## Components
@@ -172,7 +174,7 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 - **Measurements.** Measurements already displayed beside a rule clause are not repeated below. Additional recorded names and exact JSON values appear in a Measurements table. With multiple result records, label the values Last value and expose every record under All measurements. Never infer units, rename measurements or round them. Pending and running tests show no stale values as current.
 - **Files.** A table of input and saved files. Input links refer to the content hash read by the displayed run, not the mutable workspace path. Declared inputs without a committed run remain plain names.
 - **Question chip.** A link to another question: its glyph, then the start of its text. Never a bare id.
-- **Header.** The name, connection state and evidence toggle. The selected question’s result appears in evidence.
+- **Header.** The name, the goal line, the Goals menu and the connection state.
 
 ## Do's and Don'ts
 
@@ -185,4 +187,4 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 - Don't show an id where the question's text fits.
 - Show the test and its measurements; do not add Complete or Incomplete banners.
 - Do write all page text in plain English, close to ASD-STE100: one word for one meaning, simple verbs, no figures of speech such as "rests on" or "survived".
-- Don't animate the lanes into place: they hold still so a person can read them.
+- Don't animate the trail into place: it holds still so a person can read it.

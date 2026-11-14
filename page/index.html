@@ -6,28 +6,30 @@
     <title>Witness</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
-  <body>
+  <body data-view="trail">
     <header>
       <h1>Witness</h1>
+      <button id="goal-line" type="button"></button>
+      <button id="goals-button" class="button" type="button" popovertarget="goal-menu">Goals</button>
+      <div id="goal-menu" popover role="menu" aria-label="Goals"></div>
       <div id="link" class="off">Connecting</div>
-      <button id="sidebar-toggle" class="button" aria-controls="sidebar" aria-expanded="true">Hide evidence</button>
     </header>
-    <div id="goal-picker" role="tablist" aria-label="Goals"></div>
+    <nav id="views" role="tablist" aria-label="Views">
+      <button type="button" role="tab" data-view="trail">Trail</button>
+      <button type="button" role="tab" data-view="evidence">Evidence</button>
+      <button type="button" role="tab" data-view="changes">Changes</button>
+    </nav>
     <main>
       <div id="graph-stage">
-        <div id="hover-bar" aria-live="polite"></div>
-        <div id="graph"></div>
-        <div id="query-dock">
-          <button id="query-toggle" type="button" aria-expanded="false" aria-controls="query">▸ Query</button>
-          <section id="query" hidden>
-            <div class="query-controls">
-              <select id="preset" aria-label="Example queries"></select>
-              <button id="run" class="button primary" type="button">Run query</button>
-            </div>
-            <textarea id="cypher" spellcheck="false" rows="4" aria-label="Cypher query"></textarea>
-            <div id="rows"></div>
-          </section>
+        <div id="search">
+          <textarea id="search-input" rows="1" spellcheck="false" placeholder="/" aria-label="Search or Cypher"></textarea>
+          <div id="results" hidden></div>
         </div>
+        <div id="trail"></div>
+        <section id="changes" aria-label="Changes">
+          <h3>Changes</h3>
+          <ol id="change-list"></ol>
+        </section>
       </div>
       <aside id="sidebar">
         <div class="sidebar-head">

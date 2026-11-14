@@ -94,13 +94,22 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
       ["show_question", true, true],
     ]);
     const choose = (id: string) => view.evaluate(`document.querySelector('[data-goal=${JSON.stringify(id)}]').click()`);
-    expect(await view.evaluate("document.querySelector('.goal-tab.on').dataset.goal")).toBe(ids.complete);
+    expect(await view.evaluate("document.getElementById('goal-line').dataset.current")).toBe(ids.complete);
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
-    // Acceptance questions carry the ringed acceptance mark; hovering previews a question in the top bar without replacing Evidence.
+    // The trail shows every question's text, newest first; acceptance questions carry the ringed mark.
+    expect(await view.evaluate("[...document.querySelectorAll('#trail .q .text')].map(t => t.textContent)"))
+      .toEqual(["Is the saved total above 100?", "Does it crash?", "Is the total above 100?", "Does data.txt hold numbers?"]);
     expect(await view.evaluate("[...document.querySelectorAll('.q.accepts')].map(q => q.dataset.id).sort()")).toEqual([ids.a, ids.d].sort());
-    await view.evaluate(`document.querySelector('[data-id="${ids.b}"]').dispatchEvent(new PointerEvent('pointerenter'))`);
-    expect(await view.evaluate("document.getElementById('hover-bar').textContent")).toContain("Is the total above 100?");
-    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
+    // The acceptance question lists the goal's exploration that answered no or failed.
+    expect(await view.evaluate("[...document.querySelectorAll('#question h3')].map(h => h.textContent)")).toEqual(expect.arrayContaining(["Answered no", "Failed"]));
+
+    // Words in the search bar find questions; Enter opens the first.
+    await view.evaluate(`(() => { const i = document.getElementById('search-input'); i.focus(); i.value = 'crash'; i.dispatchEvent(new Event('input')); })()`);
+    expect(await view.evaluate("[...document.querySelectorAll('#results .chip')].map(c => c.textContent)")).toEqual(["Does it crash?"]);
+    await view.evaluate("document.getElementById('search-input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))");
+    expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does it crash?");
+    await view.evaluate("document.getElementById('search-input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))");
+    expect(await view.evaluate("document.getElementById('results').hidden")).toBe(true);
     await choose(ids.open!);
     expect(await view.evaluate("document.getElementById('question').textContent")).toContain("No acceptance question.");
     await choose("");
@@ -108,8 +117,8 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
       .toMatchObject({ rows: [{ id: ids.complete, complete: true, acceptance: ids.a }, { id: ids.open, complete: false, acceptance: null }, { id: ids.incomplete, complete: false, acceptance: ids.d }] });
     const yes = "MATCH (q:Question) WHERE q.id IN $yes RETURN q.id AS id";
     expect(await call("query", { cypher: yes })).toEqual({ columns: ["id"], rows: [{ id: ids.a }], truncated: false });
-    // The docked Query drawer opens on the left while Evidence remains visible on the right.
-    expect(await view.evaluate("[document.getElementById('cypher').value, document.getElementById('query').hidden, document.getElementById('question').hidden]")).toEqual([yes, false, false]);
+    // The query shows in the search bar while Evidence remains visible on the right.
+    expect(await view.evaluate("[document.getElementById('search-input').value, document.getElementById('results').hidden, document.getElementById('question').hidden]")).toEqual([yes, false, false]);
 
     for (const cypher of ["MATCH (q:Question) SET q.text = 'forged'", "CREATE (:Question {id: 'q-000000000000'})", "MATCH (q) CALL { CREATE (:Run) } RETURN q"])
       expect(((await call("query", { cypher })) as { refused: string }).refused).toStartWith("Only reads run here");
@@ -158,26 +167,20 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     expect(await (await fetch(inputUrl)).json()).toEqual([4, 5, 6]);
 
     // Every entry point derives the same upstream highlight from the selected question.
-    const lit = () => view.evaluate("[...document.querySelectorAll('.q:not(.dim)')].map(q => q.dataset.id)");
-    expect(await lit()).toEqual([ids.a, ids.b]);
+    const lit = async () => ((await view.evaluate("[...document.querySelectorAll('.q:not(.dim)')].map(q => q.dataset.id)")) as string[]).sort();
+    expect(await lit()).toEqual([ids.a!, ids.b!].sort());
     expect(await view.evaluate("document.querySelectorAll('.link.lit').length")).toBe(1);
-    const openWidths = await view.evaluate("[document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]");
+    const openWidths = await view.evaluate("[document.getElementById('trail').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]");
     await call("show_question", { id: ids.d });
-    expect(await lit()).toEqual([ids.a, ids.b, ids.d]);
+    expect(await lit()).toEqual([ids.a!, ids.b!, ids.d!].sort());
     expect(await view.evaluate("document.querySelectorAll('.link.lit').length")).toBe(2);
-    expect(await view.evaluate("[document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]")).toEqual(openWidths);
+    expect(await view.evaluate("[document.getElementById('trail').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]")).toEqual(openWidths);
+    // Depends on is the upstream tree: the direct dependency, then its own.
+    expect(await view.evaluate("[...document.querySelectorAll('#question .tree .chip')].map(c => c.textContent)")).toEqual(["Is the total above 100?", "Does data.txt hold numbers?"]);
     await view.evaluate("document.querySelector('#question button.chip').click()");
-    expect(await lit()).toEqual([ids.a, ids.b]);
+    expect(await lit()).toEqual([ids.a!, ids.b!].sort());
     await view.evaluate("document.getElementById('evidence-back').click()");
-    expect(await lit()).toEqual([ids.a, ids.b, ids.d]);
-
-    // Browser-agent selection opens the evidence panel with the same derived highlight.
-    const lanesWidth = await view.evaluate("document.getElementById('graph').clientWidth");
-    await view.evaluate("document.getElementById('sidebar-toggle').click()");
-    await call("show_question", { id: ids.b });
-    expect(await lit()).toEqual([ids.a, ids.b]);
-    expect(await view.evaluate("[document.getElementById('graph').clientWidth, document.getElementById('sidebar').getBoundingClientRect().width]")).toEqual([lanesWidth, 440]);
-    expect(await view.evaluate("document.getElementById('sidebar-toggle').getAttribute('aria-expanded')")).toBe("true");
+    expect(await lit()).toEqual([ids.a!, ids.b!, ids.d!].sort());
     await choose("");
     expect(await lit()).toHaveLength(4);
     expect(await view.evaluate("document.querySelectorAll('.link.lit').length")).toBe(0);
@@ -189,7 +192,7 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     await view.evaluate(`document.querySelector('[data-id="${ids.c}"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does it crash?");
     expect(await view.evaluate("document.querySelector('#question .badge').textContent")).toBe("failed");
-    expect(await lit()).toEqual([ids.c]);
+    expect(await lit()).toEqual([ids.c!]);
     await view.evaluate("document.getElementById('evidence-back').click()");
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the saved total above 100?");
   } finally {

@@ -107,7 +107,7 @@ test("the page shows a new question and its answer live, from its own Relate cop
   await read("new Promise(requestAnimationFrame)");
   expect(await read("window.keptProbe === document.querySelector('#question details.probe') && window.keptProbe.open && window.keptPanel === document.querySelector('#question h2')")).toBe(true);
 
-  // A burst can rebuild the lane SVG at most once per frame.
+  // A burst can rebuild the trail's SVG at most once per frame.
   await read(`(() => {
     window.displayFrame = 0; window.svgUpdates = {}; window.sampleDisplay = true;
     const tick = () => { window.displayFrame++; if (window.sampleDisplay) requestAnimationFrame(tick); };
@@ -115,7 +115,7 @@ test("the page shows a new question and its answer live, from its own Relate cop
     window.svgObserver = new MutationObserver(records => {
       window.svgUpdates[window.displayFrame] = (window.svgUpdates[window.displayFrame] || 0) + records.length;
     });
-    window.svgObserver.observe(document.querySelector('.lanes svg'), {childList:true});
+    window.svgObserver.observe(document.querySelector('#trail svg'), {childList:true});
   })()`);
   for (let i = 0; i < 32; i++) server.publish("feed", JSON.stringify({ type: "graph", nodes: [], rels: [] }));
   await until("Object.keys(window.svgUpdates).length > 0", true);
@@ -172,6 +172,8 @@ test("the selected acceptance test shows current measurements through invalidati
   await hub.idle();
   await until(`window.witness.state('${a.id}')`, "no");
   await until("document.querySelector('#question .clause .values')?.textContent", "x-2");
+  // Changes lists the run that changed the input, the answer and the measurement.
+  await until(`[...document.querySelectorAll('#change-list li[data-id="${a.id}"]')].some(li => li.textContent.includes('live-candidate.txt') && li.textContent.includes('x  1 → -2'))`, true);
   expect(await view.evaluate("document.querySelector('#question .clause .mark').textContent")).toBe("false");
   expect(await (await fetch(inputUrl)).text()).toBe("1");
   expect(await run()).toMatchObject({ rows: [{ complete: false }] });
