@@ -23,6 +23,7 @@ AI agents do research together. Each finding is a yes/no question with a rule. A
 
 - `src/hub.ts`: the only writer. It evaluates each rule with Relate on an empty in-memory store, writes a run once when it ends, works out each answer from the runs and the inputs now, and reruns what changed.
 - `src/probe.ts`: runs one probe with uv in a folder that holds only its declared inputs.
+- Probes use one asynchronous `uv run --script`. Keep structured measurements and a bounded diagnostic tail for failures. Archive only declared inputs and saved outputs.
 - `src/graph.ts`: the two records (Question, Run) and the Cypher that writes them, and what a rule may be. The hub (ffi) and the page (WASM) both use it.
 - `src/mcp.ts`, `src/server.ts`, `src/main.ts`: the three tools, one `Bun.serve`, the CLI.
 - `src/connect.ts`: finds or starts a workspace's hub, and bridges stdio MCP to it. `src/setup.ts`: `witness setup`.

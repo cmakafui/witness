@@ -13,7 +13,7 @@ Witness keeps the tested answers of all agents in this workspace in one graph. N
 | **Rule** | A Cypher expression over the measurements. True gives yes. False gives no. |
 | **Probe** | A Python script that uv runs. It prints measurements. It does not give an answer. |
 | **Input** | A file that the probe reads: a workspace path, or `q-…/name` for a file that another question saved. |
-| **Run** | One execution of the probe: the measurements, the answer, the files read and saved, the packages used. |
+| **Run** | One execution of the probe: the measurements, the answer, and the files read and saved. |
 | **Answer** | `yes`, `no` or `failed`. `pending`: an input changed, and the question runs again. `waiting`: a question that it reads has no answer yet, or its probe did not measure. |
 
 ## Steps

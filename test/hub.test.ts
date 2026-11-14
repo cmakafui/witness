@@ -1,6 +1,6 @@
 // The hub, end to end with real uv probes: answers come from runs, follow their inputs, and come back with them.
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hub } from "../src/hub.ts";
@@ -52,19 +52,23 @@ async function settle() {
   }
 }
 
-test("ask runs the probe, the rule decides, and the run records its measurements, outputs and packages", async () => {
+test("ask resolves script dependencies, records measurements and outputs, and keeps only input and output files", async () => {
   writeFileSync(join(root, "data.txt"), "4 5 6");
   const a = await hub.ask({
     text: "Does data.txt hold at least one number?",
     rule: "$count >= 1",
-    probe: sum.replace("# dependencies = []", '# dependencies = ["packaging==24.2"]'),
+    probe: sum.replace("# dependencies = []", '# dependencies = ["packaging==24.2"]') +
+      '\nimport packaging\nassert packaging.__version__ == "24.2"\nassert not os.path.exists("probe.py.lock")\n',
     inputs: ["data.txt"],
   });
   expect(a.state).toBe("yes");
   expect(a.results).toEqual([{ count: 3, total: 15 }]);
   expect(a.saved).toEqual([`${a.id}/total.json`]);
-  const [run] = hub.query("MATCH (r:Run {id: $run})-[:OF]->(q:Question) RETURN r.answer AS answer, r.packages AS packages, q.rule AS rule", { run: a.run! }).rows;
-  expect(run).toEqual({ answer: "yes", packages: ["packaging==24.2"], rule: "$count >= 1" });
+  const [run] = hub.query("MATCH (r:Run {id: $run})-[:OF]->(q:Question) RETURN r.answer AS answer, q.rule AS rule", { run: a.run! }).rows;
+  expect(run).toEqual({ answer: "yes", rule: "$count >= 1" });
+  const files = hub.query("MATCH (f:File) RETURN f.id AS id").rows.map((f) => String(f.id)).sort();
+  expect(files).toHaveLength(2);
+  expect(readdirSync(join(root, ".witness", "files")).sort()).toEqual(files);
 }, 120_000);
 
 test("the rule sees each measurement by name, and every measurement as $results", async () => {

@@ -20,9 +20,6 @@ export type ProbeOutcome = {
   failed: string | null; // why the run failed, or null when it measured
   results: Record<string, unknown>[];
   outputs: { name: string; path: string }[];
-  lock: string | null; // probe.py.lock, as uv wrote it
-  packages: { name: string; version: string }[];
-  log: string;
   started: number; // when the run began: milliseconds since 1970
   ms: number; // how long the run took
   cleanup: () => void; // removes the run's folder, after the hub keeps the outputs
@@ -38,12 +35,6 @@ function environment(out: string): Record<string, string> {
   return env;
 }
 
-/** The packages that a uv lock file pins, without the probe itself. */
-export function lockedPackages(lock: string): { name: string; version: string }[] {
-  const parsed = Bun.TOML.parse(lock) as { package?: { name: string; version?: string; source?: Record<string, unknown> }[] };
-  return (parsed.package ?? []).filter((p) => p.version && !p.source?.virtual && !p.source?.editable).map((p) => ({ name: p.name, version: p.version! }));
-}
-
 function files(dir: string, base = dir): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
     const p = join(dir, e.name);
@@ -52,6 +43,7 @@ function files(dir: string, base = dir): string[] {
 }
 
 const tail = (s: string, n = 6) => s.trim().split("\n").slice(-n).join("\n");
+const DIAGNOSTIC_CHARS = 4096;
 
 export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
   const began = Date.now();
@@ -61,18 +53,16 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
   mkdirSync(work);
   mkdirSync(out);
   const cleanup = () => rmSync(dir, { recursive: true, force: true });
-  const done = (o: Partial<ProbeOutcome> & Pick<ProbeOutcome, "failed" | "log">): ProbeOutcome => ({
+  const done = (o: Partial<ProbeOutcome> & Pick<ProbeOutcome, "failed">): ProbeOutcome => ({
     started: began,
     ms: Date.now() - began,
     results: [],
     outputs: [],
-    lock: null,
-    packages: [],
     cleanup,
     ...o,
   });
 
-  if (!uv) return done({ failed: "uv is not installed on this machine", log: "" });
+  if (!uv) return done({ failed: "uv is not installed on this machine" });
   await Bun.write(join(work, "probe.py"), run.probe);
   for (const input of run.inputs) {
     mkdirSync(dirname(join(work, input.name)), { recursive: true });
@@ -80,59 +70,72 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
   }
   const env = environment(out);
 
-  // Resolve the probe's dependencies into a lock file. The lock is evidence: it says which packages answered.
-  const lock = Bun.spawnSync([uv, "lock", "--script", "probe.py"], { cwd: work, env, stdout: "pipe", stderr: "pipe" });
-  const lockLog = lock.stdout.toString() + lock.stderr.toString();
-  if (lock.exitCode !== 0) return done({ failed: `uv could not resolve the probe's dependencies:\n${tail(lockLog)}`, log: lockLog });
-  const lockText = await Bun.file(join(work, "probe.py.lock")).text();
-
-  const started = performance.now();
-  const proc = Bun.spawn([uv, "run", "--locked", "--script", "probe.py"], {
+  const proc = Bun.spawn([uv, "run", "--script", "probe.py"], {
     cwd: work,
     env,
     stdout: "pipe",
     stderr: "pipe",
-    timeout: run.timeoutS * 1000,
-    killSignal: "SIGKILL",
+    detached: process.platform !== "win32",
   });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    if (process.platform === "win32")
+      Bun.spawn(["taskkill", "/PID", String(proc.pid), "/T", "/F"], { stdout: "ignore", stderr: "ignore" });
+    else {
+      try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill("SIGKILL"); }
+    }
+  }, run.timeoutS * 1000);
   const results: Record<string, unknown>[] = [];
   let badResult: string | null = null;
-  let log = lockLog;
+  // Keep only a short diagnostic tail. Measurements live in results, not in a transcript.
+  let diagnostic = "";
+  const remember = (s: string) => { diagnostic = (diagnostic + s).slice(-DIAGNOSTIC_CHARS); };
   const read = async (stream: ReadableStream<Uint8Array>, protocol: boolean) => {
     let buf = "";
     const decoder = new TextDecoder();
     for await (const bytes of stream) {
+      if (!protocol) {
+        remember(decoder.decode(bytes, { stream: true }));
+        continue;
+      }
       buf += decoder.decode(bytes, { stream: true });
       let i: number;
       while ((i = buf.indexOf("\n")) >= 0) {
-        line(buf.slice(0, i), protocol);
+        line(buf.slice(0, i));
         buf = buf.slice(i + 1);
       }
     }
-    if (buf) line(buf, protocol);
+    if (protocol) {
+      buf += decoder.decode();
+      if (buf) line(buf);
+    } else remember(decoder.decode());
   };
-  const line = (l: string, protocol: boolean) => {
-    log += `${l}\n`;
-    if (!protocol) return;
+  const line = (l: string) => {
     if (l.startsWith(`${RESULT} `)) {
       try {
         const data = JSON.parse(l.slice(RESULT.length + 1));
         if (data === null || typeof data !== "object" || Array.isArray(data)) throw new Error("not an object");
         results.push(data);
       } catch {
-        badResult ??= l;
+        badResult ??= l.slice(0, DIAGNOSTIC_CHARS);
       }
-    }
+    } else remember(`${l}\n`);
   };
-  await Promise.all([read(proc.stdout, true), read(proc.stderr, false)]);
-  const code = await proc.exited;
+  let code: number;
+  try {
+    await Promise.all([read(proc.stdout, true), read(proc.stderr, false)]);
+    code = await proc.exited;
+  } finally {
+    clearTimeout(timer);
+  }
 
   const outputs = files(out).map((name) => ({ name, path: join(out, name) }));
-  const base = { results, outputs, lock: lockText, packages: lockedPackages(lockText), log };
+  const base = { results, outputs };
   const failed = (reason: string) => done({ ...base, failed: reason });
-  if (proc.signalCode && performance.now() - started >= run.timeoutS * 1000) return failed(`timed out after ${run.timeoutS} s`);
+  if (timedOut) return failed(`timed out after ${run.timeoutS} s`);
   if (proc.signalCode) return failed(`stopped by ${proc.signalCode}`);
-  if (code !== 0) return failed(`exit code ${code}:\n${tail(log.slice(lockLog.length))}`);
+  if (code !== 0) return failed(`exit code ${code}:\n${tail(diagnostic)}`);
   if (badResult) return failed(`a ${RESULT} line is not a JSON object: ${badResult}`);
   if (!results.length) return failed(`measured nothing: it printed no ${RESULT} line`);
   return done({ ...base, failed: null });

@@ -43,7 +43,7 @@ Witness is not a sandbox. It does not stop an agent from acting outside it. It m
 ```
 (:Question {text, rule, probe, inputs, asker})
 (:Question)-[:NEEDS]->(:Question)            // reads a file the other question saved
-(:Run {answer, reason, started, ms, results, packages})-[:OF]->(:Question)
+(:Run {answer, reason, started, ms, results})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File)               // the inputs, as the run read them
 (:Run)-[:SAVED {name}]->(:File)              // what the run saved for other questions
 ```
@@ -97,7 +97,7 @@ To develop, run `bun test` (real uv probes, MCP over HTTP and stdio, the page in
 
 ## Where the data lives
 
-A workspace's store is `.witness/`. `graph/` is the Relate store. `files/` holds every input, output, lock file and log, named by SHA-256. Read a store with Relate's CLI:
+A workspace's store is `.witness/`. `graph/` is the Relate store. `files/` holds the inputs and saved outputs, named by SHA-256. A failed run records a short diagnostic tail in its reason. Read a store with Relate's CLI:
 
 ```bash
 relate --read-only --database .witness/graph "MATCH (q:Question) RETURN q.asker, q.text, q.rule"

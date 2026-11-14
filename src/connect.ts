@@ -39,11 +39,18 @@ export async function hub(root: string, idleS = IDLE_S): Promise<URL> {
   if (found) return found.url;
   mkdirSync(join(root, ".witness"), { recursive: true });
   const log = openSync(join(root, ".witness", "hub.log"), "a");
-  spawn(process.execPath, [MAIN, "serve", "--root", root, "--port", "0", "--idle", String(idleS)], { detached: true, stdio: ["ignore", log, log] }).unref();
+  const start = () => {
+    const child = spawn(process.execPath, [MAIN, "serve", "--root", root, "--port", "0", "--idle", String(idleS)], { detached: true, stdio: ["ignore", log, log] });
+    child.unref();
+    return child;
+  };
+  let child = start();
   for (let i = 0; i < 100; i++) {
     await Bun.sleep(100);
     const up = await running(root);
     if (up) return up.url;
+    // A retiring writer can briefly prevent the replacement from opening the store.
+    if (child.exitCode !== null && i % 5 === 4) child = start();
   }
   throw new Error(`The Witness hub did not start. See ${join(root, ".witness", "hub.log")}.`);
 }

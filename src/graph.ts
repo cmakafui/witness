@@ -46,7 +46,7 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
 export const SCHEMA = `The graph:
 (:Question {id, text, rule, probe, inputs, asker, seq})
 (:Question)-[:NEEDS]->(:Question)      reads a file the other question saved
-(:Run {id, key, seq, started, ms, answer, reason, measured, results, packages})-[:OF]->(:Question)
+(:Run {id, key, seq, started, ms, answer, reason, measured, results})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File {id, bytes})    the inputs the run read; a File's id is its SHA-256
 (:Run)-[:SAVED {name}]->(:File)               the files the run saved for other questions
 rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is the measurements as JSON. measured is true when the probe measured, even if the rule could not decide: then other questions can read the files it saved. started is when the run began, in milliseconds since 1970. ms is how long it took.

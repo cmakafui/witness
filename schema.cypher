@@ -9,8 +9,7 @@ CREATE GRAPH TYPE witness AS {
                   inputs :: LIST<STRING NOT NULL> NOT NULL, timeout :: INTEGER NOT NULL,
                   asker :: STRING, seq :: INTEGER NOT NULL}),
   (r:Run => {id :: STRING NOT NULL, key :: STRING NOT NULL, seq :: INTEGER NOT NULL, started :: INTEGER NOT NULL, ms :: INTEGER NOT NULL,
-             answer :: STRING NOT NULL, reason :: STRING, measured :: BOOLEAN, results :: STRING NOT NULL,
-             packages :: LIST<STRING NOT NULL> NOT NULL, lock :: STRING, log :: STRING NOT NULL}),
+             answer :: STRING NOT NULL, reason :: STRING, measured :: BOOLEAN, results :: STRING NOT NULL}),
   (f:File => {id :: STRING NOT NULL, bytes :: INTEGER NOT NULL}),
 
   (q)-[:NEEDS]->(q),

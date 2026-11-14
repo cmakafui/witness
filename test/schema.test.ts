@@ -11,12 +11,12 @@ beforeEach(async () => {
 });
 
 const question = "CREATE (:Question {id: $id, text: 't', rule: '$x = 1', probe: 'p', inputs: ['data.csv'], timeout: 600, seq: 1})";
-const run = "CREATE (:Run {id: 'r-1', key: 'k', seq: 2, started: 1, ms: 2, answer: 'yes', results: '[]', packages: ['numpy==2.3.4'], log: 'l'})";
+const run = "CREATE (:Run {id: 'r-1', key: 'k', seq: 2, started: 1, ms: 2, answer: 'yes', results: '[]'})";
 
 test("a well-formed question and run are accepted", () => {
   db.query(question, { id: "q-1" });
   db.query(`MATCH (q:Question {id: 'q-1'}) ${run.replace("CREATE (:Run", "CREATE (r:Run")} CREATE (r)-[:OF]->(q)`);
-  expect(db.query("MATCH (r:Run)-[:OF]->(q:Question) RETURN q.id AS id, r.packages AS packages")).toEqual([{ id: "q-1", packages: ["numpy==2.3.4"] }]);
+  expect(db.query("MATCH (r:Run)-[:OF]->(q:Question) RETURN q.id AS id, r.answer AS answer")).toEqual([{ id: "q-1", answer: "yes" }]);
 });
 
 test("a question without its probe is rejected, and a run without its answer", () => {

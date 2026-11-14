@@ -240,9 +240,6 @@ export class Hub {
         ms: 0,
         results: [],
         outputs: [],
-        lock: null,
-        packages: [],
-        log: String((e as Error).stack ?? e),
         cleanup: () => {},
       }))
       .then((outcome) => this.finish(q, run, key!, read, outcome))
@@ -298,8 +295,6 @@ export class Hub {
     try {
       const { answer, reason } = o.failed === null ? this.decide(q.rule, o.results) : { answer: "failed" as const, reason: o.failed };
       const outputs = o.outputs.map((f) => ({ name: f.name, node: this.keep(readFileSync(f.path)) }));
-      const lock = o.lock === null ? null : this.keep(Buffer.from(o.lock));
-      const log = this.keep(Buffer.from(o.log));
       this.write(
         [
           {
@@ -314,9 +309,6 @@ export class Hub {
               reason,
               measured: o.failed === null,
               results: JSON.stringify(o.results),
-              packages: o.packages.map((p) => `${p.name}==${p.version}`),
-              lock: lock?.id ?? null,
-              log: log.id,
             },
           },
           ...read.map((x) => x.node),

@@ -515,7 +515,7 @@ function details(qid: string) {
   );
   const runs = cypher(
     `MATCH (r:Run)-[:OF]->(:Question {id: $selected})
-     RETURN r.id AS run, r.seq AS seq, r.answer AS answer, r.reason AS reason, r.results AS results, r.packages AS packages ORDER BY r.seq DESC`,
+     RETURN r.id AS run, r.seq AS seq, r.answer AS answer, r.reason AS reason, r.results AS results ORDER BY r.seq DESC`,
     { selected: qid },
   );
   // Show measurements only from the committed run that gives this answer.
@@ -536,7 +536,6 @@ function details(qid: string) {
     ran: Boolean(shown),
     results,
     saved: saved.map((f) => ({ name: String(f.name), url: `/files/${f.file}?name=${encodeURIComponent(String(f.name))}` })),
-    packages: ids(shown?.packages),
     runs: runs.map((r) => ({ run: String(r.run), seq: Number(r.seq), answer: String(r.answer), reason: (r.reason as string | null) ?? null, current: r.run === st?.run })),
   };
 }
@@ -625,8 +624,6 @@ function showQuestion(qid: string) {
           ),
         ]
       : []),
-    d.packages.length ? h("h3", {}, "Packages") : null,
-    d.packages.length ? h("p", { class: "id hint" }, d.packages.join("  ")) : null,
     h("details", {}, h("summary", {}, "Probe"), h("pre", {}, d.probe)),
   ];
   document.getElementById("question")!.replaceChildren(...parts.filter((x) => x !== null));
@@ -671,7 +668,6 @@ const PRESETS: [string, string][] = [
   ["Which questions read each file?", "MATCH (q:Question)<-[:OF]-(r:Run)-[x:READ]->(:File)\nWHERE r.id IN $current AND NOT x.name STARTS WITH 'q-'\nRETURN x.name AS input, count(DISTINCT q) AS read_by, collect(DISTINCT q.id) AS questions ORDER BY input"],
   ["Which questions read from the same question?", "MATCH (a:Question)-[:NEEDS]->(u:Question)<-[:NEEDS]-(b:Question)\nWHERE a.seq < b.seq\nRETURN u.id AS output_of, a.id AS a, b.id AS b"],
   ["Which runs failed, and why?", "MATCH (r:Run {answer: 'failed'})-[:OF]->(q:Question)\nRETURN q.id AS id, r.reason AS reason, r.seq AS seq ORDER BY seq DESC"],
-  ["Which packages did the probes use?", "MATCH (r:Run)-[:OF]->(q:Question)\nUNWIND r.packages AS p\nRETURN split(p, '==')[0] AS package, count(DISTINCT q) AS questions, collect(DISTINCT split(p, '==')[1]) AS versions\nORDER BY questions DESC, package"],
   ["What did each asker ask?", "MATCH (q:Question)\nRETURN q.asker AS asker, count(*) AS questions,\n  sum(CASE WHEN q.id IN $yes THEN 1 ELSE 0 END) AS yes,\n  sum(CASE WHEN q.id IN $no THEN 1 ELSE 0 END) AS no\nORDER BY questions DESC"],
 ];
 
