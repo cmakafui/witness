@@ -63,7 +63,7 @@ Write the rule before the probe runs.
 - The answer is `failed` if the rule names a measurement that the run did not print, if a value is null, or if the result is not true or false.
 - A row without a field gives null, and null is not no. Say in the rule what a missing field means: `any(r IN $rows WHERE coalesce(r.error, 1.0) < 0.3)`.
 - If the probe measured but the rule could not decide, other questions can still read the files that the run saved. Files of a crash or a timeout cannot be read.
-- A rule is one expression. Witness refuses clauses such as `MATCH` and `RETURN`.
+- A rule is one expression. Witness evaluates it on an empty store that refuses writes, so a rule can read only the measurements.
 
 ## The probe
 

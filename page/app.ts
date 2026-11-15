@@ -23,10 +23,12 @@ type Row = Record<string, unknown>;
 
 await init({ module_or_path: wasmUrl });
 const db = new RelateDb();
+/** An empty store that refuses writes, where the page checks rule clauses, as the hub does. A rule never sees the graph. */
+const judge = new RelateDb(true);
 
 /** Runs one statement on the page's copy and returns Relate's envelope. An engine error throws. */
-function execute(query: string, params: Record<string, unknown> = {}) {
-  const r = JSON.parse(db.execute(query, JSON.stringify(params)));
+function execute(query: string, params: Record<string, unknown> = {}, on = db) {
+  const r = JSON.parse(on.execute(query, JSON.stringify(params)));
   if (r.error) throw new Error(typeof r.error === "string" ? r.error : (r.error.message ?? JSON.stringify(r.error)));
   return r as { columns: string[]; rows: Row[]; plan: Plan | null };
 }
@@ -565,7 +567,7 @@ function show(v: unknown): string {
 
 /**
  * Each part of the rule, the measurements it names, and whether it held on these measurements. The page works this
- * out on its own Relate copy, for reading. The answer itself is the run's.
+ * out on its own empty Relate store, for reading. The answer itself is the run's.
  */
 function ruleCheck(rule: string, results: unknown[], ran: boolean) {
   const m = measurements(results as Record<string, unknown>[]);
@@ -577,7 +579,7 @@ function ruleCheck(rule: string, results: unknown[], ran: boolean) {
     else if (!results.length) verdict = { word: "not measured", state: "failed" };
     else
       try {
-        const v = execute(`RETURN (${clause}) AS v`, m).rows[0]?.v;
+        const v = execute(`RETURN (${clause}) AS v`, m, judge).rows[0]?.v;
         verdict = v === true ? { word: "true", state: "yes" } : v === false ? { word: "false", state: "no" } : { word: "not true or false", state: "failed" };
       } catch (e) {
         verdict = { word: /ParameterMissing/.test((e as Error).message) ? "not measured" : "cannot be checked", state: "failed" };

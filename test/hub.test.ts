@@ -181,11 +181,19 @@ test("query cannot write", () => {
   expect(() => hub.query("CREATE (:Note {text: 'x'})")).toThrow(/read/i);
 });
 
+test("a rule sees only the measurements: it is evaluated on an empty store, not on the graph", async () => {
+  const first = await hub.ask({ text: "Is x one?", rule: "$x = 1", probe: measure({ x: 1 }) });
+  expect(first.state).toBe("yes");
+  // The graph holds a question and a run now. A rule that looks for nodes finds none.
+  const blind = await hub.ask({ text: "Does a rule see the graph?", rule: "$x = 1 AND COUNT { MATCH (n) } = 0", probe: measure({ x: 1 }) });
+  expect(blind.state).toBe("yes");
+});
+
 test("ask refuses a rule that is not an expression over measurements, a probe that measures nothing, and an outside input", async () => {
   const ok = measure({ x: 1 });
   await expect(hub.ask({ text: "x?", rule: "", probe: ok })).rejects.toThrow(/no rule/);
   await expect(hub.ask({ text: "x?", rule: "yes when x is 1", probe: ok })).rejects.toThrow(/names no measurement/);
-  await expect(hub.ask({ text: "x?", rule: "$x = 1 RETURN 1 AS answer UNION MATCH (n) RETURN true", probe: ok })).rejects.toThrow(/RETURN is not part of one/);
+  await expect(hub.ask({ text: "x?", rule: "$x = 1 RETURN 1 AS answer UNION MATCH (n) RETURN true", probe: ok })).rejects.toThrow(/not a Cypher expression/);
   await expect(hub.ask({ text: "x?", rule: "$x <", probe: ok })).rejects.toThrow(/not a Cypher expression/);
   await expect(hub.ask({ text: "x?", rule: "$x = 1", probe: "# /// script\n# ///\nprint(1)" })).rejects.toThrow(/never prints WITNESS_RESULT/);
   await expect(hub.ask({ text: "x?", rule: "$x = 1", probe: ok, inputs: ["../etc/passwd"] })).rejects.toThrow(/outside/);

@@ -60,8 +60,8 @@ export class Hub {
   private wakers = new Set<() => void>();
   private timer: Timer | undefined;
   private shown = "";
-  /** An empty store in memory, where rules are evaluated. A rule never sees the graph. */
-  private judge = Relate.open(":memory:");
+  /** An empty store in memory that refuses writes, where rules are evaluated. A rule never sees or changes the graph. */
+  private judge = Relate.open(":memory:", { readOnly: true });
 
   private constructor(
     readonly root: string,

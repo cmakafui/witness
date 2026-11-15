@@ -103,15 +103,12 @@ export function answerParams(statuses: Status[], goals: Goal[] = []): Record<Sta
   };
 }
 
-/** Words that make a rule more than an expression. A rule only computes a value from the measurements. */
-const NOT_IN_A_RULE = /\b(MATCH|CREATE|MERGE|SET|DELETE|DETACH|REMOVE|CALL|LOAD|UNION|FOREACH|USE|WITH|RETURN|UNWIND)\b/i;
-
-/** Why a rule cannot be a rule, or null when it can. The engine checks its syntax. */
+/**
+ * Why a rule cannot be a rule, or null when it can. The engine checks its syntax. A rule only computes a value from
+ * the measurements: it is evaluated on an empty store that refuses writes, so it has nothing to read or change.
+ */
 export function ruleProblem(rule: string): string | null {
   if (!rule.trim()) return "The question has no rule. Write it before anything runs: a Cypher expression over the measurements, such as $p < 0.01 AND $gain >= 0.1.";
-  if (rule.includes(";")) return "A rule is one expression, without ;.";
-  const word = NOT_IN_A_RULE.exec(rule.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, "''").replace(/\$\w+/g, "$m"));
-  if (word) return `A rule is one expression over the measurements, and ${word[1]} is not part of one. Write it like $p < 0.01 AND $gain >= 0.1.`;
   if (!/\$[A-Za-z_]\w*/.test(rule)) return "The rule names no measurement. Name each one with $: $total > 10 is yes when the run printed a total above 10.";
   return null;
 }

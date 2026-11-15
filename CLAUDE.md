@@ -26,7 +26,7 @@ Use Bun for dependency installation, scripts, tests and builds. Bundle the page 
 
 ## Code
 
-- `src/hub.ts`: the only writer. It evaluates each rule with Relate on an empty in-memory store, writes a run once when it ends, works out each answer from the runs and the inputs now, and reruns what changed or was explicitly requested. It keeps the questions, runs and saved files in memory and adds each record as it writes it, so working out answers reads no store.
+- `src/hub.ts`: the only writer. It evaluates each rule with Relate on an empty, read-only in-memory store, writes a run once when it ends, works out each answer from the runs and the inputs now, and reruns what changed or was explicitly requested. It keeps the questions, runs and saved files in memory and adds each record as it writes it, so working out answers reads no store.
 - `src/probe.ts`: runs one probe with uv in a folder that holds only its declared inputs.
 - Probes use one asynchronous `uv run --script`. Keep structured measurements and a bounded diagnostic tail for failures. Archive only declared inputs and saved outputs.
 - `src/graph.ts`: the four node types (Goal, Question, Run, File) and the Cypher that writes them, and what a rule may be. The hub (ffi) and the page (WASM) both use it.
