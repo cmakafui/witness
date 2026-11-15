@@ -107,22 +107,25 @@ test("the page shows a new question and its answer live, from its own Relate cop
   await read("new Promise(requestAnimationFrame)");
   expect(await read("window.keptProbe === document.querySelector('#question details.probe') && window.keptProbe.open && window.keptPanel === document.querySelector('#question h2')")).toBe(true);
 
-  // A burst can rebuild the lane SVG at most once per frame.
+  // A render changes only what differs: records that add nothing leave the lane SVG untouched.
   await read(`(() => {
-    window.displayFrame = 0; window.svgUpdates = {}; window.sampleDisplay = true;
-    const tick = () => { window.displayFrame++; if (window.sampleDisplay) requestAnimationFrame(tick); };
-    requestAnimationFrame(tick);
-    window.svgObserver = new MutationObserver(records => {
-      window.svgUpdates[window.displayFrame] = (window.svgUpdates[window.displayFrame] || 0) + records.length;
-    });
-    window.svgObserver.observe(document.querySelector('.lanes svg'), {childList:true});
+    window.svgChanges = 0;
+    window.keptGlyph = document.querySelector('[data-id=${JSON.stringify(a.id)}]');
+    window.svgObserver = new MutationObserver(records => { window.svgChanges += records.length; });
+    window.svgObserver.observe(document.querySelector('.lanes svg'), {childList: true, attributes: true, subtree: true});
   })()`);
   for (let i = 0; i < 32; i++) server.publish("feed", JSON.stringify({ type: "graph", nodes: [], rels: [] }));
-  await until("Object.keys(window.svgUpdates).length > 0", true);
+  await Bun.sleep(200);
   await read("new Promise(requestAnimationFrame)");
-  expect(await read("Math.max(...Object.values(window.svgUpdates))")).toBe(1);
+  expect(await read("window.svgChanges")).toBe(0);
   expect(await read("window.keptProbe === document.querySelector('#question details.probe')")).toBe(true);
-  await read("(() => { window.sampleDisplay = false; window.svgObserver.disconnect(); })()");
+
+  // A new question adds its own glyph and keeps the others: the selected one stays the same element, still ringed.
+  const added = json(await client.callTool({ name: "ask", arguments: { text: "Is the total above 5?", rule: "$total > 5", probe: PROBE, inputs: ["data.txt"] } }));
+  await until(`document.querySelector('[data-id=${JSON.stringify(added.id)}]')?.dataset.shape`, "yes");
+  expect(await read(`window.keptGlyph === document.querySelector('[data-id=${JSON.stringify(a.id)}]') && !!window.keptGlyph.querySelector('.ring.selected')`)).toBe(true);
+  expect(await read("document.querySelectorAll('.lanes svg .q').length === window.witness.questions()")).toBe(true);
+  await read("window.svgObserver.disconnect()");
 
   // Linked work changes the selected panel even though its own answer is unchanged.
   const consumer = json(await client.callTool({ name: "ask", arguments: {

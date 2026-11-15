@@ -8,6 +8,9 @@
 //
 // A probe only measures. When a run ends, Relate evaluates the question's rule, a Cypher expression, on the run's
 // measurements: true is yes, false is no, and anything else is failed. Then the hub writes the run, once.
+//
+// The hub is the only writer, and a record never changes. So it keeps the questions, the runs and the files they
+// saved in memory, and adds each new record as it writes it. Working out the answers reads no store.
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, normalize, sep } from "node:path";
 import { answerParams, clauses, type GNode, type GRel, type Goal, type GoalStatus, GOALS, goalStatuses, measurements, ruleProblem, ruleStatement, type State, type Status, statements } from "./graph.ts";
@@ -41,11 +44,16 @@ export type Event =
   | { type: "states"; states: Status[] };
 
 type Question = { id: string; rule: string; probe: string; inputs: string[]; timeout: number };
-type Run = { id: string; question: string; key: string; answer: "yes" | "no" | "failed"; reason: string | null; measured: boolean | null };
+type Run = { id: string; key: string; answer: "yes" | "no" | "failed"; reason: string | null; measured: boolean | null };
+type Saved = { name: string; file: string };
 type Input = { name: string; file: string; path: string };
 type Resolved = { status: Status; question: Question; key: string | null; inputs: Input[] };
 
 export class Hub {
+  private byId = new Map<string, Question>(); // every question, in the order asked
+  private runsOf = new Map<string, Run[]>(); // question -> its runs, in the order they ended
+  private measured = new Set<string>(); // the runs whose probe measured
+  private savedBy = new Map<string, Saved[]>(); // run -> the files it saved
   private running = new Map<string, string>(); // question -> its run in progress
   private reruns = new Set<string>(); // explicit requests awaiting inputs or a worker slot
   private hashes = new Map<string, { stamp: string; sha: string }>();
@@ -76,6 +84,8 @@ export class Hub {
     if (fresh) await applySchema(db);
     const [row] = db.query("MATCH (n) WHERE n.seq IS NOT NULL RETURN max(n.seq) AS seq");
     const hub = new Hub(root, db, graphDir, filesDir, Number(row?.seq ?? 0), jobs);
+    const { nodes, rels } = snapshot(db);
+    hub.remember(nodes.sort((a, b) => Number(a.props.seq ?? 0) - Number(b.props.seq ?? 0)), rels);
     if (pollMs > 0) {
       hub.timer = setInterval(() => hub.check(), pollMs);
       hub.timer.unref();
@@ -106,7 +116,26 @@ export class Hub {
     this.db.transaction(() => {
       for (const s of statements(nodes, rels)) this.db.query(s.cypher, s.params as Record<string, Param>);
     });
+    this.remember(nodes, rels);
     this.emit({ type: "graph", nodes, rels });
+  }
+
+  /** Adds written records to the hub's memory of the store. Records arrive in the order of their seq. */
+  private remember(nodes: GNode[], rels: GRel[]) {
+    const add = <T>(map: Map<string, T[]>, key: string, value: T) => void (map.get(key)?.push(value) ?? map.set(key, [value]));
+    const of = new Map(rels.filter((r) => r.type === "OF").map((r) => [r.from, r.to]));
+    for (const n of nodes) {
+      const p = n.props;
+      if (n.label === "Question" && !this.byId.has(n.id))
+        this.byId.set(n.id, { id: n.id, rule: String(p.rule), probe: String(p.probe), inputs: p.inputs as string[], timeout: Number(p.timeout) });
+      if (n.label === "Run") {
+        const run: Run = { id: n.id, key: String(p.key), answer: p.answer as Run["answer"], reason: (p.reason as string | null) ?? null, measured: (p.measured as boolean | null) ?? null };
+        add(this.runsOf, of.get(n.id)!, run);
+        if (run.measured) this.measured.add(run.id);
+      }
+    }
+    for (const r of rels)
+      if (r.type === "SAVED") add(this.savedBy, r.from, { name: r.name!, file: r.to });
   }
 
   /** Keeps a file's content in .witness/files, named by its hash, and returns its File record. */
@@ -117,20 +146,8 @@ export class Hub {
     return { label: "File", id, props: { bytes: content.byteLength } };
   }
 
-  private questions(): Question[] {
-    return this.db.query(
-      "MATCH (q:Question) RETURN q.id AS id, q.rule AS rule, q.probe AS probe, q.inputs AS inputs, q.timeout AS timeout ORDER BY q.seq",
-    ) as Question[];
-  }
-
-  private runs(): Run[] {
-    return this.db.query(
-      "MATCH (r:Run)-[:OF]->(q:Question) RETURN r.id AS id, q.id AS question, r.key AS key, r.answer AS answer, r.reason AS reason, r.measured AS measured ORDER BY r.seq",
-    ) as Run[];
-  }
-
-  private saved(run: string): { name: string; file: string }[] {
-    return this.db.query("MATCH (:Run {id: $run})-[s:SAVED]->(f:File) RETURN s.name AS name, f.id AS file", { run }) as never;
+  private saved(run: string): Saved[] {
+    return this.savedBy.get(run) ?? [];
   }
 
   /** The hash of a workspace file now, or null when it is missing. Cached by size and time of change. */
@@ -154,12 +171,8 @@ export class Hub {
 
   /** Every question with its answer now. */
   private resolve(): Resolved[] {
-    const questions = this.questions();
-    const byId = new Map(questions.map((q) => [q.id, q]));
-    const allRuns = this.runs();
-    const runs = Map.groupBy(allRuns, (r) => r.question);
     // A run's files can be read when its probe measured, whatever its rule said. A crash may leave half a file.
-    const measured = new Set(allRuns.filter((r) => r.measured).map((r) => r.id));
+    const { byId, runsOf: runs, measured } = this;
     const memo = new Map<string, Resolved>();
 
     const compute = (q: Question): Resolved => {
@@ -198,7 +211,7 @@ export class Hub {
       if (onKey) return done({ question: q, key, inputs, status: status(onKey.answer, { run: onKey.id, reason: onKey.reason }) });
       return done({ question: q, key, inputs, status: status("pending", { was: before ?? null }) });
     };
-    return questions.map(compute);
+    return [...byId.values()].map(compute);
   }
 
   /** Every question's answer now. */
@@ -215,11 +228,12 @@ export class Hub {
   /** Starts the pending questions, oldest first, while fewer than `jobs` run. Tells listeners when states change. */
   check(): Status[] {
     const all = this.resolve();
+    let started = false;
     for (const r of all) {
       if (this.running.size >= this.jobs) break;
-      if (r.status.state === "pending" && r.key) this.start(r);
+      if (r.status.state === "pending" && r.key) (this.start(r), (started = true));
     }
-    const statuses = this.running.size ? this.statuses() : all.map((r) => r.status);
+    const statuses = started ? this.statuses() : all.map((r) => r.status);
     const shown = JSON.stringify(statuses);
     if (shown !== this.shown) {
       this.shown = shown;
@@ -359,7 +373,7 @@ export class Hub {
       if (a.accepts && g.acceptance && g.acceptance !== id)
         throw new Refusal(`${goal} already has acceptance question ${g.acceptance}. Its contract cannot change. Create a new goal.`);
     }
-    if (!this.db.query("MATCH (q:Question {id: $id}) RETURN q.id AS id", { id }).length) {
+    if (!this.byId.has(id)) {
       const needs = [...new Set(inputs.flatMap((i) => OUTPUT_REF.exec(i)?.[1] ?? []))];
       this.write(
         [
@@ -418,11 +432,10 @@ export class Hub {
     if (deps) throw new Refusal(deps);
     if (!a.probe.includes(RESULT))
       throw new Refusal(`The probe never prints ${RESULT}. Print each measurement as a JSON object: print("${RESULT}", json.dumps({"total": total})).`);
-    const known = new Set(this.questions().map((q) => q.id));
     for (const name of inputs) {
       const ref = OUTPUT_REF.exec(name);
       if (ref) {
-        if (!known.has(ref[1]!)) throw new Refusal(`Input ${name} names question ${ref[1]}, which does not exist.`);
+        if (!this.byId.has(ref[1]!)) throw new Refusal(`Input ${name} names question ${ref[1]}, which does not exist.`);
         continue;
       }
       const clean = normalize(name);

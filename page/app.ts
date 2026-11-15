@@ -5,6 +5,9 @@
 // The lanes show how the agents got here: one row per direction of work, compact glyphs packed left-to-right by
 // causal and lane order, with a steady top preview strip on hover. The rule check on the right shows why an answer
 // stands: each part of the rule, the measurements it names, and whether it held. DESIGN.md gives the tokens.
+//
+// The layout only grows, like the record: a new question never moves an older one. So the page keeps every drawn
+// glyph and link, and a render changes only the attributes that differ.
 import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
 import { answerParams, clauses, type Goal, GOALS, type GNode, type GRel, measurements, named, type State, type Status, statements } from "../src/graph.ts";
@@ -41,6 +44,9 @@ const cypher = (query: string, params: Record<string, unknown> = {}) => result(q
 
 const nodes = new Map<string, QNode>();
 const links: QLink[] = [];
+/** Each question's dependencies, and the questions not placed in a lane yet. */
+const needs = new Map<string, string[]>();
+const unplaced: QNode[] = [];
 let statuses = new Map<string, Status>();
 let selected: string | null = null;
 let hovered: string | null = null;
@@ -53,20 +59,24 @@ const questionHistory: QuestionVisit[] = [];
 const linkId = (l: QLink) => `${l.source}:${l.target}`;
 const stateOf = (q: string): State => statuses.get(q)?.state ?? "waiting";
 const colour = (s: State) => `var(--${s === "pending" ? "running" : s})`;
-const goals = () => cypher(GOALS) as Goal[];
+/** The goals and their acceptance questions, read again when a goal or a binding arrives. */
+let goalList: Goal[] = [];
+let accepted = new Set<string>();
+const goals = () => goalList;
+function readGoals() {
+  goalList = cypher(GOALS) as Goal[];
+  accepted = new Set(goalList.flatMap((g) => (g.acceptance ? [g.acceptance] : [])));
+}
 
 /** All upstream artifact dependencies, including shared inputs from other goals. */
-function upstream(roots: string[]): Neighborhood {
-  const found = new Set(roots), followed = new Set<string>();
-  let frontier = roots;
-  while (frontier.length) {
-    const next: string[] = [];
-    for (const l of links) if (frontier.includes(l.source)) {
-      followed.add(linkId(l));
-      if (!found.has(l.target)) { found.add(l.target); next.push(l.target); }
+function upstream(root: string): Neighborhood {
+  const found = new Set([root]), followed = new Set<string>();
+  const todo = [root];
+  for (let source; (source = todo.pop()); )
+    for (const target of needs.get(source) ?? []) {
+      followed.add(linkId({ source, target }));
+      if (!found.has(target)) { found.add(target); todo.push(target); }
     }
-    frontier = next;
-  }
   return { nodes: found, links: followed };
 }
 
@@ -123,7 +133,20 @@ const evidenceBack = document.getElementById("evidence-back") as HTMLButtonEleme
 const names = h("div", { class: "lane-names", "aria-hidden": "true" });
 const scroller = h("div", { class: "lanes" });
 const svg = s("svg", { role: "group", "aria-label": "Questions by direction of work" }) as SVGSVGElement;
+const railLayer = s("g"), linkLayer = s("g"), glyphLayer = s("g");
+svg.append(railLayer, linkLayer, glyphLayer);
 scroller.append(svg);
+/** What is drawn now, and where each question was placed: lane index and column. Both only grow. */
+const glyphEls = new Map<string, SVGElement>();
+const linkEls = new Map<string, SVGElement>();
+const slot = new Map<string, { lane: number; col: number }>();
+const lanes: string[] = [];
+const laneEnd: number[] = [];
+let maxCol = 0;
+/** Sets an attribute only when its value differs, so an unchanged element is not touched. */
+const put = (e: Element, name: string, value: string | number) => {
+  if (e.getAttribute(name) !== String(value)) e.setAttribute(name, String(value));
+};
 const empty = h("p", { class: "empty" }, "No questions yet.");
 
 const TOP = 20;
@@ -146,7 +169,7 @@ function renderHover() {
   }
   const q = nodes.get(activeId)!;
   const st = stateOf(activeId);
-  const accepts = goals().some((g) => g.acceptance === activeId);
+  const accepts = accepted.has(activeId);
   hoverBar.replaceChildren(
     mark(st, 12, accepts),
     h("span", { class: "hover-state", style: `--c: ${colour(st)}` }, st),
@@ -155,15 +178,33 @@ function renderHover() {
   );
 }
 
-/** Updates hover state without rebuilding the lane SVG, so clicks and frame observers stay clean. */
+/** Updates hover state without a render. */
 function setHovered(id: string | null) {
   if (hovered === id) return;
-  if (hovered) svg.querySelector(`[data-id="${hovered}"] .hover-ring`)?.setAttribute("opacity", "0");
+  if (hovered) glyphEls.get(hovered)?.querySelector(".hover-ring")?.setAttribute("opacity", "0");
   hovered = id;
-  if (hovered && hovered !== selected) svg.querySelector(`[data-id="${hovered}"] .hover-ring`)?.setAttribute("opacity", "1");
+  if (hovered && hovered !== selected) glyphEls.get(hovered)?.querySelector(".hover-ring")?.setAttribute("opacity", "1");
   renderHover();
 }
+
+// One set of listeners serves every glyph. pointerenter does not bubble, so it is caught on the way down.
+const idAt = (e: Event) => (e.target as Element).closest<SVGElement>("[data-id]")?.dataset.id;
+svg.addEventListener("pointerenter", (e) => { const id = idAt(e); if (id) setHovered(id); }, true);
 svg.addEventListener("pointerleave", () => setHovered(null));
+svg.addEventListener("focusin", (e) => { const id = idAt(e); if (id) setHovered(id); });
+svg.addEventListener("focusout", (e) => { if (hovered === idAt(e)) setHovered(null); });
+svg.addEventListener("click", (e) => { const id = idAt(e); if (id) select(id); });
+svg.addEventListener("keydown", (e) => {
+  const id = idAt(e);
+  if (!id) return;
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    select(id);
+  } else if (e.key.startsWith("Arrow")) {
+    e.preventDefault();
+    focusNeighbor(id, e.key);
+  }
+});
 
 function focusNeighbor(fromId: string, key: string) {
   const cur = place.get(fromId);
@@ -183,106 +224,98 @@ function focusNeighbor(fromId: string, key: string) {
       .sort((a, b) => Math.abs(a[1].x - cur.x) - Math.abs(b[1].x - cur.x));
     target = adj[0]?.[0];
   }
-  if (target) (svg.querySelector(`[data-id="${target}"]`) as HTMLElement | null)?.focus();
+  if (target) glyphEls.get(target)?.focus();
+}
+
+/** Places a new question: the next free column of its lane, after every question it reads. */
+function assign(q: QNode) {
+  const name = laneOf(q.asker);
+  let lane = lanes.indexOf(name);
+  if (lane < 0) {
+    lane = lanes.push(name) - 1;
+    laneEnd.push(-1);
+    names.append(h("div", { title: name }, name));
+  }
+  const col = Math.max(laneEnd[lane]! + 1, ...(needs.get(q.id) ?? []).map((d) => (slot.get(d)?.col ?? -1) + 1));
+  laneEnd[lane] = col;
+  maxCol = Math.max(maxCol, col);
+  slot.set(q.id, { lane, col });
 }
 
 function render() {
-  const questions = [...nodes.values()].sort((a, b) => a.seq - b.seq);
   renderHover();
-  if (!questions.length) {
+  if (!nodes.size) {
     el.replaceChildren(empty);
     return;
   }
   if (!scroller.isConnected) el.replaceChildren(names, scroller);
-  const lanes = [...new Set(questions.map((q) => laneOf(q.asker)))];
+  // Pack parallel work into shared columns while keeping each lane chronological and every dependency left-to-right.
+  for (const q of unplaced.sort((a, b) => a.seq - b.seq)) assign(q);
+  unplaced.length = 0;
   const lane = Math.round(Math.max(48, Math.min(72, (el.clientHeight - TOP - 20) / lanes.length)));
   el.style.setProperty("--lane", `${lane}px`);
-  const height = TOP + lane * lanes.length + 20;
-
-  // Pack parallel work into shared columns while keeping each lane chronological and every dependency left-to-right.
-  place.clear();
-  const colOf = new Map<string, number>();
-  const laneEnd = new Map<string, number>();
-  let maxCol = 0;
-  for (const q of questions) {
-    const name = laneOf(q.asker);
-    const laneIdx = lanes.indexOf(name);
-    const deps = links.filter((l) => l.source === q.id).map((l) => (colOf.get(l.target) ?? -1) + 1);
-    const col = Math.max((laneEnd.get(name) ?? -1) + 1, ...deps, 0);
-    colOf.set(q.id, col);
-    laneEnd.set(name, col);
-    if (col > maxCol) maxCol = col;
-    place.set(q.id, { x: PAD + col * STEP, y: TOP + lane * (laneIdx + 0.5), lane: laneIdx });
-  }
   const width = Math.max(scroller.clientWidth, PAD * 2 + maxCol * STEP);
-  const highlight = selected ? upstream([selected]) : null;
-  const acceptedIds = new Set(goals().flatMap((g) => (g.acceptance ? [g.acceptance] : [])));
+  const highlight = selected ? upstream(selected) : null;
+  put(svg, "width", width);
+  put(svg, "height", TOP + lane * lanes.length + 20);
 
-  names.replaceChildren(...lanes.map((name) => h("div", { title: name }, name)));
-  svg.setAttribute("width", String(width));
-  svg.setAttribute("height", String(height));
-  const rails = lanes.map((_, i) => s("line", { class: "rail", x1: 0, x2: width, y1: TOP + lane * (i + 0.5), y2: TOP + lane * (i + 0.5) }));
-  const paths = links.flatMap((l) => {
+  lanes.forEach((_, i) => {
+    const rail = railLayer.children[i] ?? railLayer.appendChild(s("line", { class: "rail", x1: 0 }));
+    const y = TOP + lane * (i + 0.5);
+    put(rail, "x2", width);
+    put(rail, "y1", y);
+    put(rail, "y2", y);
+  });
+
+  for (const [id, at] of slot) {
+    const q = nodes.get(id)!;
+    const p = { x: PAD + at.col * STEP, y: TOP + lane * (at.lane + 0.5), lane: at.lane };
+    place.set(id, p);
+    let g = glyphEls.get(id);
+    if (!g) {
+      g = s(
+        "g",
+        { tabindex: 0, role: "button", "data-id": id },
+        s("title", {}, document.createTextNode(q.text)),
+        s("circle", { class: "hit", r: 18 }),
+        s("circle", { class: "ring hover hover-ring", r: 16.5 }),
+        s("g"),
+        s("circle", { class: "ring", r: 16.5 }),
+      );
+      glyphEls.set(id, g);
+      glyphLayer.append(g);
+    }
+    const [, , hoverRing, body, ring] = g.children as unknown as SVGElement[];
+    const state = stateOf(id);
+    const accepts = accepted.has(id);
+    put(g, "transform", `translate(${p.x} ${p.y})`);
+    put(g, "class", `q${accepts ? " accepts" : ""}${highlight && !highlight.nodes.has(id) ? " dim" : ""}`);
+    put(g, "aria-label", `${state}${accepts ? " (acceptance)" : ""}: ${q.text}`);
+    put(hoverRing!, "opacity", hovered === id && selected !== id ? 1 : 0);
+    put(ring!, "class", `ring${id === selected ? " selected" : marked.has(id) ? " marked" : ""}`);
+    // The glyph itself changes only with the answer or the acceptance binding.
+    const shape = `${state}${accepts ? " accepts" : ""}`;
+    if (g.dataset.shape !== shape) {
+      g.dataset.shape = shape;
+      body!.replaceChildren(...(accepts ? [s("circle", { class: "accept-ring", r: 12.5, style: `--c: ${colour(state)}` }), glyph(state, 6.5)] : [glyph(state, 8.5)]));
+    }
+  }
+
+  for (const l of links) {
     // Evidence flows forward: from the question that saved a file to the one that reads it.
     const [from, to] = [place.get(l.target), place.get(l.source)];
-    if (!from || !to) return [];
-    const lit = highlight?.links.has(linkId(l));
-    const files = nodes.get(l.source)!.inputs.filter((i) => i.startsWith(`${l.target}/`)).map((i) => i.slice(l.target.length + 1));
-    return [
-      s(
-        "path",
-        {
-          d: curve(from, to, lane),
-          class: `link needs${highlight ? (lit ? " lit" : " dim") : ""}`,
-        },
-        files.length ? s("title", {}, document.createTextNode(files.join(", "))) : null,
-      ),
-    ];
-  });
-  const glyphs = questions.map((q) => {
-    const p = place.get(q.id)!;
-    const state = stateOf(q.id);
-    const isAccepts = acceptedIds.has(q.id);
-    const g = s(
-      "g",
-      {
-        class: `q${isAccepts ? " accepts" : ""}${highlight && !highlight.nodes.has(q.id) && q.id !== selected ? " dim" : ""}`,
-        transform: `translate(${p.x} ${p.y})`,
-        tabindex: 0,
-        role: "button",
-        "aria-label": `${state}${isAccepts ? " (acceptance)" : ""}: ${q.text}`,
-        "data-id": q.id,
-        ...(isAccepts ? { "data-accepts": "true" } : {}),
-      },
-      s("title", {}, document.createTextNode(q.text)),
-      s("circle", { class: "hit", r: 18 }),
-      s("circle", { class: "ring hover hover-ring", r: 16.5, opacity: hovered === q.id && selected !== q.id ? 1 : 0 }),
-    );
-    if (isAccepts) {
-      g.append(s("circle", { class: "accept-ring", r: 12.5, style: `--c: ${colour(state)}` }));
-      g.append(glyph(state, 6.5));
-    } else {
-      g.append(glyph(state, 8.5));
+    if (!from || !to) continue;
+    const id = linkId(l);
+    let path = linkEls.get(id);
+    if (!path) {
+      const files = nodes.get(l.source)!.inputs.filter((i) => i.startsWith(`${l.target}/`)).map((i) => i.slice(l.target.length + 1));
+      path = s("path", {}, files.length ? s("title", {}, document.createTextNode(files.join(", "))) : null);
+      linkEls.set(id, path);
+      linkLayer.append(path);
     }
-    if (q.id === selected) g.append(s("circle", { class: "ring selected", r: 16.5 }));
-    else if (marked.has(q.id)) g.append(s("circle", { class: "ring marked", r: 16.5 }));
-    g.addEventListener("pointerenter", () => setHovered(q.id));
-    g.addEventListener("focus", () => setHovered(q.id));
-    g.addEventListener("blur", () => { if (hovered === q.id) setHovered(null); });
-    g.addEventListener("click", () => select(q.id));
-    g.addEventListener("keydown", (e) => {
-      const key = (e as KeyboardEvent).key;
-      if (key === "Enter" || key === " ") {
-        e.preventDefault();
-        select(q.id);
-      } else if (key.startsWith("Arrow")) {
-        e.preventDefault();
-        focusNeighbor(q.id, key);
-      }
-    });
-    return g;
-  });
-  svg.replaceChildren(s("g", {}, ...rails), s("g", {}, ...paths), s("g", {}, ...glyphs));
+    put(path, "d", curve(from, to, lane));
+    put(path, "class", `link needs${highlight ? (highlight.links.has(id) ? " lit" : " dim") : ""}`);
+  }
 }
 
 /** An artifact dependency. Within one lane it arcs above the questions between. */
@@ -365,17 +398,23 @@ function apply(m: Msg) {
   let evidence = false;
   if (m.type === "graph") {
     for (const st of statements(m.nodes, m.rels)) cypher(st.cypher, st.params);
+    if (m.nodes.some((n) => n.label === "Goal") || m.rels.some((r) => r.type === "ACCEPTED_BY")) readGoals();
     evidence = selected !== null && m.rels.some((r) =>
       (r.type === "OF" && r.to === selected) ||
       (r.type === "FOR" && r.from === selected) ||
       (r.type === "ACCEPTED_BY" && r.to === selected) ||
       (r.type === "NEEDS" && (r.from === selected || r.to === selected)));
     for (const n of m.nodes)
-      if (n.label === "Question" && !nodes.has(n.id))
-        nodes.set(n.id, { id: n.id, text: String(n.props.text), asker: (n.props.asker as string) ?? null, seq: Number(n.props.seq), inputs: n.props.inputs as string[] });
+      if (n.label === "Question" && !nodes.has(n.id)) {
+        const q = { id: n.id, text: String(n.props.text), asker: (n.props.asker as string) ?? null, seq: Number(n.props.seq), inputs: n.props.inputs as string[] };
+        nodes.set(n.id, q);
+        unplaced.push(q);
+      }
     for (const r of m.rels)
-      if (r.type === "NEEDS" && !links.some((l) => l.source === r.from && l.target === r.to))
+      if (r.type === "NEEDS" && !needs.get(r.from)?.includes(r.to)) {
         links.push({ source: r.from, target: r.to });
+        needs.set(r.from, [...(needs.get(r.from) ?? []), r.to]);
+      }
   } else if (m.type === "states") {
     const next = new Map(m.states.map((x) => [x.id, x]));
     evidence = [...panelQuestions()].some((id) => JSON.stringify(statuses.get(id)) !== JSON.stringify(next.get(id)));
@@ -461,7 +500,7 @@ function badge(st: Status | undefined) {
 
 /** An id in a table: clickable, with its answer's glyph. */
 function ref(q: string) {
-  const accepts = goals().some((g) => g.acceptance === q);
+  const accepts = accepted.has(q);
   const a = h("span", { class: "ref id" }, mark(stateOf(q), 10, accepts), q);
   a.onclick = () => select(q);
   return a;
@@ -469,7 +508,7 @@ function ref(q: string) {
 
 /** Another question, by its text. */
 function chip(q: string) {
-  const accepts = goals().some((g) => g.acceptance === q);
+  const accepts = accepted.has(q);
   const b = h("button", { type: "button", class: "chip", title: q }, mark(stateOf(q), 12, accepts), h("span", {}, nodes.get(q)?.text ?? q));
   b.onclick = () => select(q);
   return b;
