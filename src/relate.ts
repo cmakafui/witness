@@ -131,7 +131,7 @@ export type Param = null | boolean | number | string | Param[] | { [k: string]: 
 
 /** Puts one value into a builder. A map takes a name; a list takes null and appends. */
 function put(builder: Ptr, name: string | null, v: Param, err: BigUint64Array): number {
-  const key = name === null ? null : ptr(text(name));
+  const key = name === null ? null : text(name);
   if (v === null || v === undefined) return c.relate_params_put_null(builder, key, ptr(err));
   if (typeof v === "boolean") return c.relate_params_put_bool(builder, key, v ? 1 : 0, ptr(err));
   if (typeof v === "number")

@@ -77,13 +77,20 @@ h1 { font-size: 17px; font-weight: 700; margin: 0; }
 .button:hover { border-color: var(--muted); }
 .button.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); min-width: 88px; }
 
-/* Choose the work; inspect its acceptance test in Evidence. */
+/* Choose the work; inspect its acceptance test in Evidence; scrub recorded order by seq. */
 #goal-picker {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   padding: 8px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
-#goal { display: block; width: min(640px, 100%); }
+#goal { flex: 1; max-width: 640px; }
+#seq-bar { display: flex; align-items: center; gap: 8px; margin-left: auto; color: var(--muted); }
+#seq-bar[hidden] { display: none; }
+#seq { width: 140px; accent-color: var(--ink); cursor: pointer; margin: 0; }
+#seq-value { min-width: 6ch; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 main {
   grid-row: 3;

@@ -194,6 +194,29 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     expect(await lit()).toEqual([ids.c]);
     await view.evaluate("document.getElementById('evidence-back').click()");
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the saved total above 100?");
+
+    // The seq slider steps through recorded history: earlier runs, pending states, hidden future questions, and queries at that seq.
+    expect(await view.evaluate("[document.getElementById('seq-bar').hidden, document.getElementById('seq').max, document.getElementById('seq-value').textContent]"))
+      .toEqual([false, "12", "seq 12"]);
+    await choose(ids.complete!);
+    expect(await view.evaluate("document.querySelector('#question details.runs-disclosure summary').textContent")).toBe("2 runs");
+    // At seq 4, question a was asked but its first run (seq 5) had not finished yet.
+    await view.evaluate("(() => { const s = document.getElementById('seq'); s.value = '4'; s.dispatchEvent(new Event('input')); })()");
+    expect(await view.evaluate("[document.getElementById('seq-value').textContent, window.witness.state(" + JSON.stringify(ids.a) + "), document.querySelector('#question .badge').textContent, document.querySelector('#question .clause .mark').textContent]"))
+      .toEqual(["seq 4 / 12", "pending", "pending", "not run yet"]);
+    expect(await view.evaluate("[...document.querySelectorAll('.q')].filter(q => q.getAttribute('display') !== 'none').map(q => q.dataset.id)")).toEqual([ids.a]);
+    // At seq 5, the first run finished (oldRun); the rerun at seq 6 has not happened yet.
+    await view.evaluate("window.witness.setSeq(5)");
+    expect(await view.evaluate("[window.witness.state(" + JSON.stringify(ids.a) + "), document.querySelector('#question details.runs-disclosure summary').textContent]"))
+      .toEqual(["yes", "1 run"]);
+    expect(await call("query", { cypher: "MATCH (r:Run) WHERE r.id IN $current RETURN r.id AS run" }))
+      .toEqual({ columns: ["run"], rows: [{ run: ids.oldRun }], truncated: false });
+    // Dragging back to maxSeq restores the latest run and all questions.
+    await view.evaluate("window.witness.setSeq(null)");
+    expect(await view.evaluate("[document.getElementById('seq-value').textContent, document.querySelector('#question details.runs-disclosure summary').textContent]"))
+      .toEqual(["seq 12", "2 runs"]);
+    expect(await call("query", { cypher: "MATCH (r:Run) WHERE r.id IN $current AND r.id = '" + ids.latestRun + "' RETURN r.id AS run" }))
+      .toEqual({ columns: ["run"], rows: [{ run: ids.latestRun }], truncated: false });
   } finally {
     server.stop(true);
   }

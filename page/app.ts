@@ -18,6 +18,7 @@ type Msg =
   | { type: "states"; states: Status[] };
 
 type QNode = { id: string; text: string; asker: string | null; seq: number; inputs: string[] };
+type QRun = { id: string; seq: number; answer: "yes" | "no" | "failed"; reason: string | null };
 type QLink = { source: string; target: string };
 type Row = Record<string, unknown>;
 
@@ -42,7 +43,15 @@ for (const index of UNIQUE_IDS) cypher(index);
 function scratch(): RelateDb {
   const copy = new RelateDb();
   for (const index of UNIQUE_IDS) execute(index, {}, copy);
-  for (const st of statements(cypher(ALL_NODES) as GNode[], cypher(ALL_RELS) as GRel[])) execute(st.cypher, st.params, copy);
+  let allNodes = cypher(ALL_NODES) as GNode[];
+  let allRels = cypher(ALL_RELS) as GRel[];
+  if (atSeq !== null) {
+    const kept = new Set(allNodes.filter((n) => n.label !== "File" && Number(n.props.seq ?? 0) <= atSeq!).map((n) => n.id));
+    for (const r of allRels) if ((r.type === "READ" || r.type === "SAVED") && kept.has(r.from)) kept.add(r.to);
+    allNodes = allNodes.filter((n) => kept.has(n.id));
+    allRels = allRels.filter((r) => kept.has(r.from) && kept.has(r.to));
+  }
+  for (const st of statements(allNodes, allRels)) execute(st.cypher, st.params, copy);
   return copy;
 }
 
@@ -50,11 +59,15 @@ function scratch(): RelateDb {
 // State
 
 const nodes = new Map<string, QNode>();
+const runsOf = new Map<string, QRun[]>();
+const goalSeq = new Map<string, number>();
 const links: QLink[] = [];
 /** Each question's dependencies, and the questions not placed in a lane yet. */
 const needs = new Map<string, string[]>();
 const unplaced: QNode[] = [];
 let statuses = new Map<string, Status>();
+let maxSeq = 0;
+let atSeq: number | null = null;
 let selected: string | null = null;
 let hovered: string | null = null;
 let selectedGoal = "";
@@ -64,7 +77,17 @@ type Neighborhood = { nodes: Set<string>; links: Set<string> };
 type QuestionVisit = { id: string; scroll: number; lanes: number; probeOpen: boolean; runsOpen: boolean; marked: Set<string> };
 const questionHistory: QuestionVisit[] = [];
 const linkId = (l: QLink) => `${l.source}:${l.target}`;
-const stateOf = (q: string): State => statuses.get(q)?.state ?? "waiting";
+function statusOf(q: string): Status | undefined {
+  if (atSeq === null) return statuses.get(q);
+  const node = nodes.get(q);
+  if (!node || node.seq > atSeq) return undefined;
+  const runs = (runsOf.get(q) ?? []).filter((r) => r.seq <= atSeq!);
+  const last = runs.at(-1);
+  if (last) return { id: q, state: last.answer, run: last.id, was: null, reason: last.reason };
+  const waiting = (needs.get(q) ?? []).some((u) => !(runsOf.get(u) ?? []).some((r) => r.seq <= atSeq!));
+  return { id: q, state: waiting ? "waiting" : "pending", run: null, was: null, reason: null };
+}
+const stateOf = (q: string): State => statusOf(q)?.state ?? "waiting";
 const colour = (s: State) => `var(--${s === "pending" ? "running" : s})`;
 /** The goals and their acceptance questions, read again when a goal or a binding arrives. */
 let goalList: Goal[] = [];
@@ -250,6 +273,7 @@ function assign(q: QNode) {
 }
 
 function render() {
+  renderSeq();
   renderHover();
   if (!nodes.size) {
     el.replaceChildren(empty);
@@ -295,6 +319,8 @@ function render() {
     const [, , hoverRing, body, ring] = g.children as unknown as SVGElement[];
     const state = stateOf(id);
     const accepts = accepted.has(id);
+    if (atSeq !== null && q.seq > atSeq) put(g, "display", "none");
+    else if (g.hasAttribute("display")) g.removeAttribute("display");
     put(g, "transform", `translate(${p.x} ${p.y})`);
     put(g, "class", `q${accepts ? " accepts" : ""}${highlight && !highlight.nodes.has(id) ? " dim" : ""}`);
     put(g, "aria-label", `${state}${accepts ? " (acceptance)" : ""}: ${q.text}`);
@@ -320,6 +346,8 @@ function render() {
       linkEls.set(id, path);
       linkLayer.append(path);
     }
+    if (atSeq !== null && ((nodes.get(l.source)?.seq ?? 0) > atSeq || (nodes.get(l.target)?.seq ?? 0) > atSeq)) put(path, "display", "none");
+    else if (path.hasAttribute("display")) path.removeAttribute("display");
     put(path, "d", curve(from, to, lane));
     put(path, "class", `link needs${highlight ? (highlight.links.has(id) ? " lit" : " dim") : ""}`);
   }
@@ -410,12 +438,28 @@ function apply(m: Msg) {
       (r.type === "OF" && r.to === selected) ||
       (r.type === "ACCEPTED_BY" && r.to === selected) ||
       (r.type === "NEEDS" && (r.from === selected || r.to === selected)));
-    for (const n of m.nodes)
+    const of = new Map(m.rels.filter((r) => r.type === "OF").map((r) => [r.from, r.to]));
+    for (const n of m.nodes) {
+      const seq = Number(n.props.seq ?? 0);
+      if (seq > maxSeq) maxSeq = seq;
+      if (n.label === "Goal") goalSeq.set(n.id, seq);
       if (n.label === "Question" && !nodes.has(n.id)) {
-        const q = { id: n.id, text: String(n.props.text), asker: (n.props.asker as string) ?? null, seq: Number(n.props.seq), inputs: n.props.inputs as string[] };
+        const q = { id: n.id, text: String(n.props.text), asker: (n.props.asker as string) ?? null, seq, inputs: n.props.inputs as string[] };
         nodes.set(n.id, q);
         unplaced.push(q);
       }
+      if (n.label === "Run") {
+        const qid = of.get(n.id);
+        if (qid) {
+          const list = runsOf.get(qid) ?? [];
+          if (!list.some((x) => x.id === n.id)) {
+            list.push({ id: n.id, seq, answer: n.props.answer as QRun["answer"], reason: (n.props.reason as string | null) ?? null });
+            list.sort((a, b) => a.seq - b.seq);
+            runsOf.set(qid, list);
+          }
+        }
+      }
+    }
     for (const r of m.rels)
       if (r.type === "NEEDS" && !needs.get(r.from)?.includes(r.to)) {
         links.push({ source: r.from, target: r.to });
@@ -442,10 +486,32 @@ function connect(delay = 500) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Goals
+// Goals & seq scrubber
 
 const goalSelect = document.getElementById("goal") as HTMLSelectElement;
+const seqBar = document.getElementById("seq-bar")!;
+const seqInput = document.getElementById("seq") as HTMLInputElement;
+const seqValue = document.getElementById("seq-value")!;
 let goalSignature = "";
+
+function renderSeq() {
+  seqBar.hidden = maxSeq <= 1;
+  if (maxSeq <= 1) return;
+  put(seqInput, "max", maxSeq);
+  seqInput.value = String(atSeq ?? maxSeq);
+  seqValue.textContent = atSeq === null ? `seq ${maxSeq}` : `seq ${atSeq} / ${maxSeq}`;
+}
+
+function setSeq(n: number | null) {
+  const next = n === null || n >= maxSeq ? null : Math.max(1, Math.floor(n));
+  if (atSeq === next) return;
+  atSeq = next;
+  renderSeq();
+  if (!querySection.hidden) runQuery();
+  else render();
+  if (selected) showQuestion(selected);
+}
+seqInput.oninput = () => setSeq(Number(seqInput.value));
 
 /** The dropdown names the work; the evidence panel shows its acceptance test. */
 function renderGoals() {
@@ -526,7 +592,7 @@ const IMAGE = /\.(png|jpe?g|gif|svg|webp)$/i;
 function details(qid: string) {
   const [q] = cypher("MATCH (q:Question {id: $selected}) RETURN q.text AS text, q.rule AS rule, q.probe AS probe, q.inputs AS inputs, q.asker AS asker", { selected: qid });
   if (!q) return null;
-  const st = statuses.get(qid);
+  const st = statusOf(qid);
   const [l] = cypher(
     `MATCH (q:Question {id: $selected})
      OPTIONAL MATCH (q)-[:NEEDS]->(n:Question) WITH q, collect(DISTINCT n.id) AS needs
@@ -534,11 +600,12 @@ function details(qid: string) {
      RETURN needs, collect(DISTINCT m.id) AS neededBy`,
     { selected: qid },
   );
-  const runs = cypher(
+  const allRuns = cypher(
     `MATCH (r:Run)-[:OF]->(:Question {id: $selected})
      RETURN r.id AS run, r.seq AS seq, r.answer AS answer, r.reason AS reason, r.results AS results, r.ms AS ms ORDER BY r.seq DESC`,
     { selected: qid },
   );
+  const runs = atSeq === null ? allRuns : allRuns.filter((r) => Number(r.seq) <= atSeq!);
   // Show measurements only from the committed run that gives this answer.
   const shown = runs.find((r) => r.run === st?.run);
   const results: unknown[] = shown ? JSON.parse(String(shown.results)) : [];
@@ -556,7 +623,7 @@ function details(qid: string) {
     accepts: cypher("MATCH (g:Goal)-[:ACCEPTED_BY]->(:Question {id: $id}) RETURN g.id AS id, g.text AS text", { id: qid }),
     status: st,
     restsOn: ids(l?.needs),
-    usedBy: ids(l?.neededBy),
+    usedBy: ids(l?.neededBy).filter((id) => atSeq === null || (nodes.get(id)?.seq ?? 0) <= atSeq),
     ran: Boolean(shown),
     results,
     read: files(read),
@@ -764,12 +831,22 @@ text.value = PRESETS[0]![1];
 /** Question ids in a value: the value itself, or the items of a list. */
 const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.flatMap(idsIn) : typeof v === "string" && nodes.has(v) ? [v] : []);
 
-/** The parameters every query in the page gets: the answers now, and the selected question and its current run. */
-const params = () => ({
-  ...answerParams([...statuses.values()], goals()),
-  selected,
-  run: (selected && statuses.get(selected)?.run) ?? null,
-});
+/** The parameters every query in the page gets: the answers now (or at the chosen seq), and the selected question and its current run. */
+const params = () => {
+  const activeStatuses =
+    atSeq === null ? [...statuses.values()] : [...nodes.values()].filter((q) => q.seq <= atSeq!).map((q) => statusOf(q.id)!);
+  const activeGoals =
+    atSeq === null
+      ? goals()
+      : goals()
+          .filter((g) => (goalSeq.get(g.id) ?? 0) <= atSeq!)
+          .map((g) => ({ ...g, acceptance: g.acceptance && (nodes.get(g.acceptance)?.seq ?? Infinity) <= atSeq! ? g.acceptance : null }));
+  return {
+    ...answerParams(activeStatuses, activeGoals),
+    selected,
+    run: (selected && statusOf(selected)?.run) ?? null,
+  };
+};
 
 /** Runs the Query drawer's Cypher on a throwaway copy, shows the rows, and marks the questions they name. Returns the rows, or the error. */
 function runQuery(): { columns: string[]; rows: Row[] } | Error {
@@ -831,4 +908,4 @@ const tools = webTools({
 register(tools);
 
 // For tests and the browser console: read the page's copy of the graph, and call the page's tools.
-Object.assign(window, { witness: { cypher, select, tools, state: (q: string) => statuses.get(q)?.state ?? null, questions: () => nodes.size } });
+Object.assign(window, { witness: { cypher, select, setSeq, tools, state: (q: string) => statusOf(q)?.state ?? null, questions: () => nodes.size } });
