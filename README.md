@@ -8,9 +8,9 @@ Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 �
 
 `witness replay DIR` opens a recorded session from its store alone. It needs only [Bun](https://bun.com) 1.4 or later. It needs no AI agent, no API key and no uv. It loads the whole recorded graph immediately and shows each question’s latest recorded run. Replay derives goal completion from those recorded answers; it does not check today’s workspace inputs.
 
-Choose a goal from the dropdown to open its acceptance question. A goal without an acceptance question shows “No acceptance question”. The graph highlights the selected question’s upstream artifact dependencies and keeps surrounding exploration visible, marking acceptance questions with a ringed glyph (`◎`). Each row is one direction of work; parallel questions share columns while preserving lane and dependency order, and hovering or arrowing across dots previews each question in a steady bar above the lanes.
+Choose a goal to open its acceptance question, marked `◎`. Each row of the graph is one direction of work, and a curve joins a question to the questions that read its files. Select a question to see its evidence: the answer, each part of the rule with the values it used, saved images, files and run history. [`page/DESIGN.md`](page/DESIGN.md) describes the page in full.
 
-The evidence panel stays open on the right, showing the selected question’s answer, actual rule clauses and their values, saved images, any extra measurements not already displayed in the clauses, files, and disclosures for the probe and run history. Measurement names and values come directly from the current committed run, without inferred labels, units or rounding. Multiple result records can be expanded under All measurements. Files distinguish declared inputs from saved outputs; input links open the archived bytes that the displayed run read. Pending work shows no old measurements as current. The Query drawer below the lanes runs Cypher on the page's own copy of the graph while keeping Evidence open:
+The Query drawer runs Cypher on the graph in the page:
 
 ```cypher
 // Which questions answer yes?
@@ -18,9 +18,7 @@ MATCH (q:Question) WHERE q.id IN $yes
 RETURN q.text, q.rule ORDER BY q.seq
 ```
 
-Choose All questions for the whole record. Start from a goal’s acceptance question, hover upstream dots to preview how the work got there, or follow **Depends on** and **Used by** to inspect evidence in full. Click any question in the graph to inspect it, and use **Back** to return to the previous reading position. The Query drawer can list questions and runs by `seq` when you need their recorded order.
-
-Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the browser's agent two tools: `query` and `show_question`. Turn it on at `chrome://flags/#enable-webmcp-testing`. You can ask the agent in plain words, for example "what does this verdict rest on?". It answers with Cypher on the page's copy of the graph. It shows you the query and the questions it found. Selecting a question through the graph, a link or `show_question` uses the same upstream highlight; Back restores the previous question and reading position. These tools only read, and they mark what they return as untrusted. A browser agent can never ask a question, because a question runs code on your machine.
+Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the browser's agent two tools: `query` and `show_question`. Turn it on at `chrome://flags/#enable-webmcp-testing`. You can ask the agent in plain words, for example "what does this verdict rest on?". It answers with Cypher and shows you the query and the questions it found. Every query, yours or the agent's, runs on a throwaway copy of the graph, so no query can change what the page shows. The tools mark what they return as untrusted. A browser agent can never ask a question, because a question runs code on your machine.
 
 ## Use case
 
@@ -55,7 +53,7 @@ A `File` is named by its SHA-256. The answer of a run is stored with that run. T
 
 Goals and acceptance bindings are immutable. A goal can start without an acceptance question: it is open and incomplete. Bind at most one acceptance question, before it runs. An identical retry reuses that question. A different contract requires a new goal, which may use the same text. A goal is complete only while its acceptance question currently answers `yes`; `no`, `failed`, `pending`, `running` and `waiting` all mean incomplete. Input changes can invalidate completion. Restoring inputs restores their most recent recorded answer and its derived completion. No other question votes. Queries get `$complete` and `$incomplete` as goal-id lists; completion is never stored.
 
-The page holds its own copy of the graph in Relate's WASM build. It applies each new record with the same Cypher as the hub ([`src/graph.ts`](src/graph.ts)). Its panels and query box run Cypher in the browser. The page's query tool for a browser agent asks Relate for the plan of the query. It refuses any plan that writes.
+The page holds its own copy of the graph in Relate's WASM build. It applies each new record with the same Cypher as the hub ([`src/graph.ts`](src/graph.ts)). Its panels and query box run Cypher in the browser. A query runs on a throwaway copy of that graph, so it cannot change what the page shows.
 
 ## Setup and run
 
@@ -92,11 +90,9 @@ RETURN g.id, g.text, g.id IN $complete AS complete, q.id AS acceptance
 ORDER BY g.seq
 ```
 
-To measure again, send the same `ask` arguments with `rerun: true`. Keep the text, rule, probe, inputs and acceptance binding the same. The question stays unchanged and a new Run is appended, even for unchanged inputs or a cached failure. Ordinary asks then reuse the latest finished run on those inputs, including a failed result. Previous runs and files remain available.
+To measure again, send the same `ask` with `rerun: true`. The question stays unchanged and a new Run is appended. The latest finished run on the current inputs gives the answer, even when it failed. A call for a question that is already queued or running joins that execution. Earlier runs and files remain.
 
-If the question is already queued or running, the call joins that execution. To request another measurement, wait for it to finish before calling again. Reruns use the normal worker limit and wait for upstream inputs. On a new question, `rerun: true` simply requests its first execution. `wait_s: 0` returns immediately while queued or running work continues.
-
-The live page shows pending, running or waiting until the new run finishes; an acceptance goal is incomplete during that time. Consumers rerun automatically when saved input bytes change, and reuse their cached runs when the bytes stay the same. Replay retains every run and displays the latest recorded execution. The cache key covers the probe and declared input hashes, not the full environment. A probe that installs packages must set a fixed package upload cutoff with [`exclude-newer`](https://docs.astral.sh/uv/guides/scripts/#improving-reproducibility), keeping that cutoff in the hashed probe text. It does not lock Python or the full environment; explicit rerun permits remeasurement, not a reproducibility guarantee.
+The cache key covers the probe and declared input hashes, not the full environment. A probe that installs packages must set a fixed package upload cutoff with [`exclude-newer`](https://docs.astral.sh/uv/guides/scripts/#improving-reproducibility), keeping that cutoff in the hashed probe text. It does not lock Python or the full environment. A rerun measures again; it does not guarantee the same result.
 
 A probe is a uv script. It prints what it measured. It does not answer:
 

@@ -10,7 +10,7 @@
 // glyph and link, and a render changes only the attributes that differ.
 import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
-import { answerParams, clauses, type Goal, GOALS, type GNode, type GRel, measurements, named, type State, type Status, statements } from "../src/graph.ts";
+import { ALL_NODES, ALL_RELS, answerParams, clauses, type Goal, GOALS, type GNode, type GRel, measurements, named, type State, type Status, statements, UNIQUE_IDS } from "../src/graph.ts";
 import { register, webTools } from "./tools.ts";
 
 type Msg =
@@ -30,16 +30,21 @@ const judge = new RelateDb(true);
 function execute(query: string, params: Record<string, unknown> = {}, on = db) {
   const r = JSON.parse(on.execute(query, JSON.stringify(params)));
   if (r.error) throw new Error(typeof r.error === "string" ? r.error : (r.error.message ?? JSON.stringify(r.error)));
-  return r as { columns: string[]; rows: Row[]; plan: Plan | null };
+  return r as { columns: string[]; rows: Row[] };
 }
-type Plan = { root: { operator: string; children: Plan["root"][] } };
+const cypher = (query: string, params: Record<string, unknown> = {}) => execute(query, params).rows;
+for (const index of UNIQUE_IDS) cypher(index);
 
-/** Runs Cypher on the page's copy. The columns come in the order the query returns them. */
-function result(query: string, params: Record<string, unknown> = {}): { columns: string[]; rows: Row[] } {
-  const { columns, rows } = execute(query, params);
-  return { columns, rows };
+/**
+ * A copy of the page's graph, to run one query on and throw away. A query from a person or from the browser's agent
+ * never runs on the copy the page shows, so no query can change what the page shows.
+ */
+function scratch(): RelateDb {
+  const copy = new RelateDb();
+  for (const index of UNIQUE_IDS) execute(index, {}, copy);
+  for (const st of statements(cypher(ALL_NODES) as GNode[], cypher(ALL_RELS) as GRel[])) execute(st.cypher, st.params, copy);
+  return copy;
 }
-const cypher = (query: string, params: Record<string, unknown> = {}) => result(query, params).rows;
 
 // ---------------------------------------------------------------------------------------------------------------
 // State
@@ -766,15 +771,17 @@ const params = () => ({
   run: (selected && statuses.get(selected)?.run) ?? null,
 });
 
-/** Runs the Query drawer's Cypher, shows the rows, and marks the questions they name. Returns the rows, or the error. */
+/** Runs the Query drawer's Cypher on a throwaway copy, shows the rows, and marks the questions they name. Returns the rows, or the error. */
 function runQuery(): { columns: string[]; rows: Row[] } | Error {
   const out = document.getElementById("rows")!;
   if (text.value.includes("$selected") && !selected) {
     out.replaceChildren(h("p", { class: "hint" }, "Select a question first."));
     return new Error("No question is selected, and this query uses $selected. Select one first.");
   }
+  const copy = scratch();
   try {
-    const r = result(text.value, params());
+    const { columns, rows } = execute(text.value, params(), copy);
+    const r = { columns, rows };
     marked = new Set(r.rows.flatMap((row) => Object.values(row).flatMap(idsIn)));
     render();
     const cell = (v: unknown): Node | string => {
@@ -794,6 +801,8 @@ function runQuery(): { columns: string[]; rows: Row[] } | Error {
     render();
     out.replaceChildren(h("p", { class: "error" }, (e as Error).message));
     return e as Error;
+  } finally {
+    copy.free();
   }
 }
 document.getElementById("run")!.onclick = () => runQuery();
@@ -812,12 +821,6 @@ connect();
 
 // The page's tools for a browser agent (WebMCP), on the page's own functions.
 const tools = webTools({
-  operators(query) {
-    const { plan } = execute(`EXPLAIN ${query}`, params());
-    if (!plan) throw new Error("Relate gave no plan for this query, so the page cannot tell that it only reads.");
-    const walk = (n: Plan["root"]): string[] => [n.operator, ...n.children.flatMap(walk)];
-    return walk(plan.root);
-  },
   query: showQuery,
   question(qid) {
     if (!nodes.has(qid)) return null;

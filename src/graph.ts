@@ -23,6 +23,18 @@ export const ENDS: Record<RelType, [Label, Label]> = {
   SAVED: ["Run", "File"],
 };
 
+/**
+ * Every record is found by its id. These make the index for it: without one, a store scans a whole label for each
+ * record it writes. schema.cypher declares the same for the hub's store; the page's copies use these.
+ */
+export const UNIQUE_IDS = Object.keys({ Goal: 0, Question: 0, Run: 0, File: 0 } satisfies Record<Label, 0>).map(
+  (label) => `CREATE CONSTRAINT ${label.toLowerCase()}_id FOR (n:${label}) REQUIRE n.id IS UNIQUE`,
+);
+
+/** The queries that read a whole graph as records, for a page that connects or a copy of the page's graph. */
+export const ALL_NODES = "MATCH (n) RETURN labels(n)[0] AS label, n.id AS id, properties(n) AS props";
+export const ALL_RELS = "MATCH (a)-[r]->(b) RETURN type(r) AS type, a.id AS from, b.id AS to, r.name AS name";
+
 export type Statement = { cypher: string; params: { rows: unknown[] } };
 
 /** The statements that write these records: one per label, then one per relationship type. */

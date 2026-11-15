@@ -13,7 +13,7 @@
 // saved in memory, and adds each new record as it writes it. Working out the answers reads no store.
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, normalize, sep } from "node:path";
-import { answerParams, clauses, type GNode, type GRel, type Goal, type GoalStatus, GOALS, goalStatuses, measurements, ruleProblem, ruleStatement, type State, type Status, statements } from "./graph.ts";
+import { ALL_NODES, ALL_RELS, answerParams, clauses, type GNode, type GRel, type Goal, type GoalStatus, GOALS, goalStatuses, measurements, ruleProblem, ruleStatement, type State, type Status, statements } from "./graph.ts";
 import { dependencyProblem, isFile, runProbe, type ProbeOutcome, RESULT } from "./probe.ts";
 import { type Param, Relate, RelateError, type Row } from "./relate.ts";
 import { applySchema } from "./schema.ts";
@@ -495,7 +495,7 @@ export class Hub {
 
 /** A store's whole graph as records. The hub sends it to a page; replay reads a recorded store with it. */
 export function snapshot(db: Relate): { nodes: GNode[]; rels: GRel[] } {
-  const nodes = db.query("MATCH (n) RETURN labels(n)[0] AS label, n.id AS id, properties(n) AS props") as GNode[];
-  const rels = db.query("MATCH (a)-[r]->(b) RETURN type(r) AS type, a.id AS from, b.id AS to, r.name AS name") as GRel[];
+  const nodes = db.query(ALL_NODES) as GNode[];
+  const rels = db.query(ALL_RELS) as GRel[];
   return { nodes, rels: rels.map(({ name, ...r }) => ({ ...r, ...(name ? { name } : {}) })) };
 }

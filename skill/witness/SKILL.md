@@ -21,7 +21,7 @@ Witness keeps the tested answers of all agents in this workspace in one graph. N
 
 1. Call `query` before you ask. Use an answer that exists.
 2. Run the probe yourself on a small case. This shows that the probe works. It is not evidence.
-3. Call `ask` with the question, the rule, the probe and all inputs. Give `asker` your name or role.
+3. Call `ask` with the question, the rule, the probe and all inputs. Give `asker` your direction of work. The page gives each direction its own row.
 4. Read the answer, the measurements and the saved files.
 
 ## Goals and acceptance
@@ -45,13 +45,9 @@ ORDER BY g.seq
 
 ## Rerunning
 
-- Send the same `ask` arguments with `rerun: true` to measure again, including after a cached failure. Keep the text, rule, probe, inputs and `accepts` binding unchanged. Rerun is not part of question identity and does not edit its record or rule.
-- A new Run is appended. Its result becomes the cached answer for those inputs, even if it fails. Older runs and their files remain available through `query` and `look` with `r-…/name`.
-- Ordinary asks reuse the latest finished run on the current input key. Restoring previous input bytes restores the latest run on that key, including any explicit rerun.
-- Calls for a question already queued or running join that execution; they do not create extra trials. Wait for completion before requesting another trial. On a new question, `rerun: true` runs it once.
-- Reruns use the normal worker limit and wait for upstream files. `wait_s: 0` returns immediately while the work continues. Query the question's status afterward.
-- During a rerun, the question is pending, running or waiting; its old measurements are not current. Acceptance completion waits for the new answer. Consumers rerun automatically only when the saved bytes they read change.
-- Rerun allows remeasurement. It does not capture the full environment or establish independence between trials.
+- Send the same `ask` arguments with `rerun: true` to measure again, including after a cached failure. Keep the text, rule, probe, inputs and `accepts` unchanged.
+- A new Run is appended. The latest finished run on the current inputs gives the answer, even if it failed. Until it ends, the question is pending or running, and an acceptance goal is incomplete. Older runs and their files remain available through `query` and `look` with `r-…/name`.
+- A call for a question already queued or running joins that execution. Wait for it to finish before you ask for another. A rerun measures again; it does not make the trials independent.
 
 ## The rule
 
@@ -125,8 +121,6 @@ RETURN q.id, q.text, r.answer, r.ms ORDER BY r.ms DESC LIMIT 50
 For more syntax, see [Relate's Cypher guide](https://github.com/relatedb/relate/blob/main/surfaces/relate-cli/src/skill/bundle/SKILL.md#cypher). It tracks upstream; check newer features against Witness's pinned Relate version.
 
 `look` shows a saved file. Images come back as images.
-
-In the live page and replay, choose a goal from the dropdown to open its acceptance question (`◎`). Every selected question highlights its own upstream artifact dependencies, while hovering previews questions in the top bar above the lanes. All questions clears the selection. Follow Depends on and Used by, or select any graph question; Back restores the previous reading position. The panel stays open beside the docked Query drawer and shows the actual rule, clause values, images, and any extra measurements from the current committed run. Values retain their full recorded precision, and All measurements shows every record when there are several. File links marked input open the archived bytes read by that run; saved links open its outputs. Pending work does not display old measurements as current. Use Cypher with `ORDER BY q.seq` or `ORDER BY r.seq` to inspect recorded order. Goal completion remains available through queries and tool replies. Browser agents use `query` and `show_question`; `show_question` selects and highlights the same way as a person clicking a question.
 
 ## Reporting
 

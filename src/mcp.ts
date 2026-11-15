@@ -57,7 +57,7 @@ function server(hub: Hub): McpServer {
         probe: z.string().describe('A Python script with a PEP 723 header. It prints each measurement as WITNESS_RESULT and one JSON object, for example {"p": 0.003}.'),
         inputs: z.array(z.string()).default([]).describe("The files that the probe reads: workspace paths, or q-…/name for a file that another question saved."),
         accepts: z.string().optional().describe("An existing goal id whose only acceptance question this will be. Binds before execution. Only its current yes completes the goal. An identical retry is allowed; a different acceptance question requires a new goal."),
-        asker: z.string().optional().describe("Your name or role. Witness shows it and does not use it."),
+        asker: z.string().optional().describe("Your direction of work, for example the approach you test. The page gives each direction its own row. It does not change the answer."),
         timeout_s: z.number().int().positive().max(3600).optional().describe("The time limit of one run, in seconds. Default 600."),
         wait_s: z.number().int().min(0).max(240).optional().describe("The time to wait for the answer, in seconds, at most 240. Default 120. After that, the run continues."),
         rerun: z.boolean().default(false).describe("Request a new execution of this unchanged question, including after a cached failure. Appends a Run; the latest finished run on the current inputs becomes the cached answer. If this question is queued or running, join that execution. Default false."),

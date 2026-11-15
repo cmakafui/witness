@@ -110,8 +110,11 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     // The docked Query drawer opens on the left while Evidence remains visible on the right.
     expect(await view.evaluate("[document.getElementById('cypher').value, document.getElementById('query').hidden, document.getElementById('question').hidden]")).toEqual([yes, false, false]);
 
-    for (const cypher of ["MATCH (q:Question) SET q.text = 'forged'", "CREATE (:Question {id: 'q-000000000000'})", "MATCH (q) CALL { CREATE (:Run) } RETURN q"])
-      expect(((await call("query", { cypher })) as { refused: string }).refused).toStartWith("Only reads run here");
+    // A query runs on a throwaway copy: a query that writes changes nothing the page shows, from the tool or the drawer.
+    for (const cypher of ["MATCH (q:Question) SET q.text = 'forged'", "CREATE (:Question {id: 'q-000000000000', text: 'forged'})", "MATCH (q:Question) CALL { CREATE (:Run) } RETURN count(q) AS n"])
+      await call("query", { cypher });
+    await view.evaluate("document.getElementById('run').click()");
+    expect(await view.evaluate("document.querySelectorAll('.q').length === window.witness.questions()")).toBe(true);
     const forged = "MATCH (n) WHERE n.text = 'forged' OR n.id = 'q-000000000000' OR (n:Run AND n.id IS NULL) RETURN count(n) AS n";
     expect(await view.evaluate(`window.witness.cypher(${JSON.stringify(forged)})`)).toEqual([{ n: 0 }]);
 

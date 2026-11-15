@@ -1,14 +1,13 @@
 /// <reference lib="dom" />
 // The page's tools for an agent in the browser (WebMCP): the person asks it about the graph, and it answers with the
-// page's own Cypher and shows what it found. These tools only read. An agent in the browser can never ask a question:
-// asking runs code on this machine, so `ask` stays with the agents on /mcp.
+// page's own Cypher and shows what it found. These tools cannot change what the page shows: a query runs on a
+// throwaway copy of the graph. An agent in the browser can never ask a question: asking runs code on this machine,
+// so `ask` stays with the agents on /mcp.
 import { SCHEMA, type Status } from "../src/graph.ts";
 
 /** What the tools need from the page. */
 export type Page = {
-  /** The operators of a query's plan. */
-  operators(cypher: string): string[];
-  /** Shows the query in the Query drawer, runs it there, and returns its rows or its error. */
+  /** Shows the query in the Query drawer, runs it on a throwaway copy of the graph, and returns its rows or its error. */
   query(cypher: string): { columns: string[]; rows: Record<string, unknown>[] } | Error;
   /** Selects the question in the graph and returns what its panel shows, or null when there is no such question. */
   question(id: string): (Record<string, unknown> & { status: Status | undefined; read: { name: string; url: string }[]; saved: { name: string; url: string }[] }) | null;
@@ -22,8 +21,6 @@ export type Tool = {
   execute(args: Record<string, unknown>): Promise<string>;
 };
 
-/** The plan operators of a query that only reads. A CALL subquery hides its body from the plan, so it is not here. */
-const READS = new Set(["ProduceResults", "Projection", "AllNodesScan", "NodeByLabelScan", "Expand", "Optional", "EagerAggregation", "Unwind", "Union"]);
 const LIMIT = 200;
 
 // Every question, rule and result was written by an agent, so the tools mark what they return as untrusted.
@@ -47,14 +44,11 @@ export function webTools(page: Page): Tool[] {
   return [
     {
       name: "query",
-      description: `Run a read-only Cypher query on the Witness graph in this page, and show it to the person in the Query drawer. $selected is the question the person has selected. At most ${LIMIT} rows.\n\n${SCHEMA}`,
-      inputSchema: { type: "object", properties: { cypher: { type: "string", description: "A read-only Cypher query." } }, required: ["cypher"] },
+      description: `Run a Cypher query on a throwaway copy of the Witness graph in this page, and show it to the person in the Query drawer. A query cannot change the graph. $selected is the question the person has selected. At most ${LIMIT} rows.\n\n${SCHEMA}`,
+      inputSchema: { type: "object", properties: { cypher: { type: "string", description: "A Cypher query." } }, required: ["cypher"] },
       annotations: hints,
       execute: reply(({ cypher }) => {
         if (typeof cypher !== "string") throw new Error("Give cypher as a string.");
-        const writes = page.operators(cypher).flatMap((o) => o.match(/\w+/g) ?? []).filter((o) => !READS.has(o));
-        if (writes.length)
-          throw new Error(`Only reads run here, and this query plans ${[...new Set(writes)].join(", ")}. Use MATCH, OPTIONAL MATCH, WITH, UNWIND, UNION and RETURN.`);
         const r = page.query(cypher);
         if (r instanceof Error) throw r;
         return { columns: r.columns, rows: r.rows.slice(0, LIMIT), truncated: r.rows.length > LIMIT };
