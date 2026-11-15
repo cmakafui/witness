@@ -163,7 +163,7 @@ test("the selected acceptance test shows current measurements through invalidati
   expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Is the live candidate positive?");
   const inputUrl = await view.evaluate("document.querySelector('#question .files a').href") as string;
   expect(await (await fetch(inputUrl)).text()).toBe("1");
-  await hub.ask({ text: "Is this candidate below zero?", rule: "$x < 0", probe, inputs: ["live-candidate.txt"], goal: g.id });
+  await hub.ask({ text: "Is this candidate below zero?", rule: "$x < 0", probe, inputs: ["live-candidate.txt"] });
   await until("document.querySelector('#question .clause .values')?.textContent", "x1");
   // The browser query tool derives the same completion as the worker's query tool.
   const query = `MATCH (g:Goal {id: '${g.id}'}) RETURN g.id IN $complete AS complete`;

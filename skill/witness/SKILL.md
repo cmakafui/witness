@@ -28,13 +28,11 @@ Witness keeps the tested answers of all agents in this workspace in one graph. N
 
 Call `query` to find the goal before creating one. `goal({text: "…"})` creates a new goal every time, even for identical text. Its id starts with `g-`. An unbound goal is open and incomplete.
 
-- Use `ask` with `goal: "g-…"` for exploratory questions. Their answers never determine completion, whether yes, no or failed.
-- Use `ask` with `accepts: "g-…"` for the goal’s acceptance question. Use either `goal` or `accepts`, never both. Leave both out for questions without a goal.
+- Use `ask` with `accepts: "g-…"` for the goal’s acceptance question. Leave it out for every other question. Those answers never determine completion, whether yes, no or failed.
 - Write the acceptance contract before executing it. Witness writes the question and binding atomically before the probe starts. You can bind only one acceptance question per goal. An identical retry is allowed; a different contract requires a new goal.
-- Exploratory goal membership is not part of question identity. Repeat the same question with another `goal` to add a `FOR` association and reuse its runs, including a run already in progress. Omitting `goal` also reuses that question. The original question and first asker stay unchanged.
-- Acceptance binding is part of identity. `accepts` creates a distinct question bound before execution; an existing exploratory run cannot be promoted in place.
+- Acceptance binding is part of identity. `accepts` creates a distinct question bound before execution; an existing run cannot be promoted in place.
 - Only the acceptance question’s **current** yes completes the goal. No, failed, pending, running and waiting all mean incomplete. Input changes invalidate completion; restoring the inputs restores their latest recorded answer. Completion is never stored.
-- `ask` returns the associated goal’s completion alongside the question’s answer. Query `$complete` and `$incomplete` for goal ids. They never include exploratory question ids.
+- An `ask` with `accepts` returns the goal’s completion alongside the question’s answer. Query `$complete` and `$incomplete` for goal ids.
 
 An acceptance question can read a candidate file directly or consume `q-…/name`. Its rule tests the solved condition. Exploration can keep producing negative answers while the goal is complete.
 
@@ -52,7 +50,7 @@ ORDER BY g.seq
 - Ordinary asks reuse the latest finished run on the current input key. Restoring previous input bytes restores the latest run on that key, including any explicit rerun.
 - Calls for a question already queued or running join that execution; they do not create extra trials. Wait for completion before requesting another trial. On a new question, `rerun: true` runs it once.
 - Reruns use the normal worker limit and wait for upstream files. `wait_s: 0` returns immediately while the work continues. Query the question's status afterward.
-- During a rerun, the question is pending, running or waiting; its old measurements are not current. Acceptance completion waits for the new answer. A shared exploratory question is rerun for all its goal associations. Consumers rerun automatically only when the saved bytes they read change.
+- During a rerun, the question is pending, running or waiting; its old measurements are not current. Acceptance completion waits for the new answer. Consumers rerun automatically only when the saved bytes they read change.
 - Rerun allows remeasurement. It does not capture the full environment or establish independence between trials.
 
 ## The rule

@@ -401,7 +401,6 @@ function apply(m: Msg) {
     if (m.nodes.some((n) => n.label === "Goal") || m.rels.some((r) => r.type === "ACCEPTED_BY")) readGoals();
     evidence = selected !== null && m.rels.some((r) =>
       (r.type === "OF" && r.to === selected) ||
-      (r.type === "FOR" && r.from === selected) ||
       (r.type === "ACCEPTED_BY" && r.to === selected) ||
       (r.type === "NEEDS" && (r.from === selected || r.to === selected)));
     for (const n of m.nodes)
@@ -547,7 +546,6 @@ function details(qid: string) {
     probe: String(q.probe),
     inputs: ids(q.inputs),
     asker: (q.asker as string | null) ?? null,
-    explores: cypher("MATCH (:Question {id: $id})-[:FOR]->(g:Goal) RETURN g.id AS id, g.text AS text", { id: qid }),
     accepts: cypher("MATCH (g:Goal)-[:ACCEPTED_BY]->(:Question {id: $id}) RETURN g.id AS id, g.text AS text", { id: qid }),
     status: st,
     restsOn: ids(l?.needs),

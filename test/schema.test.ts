@@ -43,7 +43,6 @@ test("goals require immutable record fields, unique ids and the correct relation
   db.query("CREATE (:Goal {id: 'g-1', text: 'Solved condition', seq: 1})");
   expect(() => db.query("CREATE (:Goal {id: 'g-1', text: 'Other', seq: 2})")).toThrow(/uniqueness/);
   db.query(question, { id: "q-1" });
-  db.query("MATCH (g:Goal), (q:Question) CREATE (g)-[:ACCEPTED_BY]->(q), (q)-[:FOR]->(g)");
+  db.query("MATCH (g:Goal), (q:Question) CREATE (g)-[:ACCEPTED_BY]->(q)");
   expect(() => db.query("MATCH (g:Goal), (q:Question) CREATE (q)-[:ACCEPTED_BY]->(g)")).toThrow(/endpoint/);
-  expect(() => db.query("MATCH (g:Goal), (q:Question) CREATE (g)-[:FOR]->(q)")).toThrow(/endpoint/);
 });

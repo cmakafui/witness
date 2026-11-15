@@ -1,6 +1,6 @@
 # Witness
 
-A shared record for teams of AI agents. Each claim is a yes/no question with a rule. The rule is written before anything runs. A probe measures. The rule decides. [Relate](https://relatedb.ai) keeps the questions and their runs in one graph. You can query the graph and watch it live. A goal states the solved condition. Its acceptance question determines whether it is complete; exploratory questions help find a solution without deciding completion.
+A shared record for teams of AI agents. Each claim is a yes/no question with a rule. The rule is written before anything runs. A probe measures. The rule decides. [Relate](https://relatedb.ai) keeps the questions and their runs in one graph. You can query the graph and watch it live. A goal states the solved condition. Its acceptance question determines whether it is complete; all other questions help find a solution without deciding completion.
 
 Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 – Dec 11, 2026).
 
@@ -40,11 +40,10 @@ Witness is not a sandbox. It does not stop an agent from acting outside it. It m
 - **Mode:** directory, at `.witness/graph/` in the workspace.
 - **Why this mode:** the hub writes every record through `bun:ffi` as it happens, so the store is always on disk. Other processes can open it read-only beside the hub. Relate lets only one process write to a store. The hub is that process. Agents cannot write answers.
 - **Rules are Cypher.** A rule such as `$p < 0.01 AND $gain >= 0.1` is a Cypher expression. When a run ends, the hub evaluates the rule with Relate on an empty in-memory store. The run's measurements are the parameters. True is yes. False is no. Anything else is failed, for example when the run never made a measurement the rule needs.
-- **Four node types, six relationship types.** Goals state solved conditions. Questions fix tests. Runs record executions. Files hold the inputs and saved evidence. The hub writes a question and its goal binding together, before execution, and a run once it ends.
+- **Four node types, five relationship types.** Goals state solved conditions. Questions fix tests. Runs record executions. Files hold the inputs and saved evidence. The hub writes a question and its goal binding together, before execution, and a run once it ends.
 
 ```
 (:Goal {id, text, seq})-[:ACCEPTED_BY]->(:Question)  // its only acceptance question
-(:Question)-[:FOR]->(:Goal)                        // exploratory purpose; never votes
 (:Question {text, rule, probe, inputs, asker})
 (:Question)-[:NEEDS]->(:Question)            // reads a file the other question saved
 (:Run {answer, reason, started, ms, results})-[:OF]->(:Question)
@@ -54,7 +53,7 @@ Witness is not a sandbox. It does not stop an agent from acting outside it. It m
 
 A `File` is named by its SHA-256. The answer of a run is stored with that run. The answer of a question is never stored. The hub finds the run on the question's inputs as they are now. It passes the answers to queries as `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` and `$current`. Relate enforces the schema in [`schema.cypher`](schema.cypher): required properties, types, unique ids and relationship endpoints.
 
-Goals and acceptance bindings are immutable. Exploratory `FOR` associations can be added to an existing question; one question may serve several goals. A goal can start without an acceptance question: it is open and incomplete. Bind at most one acceptance question, before it runs. An identical retry reuses that question. A different contract requires a new goal, which may use the same text. A goal is complete only while its acceptance question currently answers `yes`; `no`, `failed`, `pending`, `running` and `waiting` all mean incomplete. Input changes can invalidate completion. Restoring inputs restores their most recent recorded answer and its derived completion. Exploratory answers never vote. Queries get `$complete` and `$incomplete` as goal-id lists; completion is never stored.
+Goals and acceptance bindings are immutable. A goal can start without an acceptance question: it is open and incomplete. Bind at most one acceptance question, before it runs. An identical retry reuses that question. A different contract requires a new goal, which may use the same text. A goal is complete only while its acceptance question currently answers `yes`; `no`, `failed`, `pending`, `running` and `waiting` all mean incomplete. Input changes can invalidate completion. Restoring inputs restores their most recent recorded answer and its derived completion. No other question votes. Queries get `$complete` and `$incomplete` as goal-id lists; completion is never stored.
 
 The page holds its own copy of the graph in Relate's WASM build. It applies each new record with the same Cypher as the hub ([`src/graph.ts`](src/graph.ts)). Its panels and query box run Cypher in the browser. The page's query tool for a browser agent asks Relate for the plan of the query. It refuses any plan that writes.
 
@@ -80,11 +79,11 @@ witness replay [DIR]   # inspect a recorded session
 Agents get four tools:
 
 - `goal`: create a new immutable goal from its solved condition. Query first to reuse a goal.
-- `ask`: a question, its rule, its probe and its inputs. Add `goal: "g-…"` for exploration, or `accepts: "g-…"` to bind the acceptance question. These fields are mutually exclusive. Exploratory `goal` associations do not affect question identity: adding another goal reuses the question and its runs, including an execution already in progress. The first asker stays on the original question. `accepts` is part of identity and binds a separate acceptance question before execution; it cannot promote an existing exploratory run. `ask` also returns the associated goal’s current completion.
+- `ask`: a question, its rule, its probe and its inputs. Add `accepts: "g-…"` to bind the goal’s acceptance question. `accepts` is part of identity and binds a separate acceptance question before execution; it cannot promote an existing run. `ask` then also returns that goal’s current completion. The same question asked again is the same question, and the first asker stays on it.
 - `query`: read-only Cypher.
 - `look`: a saved file. Images come back as images.
 
-For example, create a goal with `goal({text: "The candidate is correct on the independent suite and at least twice as fast as baseline."})`. Associate candidate searches and measurements with `ask({goal: "g-…", ...})`. Then bind `ask({accepts: "g-…", ...})` with a rule such as `$correct AND $speedup >= 2`, declaring the candidate and suite as inputs. A failed candidate search does not prevent completion; the acceptance question decides it. Choose that contract before executing its test.
+For example, create a goal with `goal({text: "The candidate is correct on the independent suite and at least twice as fast as baseline."})`. Search for candidates and measure them with ordinary `ask` calls. Then bind `ask({accepts: "g-…", ...})` with a rule such as `$correct AND $speedup >= 2`, declaring the candidate and suite as inputs. A failed candidate search does not prevent completion; the acceptance question decides it. Choose that contract before executing its test.
 
 ```cypher
 MATCH (g:Goal)
@@ -93,7 +92,7 @@ RETURN g.id, g.text, g.id IN $complete AS complete, q.id AS acceptance
 ORDER BY g.seq
 ```
 
-To measure again, send the same `ask` arguments with `rerun: true`. Keep the text, rule, probe, inputs and acceptance binding the same. The question stays unchanged and a new Run is appended, even for unchanged inputs or a cached failure. Ordinary asks then reuse the latest finished run on those inputs, including a failed result. Previous runs and files remain available. A rerun of a shared exploratory question is shared across its goals.
+To measure again, send the same `ask` arguments with `rerun: true`. Keep the text, rule, probe, inputs and acceptance binding the same. The question stays unchanged and a new Run is appended, even for unchanged inputs or a cached failure. Ordinary asks then reuse the latest finished run on those inputs, including a failed result. Previous runs and files remain available.
 
 If the question is already queued or running, the call joins that execution. To request another measurement, wait for it to finish before calling again. Reruns use the normal worker limit and wait for upstream inputs. On a new question, `rerun: true` simply requests its first execution. `wait_s: 0` returns immediately while queued or running work continues.
 

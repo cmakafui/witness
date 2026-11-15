@@ -28,13 +28,12 @@ beforeAll(async () => {
   const a = await hub.ask({ ...inspect, rerun: true });
   Object.assign(ids, { oldRun: first.run, latestRun: a.run });
   const b = await hub.ask({
-    goal: complete.id,
     text: "Is the total above 100?",
     rule: "$total > 100",
     inputs: [`${a.id}/n.json`],
     probe: `${head}n=json.load(open("${a.id}/n.json"))\njson.dump(n, open(os.path.join(os.environ["WITNESS_OUT"], "n.json"), "w"))\nprint("WITNESS_RESULT", json.dumps({"total": sum(n)}))`,
   });
-  const c = await hub.ask({ goal: complete.id, text: "Does it crash?", rule: "$x = 1", probe: `${head}raise SystemExit(2)\nprint("WITNESS_RESULT", "{}")` });
+  const c = await hub.ask({ text: "Does it crash?", rule: "$x = 1", probe: `${head}raise SystemExit(2)\nprint("WITNESS_RESULT", "{}")` });
   const d = await hub.ask({ accepts: incomplete.id, text: "Is the saved total above 100?", rule: "$total > 100", inputs: [`${b.id}/n.json`], probe: `${head}n=json.load(open("${b.id}/n.json"))\nprint("WITNESS_RESULT", json.dumps({"total": sum(n)}))` });
   Object.assign(ids, { a: a.id, b: b.id, c: c.id, d: d.id });
   await hub.idle();
@@ -150,7 +149,7 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
 
     await choose(ids.complete!);
     expect(await view.evaluate("document.querySelector('#question h2').textContent")).toBe("Does data.txt hold numbers?");
-    expect(await call("show_question", { id: ids.b })).toMatchObject({ explores: [{ id: ids.complete, text: "The data holds numbers." }], accepts: [] });
+    expect(await call("show_question", { id: ids.b })).toMatchObject({ accepts: [] });
     expect(await view.evaluate("document.querySelector('#question .clause .values').textContent")).toContain("total15");
     expect(await view.evaluate("document.querySelector('#question .measurements')")).toBeNull();
     expect(await view.evaluate("[...document.querySelectorAll('.q')].map(q => q.dataset.id)")).toContain(ids.c);

@@ -63,7 +63,7 @@ export function webTools(page: Page): Tool[] {
     {
       name: "show_question",
       description:
-        "Select a question in the Witness graph, highlight its upstream artifact dependencies, and show its evidence. Returns its text, rule, answer now, the goals it explores or accepts, dependencies and consumers, measurements of its current run, archived inputs, saved files, and runs. File URLs refer to the bytes that run read or saved. Exploratory questions never determine goal completion.",
+        "Select a question in the Witness graph, highlight its upstream artifact dependencies, and show its evidence. Returns its text, rule, answer now, the goals it accepts, dependencies and consumers, measurements of its current run, archived inputs, saved files, and runs. File URLs refer to the bytes that run read or saved. Only an acceptance question determines goal completion.",
       inputSchema: { type: "object", properties: { id: { type: "string", description: "The question's id: q- and 12 hex digits." } }, required: ["id"] },
       annotations: hints,
       execute: reply(({ id }) => {

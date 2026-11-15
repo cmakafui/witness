@@ -31,7 +31,6 @@ export type Ask = {
   rule: string;
   probe: string;
   inputs?: string[];
-  goal?: string;
   accepts?: string;
   asker?: string;
   timeoutS?: number;
@@ -143,7 +142,7 @@ export class Hub {
     const id = sha256(content);
     const path = join(this.filesDir, id);
     if (!existsSync(path)) writeFileSync(path, content);
-    return { label: "File", id, props: { bytes: content.byteLength } };
+    return { label: "File", id, props: {} };
   }
 
   private saved(run: string): Saved[] {
@@ -365,12 +364,11 @@ export class Hub {
     const inputs = [...new Set(a.inputs ?? [])].sort();
     this.refuse(a, inputs);
     const id = contentId("q", a.text, a.rule, sha256(a.probe), JSON.stringify(inputs), a.accepts ?? "");
-    if (a.goal !== undefined && a.accepts !== undefined) throw new Refusal("Use goal for exploration or accepts for acceptance, not both.");
-    const goal = a.goal ?? a.accepts;
+    const goal = a.accepts;
     if (goal !== undefined) {
       const g = (this.db.query(GOALS) as Goal[]).find((g) => g.id === goal);
       if (!g) throw new Refusal(`There is no goal ${goal}. Call goal first, or query existing goals.`);
-      if (a.accepts && g.acceptance && g.acceptance !== id)
+      if (g.acceptance && g.acceptance !== id)
         throw new Refusal(`${goal} already has acceptance question ${g.acceptance}. Its contract cannot change. Create a new goal.`);
     }
     if (!this.byId.has(id)) {
@@ -385,13 +383,9 @@ export class Hub {
         ],
         [
           ...needs.map((n) => ({ type: "NEEDS" as const, from: id, to: n })),
-          ...(a.goal ? [{ type: "FOR" as const, from: id, to: a.goal }] : []),
           ...(a.accepts ? [{ type: "ACCEPTED_BY" as const, from: a.accepts, to: id }] : []),
         ],
       );
-    } else if (a.goal && !this.db.query("MATCH (:Question {id: $id})-[:FOR]->(:Goal {id: $goal}) RETURN 1 AS found", { id, goal: a.goal }).length) {
-      // Purpose can be added without changing the tested question or repeating its execution.
-      this.write([], [{ type: "FOR", from: id, to: a.goal }]);
     }
     // Concurrent requests join the execution already in progress; queued requests coalesce in the set.
     if (a.rerun && !this.running.has(id)) this.reruns.add(id);

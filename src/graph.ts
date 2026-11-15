@@ -9,7 +9,7 @@
 // question's inputs as they are now.
 
 export type Label = "Goal" | "Question" | "Run" | "File";
-export type RelType = "ACCEPTED_BY" | "FOR" | "NEEDS" | "OF" | "READ" | "SAVED";
+export type RelType = "ACCEPTED_BY" | "NEEDS" | "OF" | "READ" | "SAVED";
 
 export type GNode = { label: Label; id: string; props: Record<string, string | number | boolean | string[] | null> };
 export type GRel = { type: RelType; from: string; to: string; name?: string };
@@ -17,7 +17,6 @@ export type GRel = { type: RelType; from: string; to: string; name?: string };
 /** The label at each end of each relationship type. schema.cypher declares the same. */
 export const ENDS: Record<RelType, [Label, Label]> = {
   ACCEPTED_BY: ["Goal", "Question"],
-  FOR: ["Question", "Goal"],
   NEEDS: ["Question", "Question"],
   OF: ["Run", "Question"],
   READ: ["Run", "File"],
@@ -48,15 +47,14 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
 /** The graph, as agents read it: in the MCP query tool and in the page's WebMCP query tool. */
 export const SCHEMA = `The graph:
 (:Goal {id, text, seq})-[:ACCEPTED_BY]->(:Question)  the goal's only acceptance question, bound before it runs
-(:Question)-[:FOR]->(:Goal)           exploratory purpose; one question may serve several goals; never votes on completion
 (:Question {id, text, rule, probe, inputs, asker, seq})
 (:Question)-[:NEEDS]->(:Question)      reads a file the other question saved
 (:Run {id, key, seq, started, ms, answer, reason, measured, results})-[:OF]->(:Question)
-(:Run)-[:READ {name}]->(:File {id, bytes})    the inputs the run read; a File's id is its SHA-256
+(:Run)-[:READ {name}]->(:File {id})    the inputs the run read; a File's id is its SHA-256
 (:Run)-[:SAVED {name}]->(:File)               the files the run saved for other questions
 rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is the measurements as JSON. measured is true when the probe measured, even if the rule could not decide: then other questions can read the files it saved. started is when the run began, in milliseconds since 1970. ms is how long it took.
 Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now. Several runs can share a key: the latest finished run by seq on the current inputs supplies the cached answer. ask with rerun: true appends another execution without changing the question or rule; queued or running executions are shared.
-$complete and $incomplete are goal ids. A goal is complete only when its acceptance question currently answers yes. No acceptance question means open and incomplete. All other acceptance states mean incomplete. Exploratory questions never determine completion. Goals and acceptance bindings cannot be edited; changing the acceptance contract requires a new goal.`;
+$complete and $incomplete are goal ids. A goal is complete only when its acceptance question currently answers yes. No acceptance question means open and incomplete. All other acceptance states mean incomplete. No other question determines completion. Goals and acceptance bindings cannot be edited; changing the acceptance contract requires a new goal.`;
 
 /** A question's answer as the hub works it out. It is never stored: it comes from the runs and the inputs now. */
 export type State = "yes" | "no" | "failed" | "running" | "pending" | "waiting";

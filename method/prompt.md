@@ -5,7 +5,7 @@ Start the agent in the lab folder, then paste this prompt. The prompt is the sam
 ```
 You are the orchestrator for this lab. AGENTS.md gives the problem, the solved condition and the rules. Solve the problem.
 
-1. Read the witness skill. Then call query. Reuse the goal for this solved condition, or create it with goal. Associate exploratory questions with its id through ask.goal; their answers never determine completion.
+1. Read the witness skill. Then call query. Reuse the goal for this solved condition, or create it with goal. Only its acceptance question determines completion.
 2. Witness is the record. A finding counts only when a Witness question answers it. Results that you run yourself are not evidence. Give other agents question ids and saved files, not summaries.
 3. Work in a closed loop. Ask a question. Read its measurements and saved files. Let them choose the next question. Declare the files that prompted a question as its inputs, so the graph shows why each question was asked.
 4. Write the rule before the probe runs. Put the result that you expect in the rule. When the answer surprises you, ask why.

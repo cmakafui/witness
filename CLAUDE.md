@@ -5,9 +5,9 @@ AI agents do research together. Each finding is a yes/no question with a rule. A
 ## Rules
 
 - Nothing writes an answer. An answer comes only from a run: the question's rule on the run's measurements. A probe never answers.
-- The graph holds Goal, Question, Run and File nodes. It does not hold agents. A goal has at most one ACCEPTED_BY question, bound atomically before execution; exploratory FOR edges never vote on completion. Goals and bindings are immutable. A different acceptance contract requires a new goal.
+- The graph holds Goal, Question, Run and File nodes. It does not hold agents. A goal has at most one ACCEPTED_BY question, bound atomically before execution; no other question votes on completion. Goals and bindings are immutable. A different acceptance contract requires a new goal.
 - A goal is complete only while its acceptance question currently answers yes. Completion is derived, never stored; changed inputs invalidate it and restored inputs restore it. An unbound goal is open and incomplete.
-- Exploratory questions are shared across goals. Adding a FOR edge reuses the question and cached or running execution; it does not change question identity or the first asker. Acceptance questions remain separately bound before execution.
+- The same question asked again is the same question: it reuses the cached or running execution and keeps the first asker. An acceptance question is a separate question, bound before execution.
 - ask.rerun requests another execution of the unchanged question and rule. Append a uniquely identified Run, even on the same key. The latest finished run on current inputs supplies the cached answer, including failed results. Coalesce queued requests and join a running execution; honor the worker limit.
 - The hub never changes or deletes a record. It only creates records. The answer to a question comes from its runs and from the inputs as they are now.
 - The hub is the only process that writes to Relate. Probes never touch the store.

@@ -12,10 +12,9 @@ CREATE GRAPH TYPE witness AS {
                   asker :: STRING, seq :: INTEGER NOT NULL}),
   (r:Run => {id :: STRING NOT NULL, key :: STRING NOT NULL, seq :: INTEGER NOT NULL, started :: INTEGER NOT NULL, ms :: INTEGER NOT NULL,
              answer :: STRING NOT NULL, reason :: STRING, measured :: BOOLEAN, results :: STRING NOT NULL}),
-  (f:File => {id :: STRING NOT NULL, bytes :: INTEGER NOT NULL}),
+  (f:File => {id :: STRING NOT NULL}),
 
   (g)-[:ACCEPTED_BY]->(q),
-  (q)-[:FOR]->(g),
   (q)-[:NEEDS]->(q),
   (r)-[:OF]->(q),
   (r)-[:READ => {name :: STRING NOT NULL}]->(f),
