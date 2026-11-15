@@ -10,7 +10,7 @@
 // glyph and link, and a render changes only the attributes that differ.
 import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
-import { ALL_NODES, ALL_RELS, answerParams, clauses, type Goal, GOALS, type GNode, type GRel, measurements, named, type State, type Status, statements, UNIQUE_IDS } from "../src/graph.ts";
+import { ALL_NODES, ALL_RELS, answerParams, clauses, type Goal, GOALS, type GNode, type GRel, measurements, named, recordedStatuses, type RecordedRun, type State, type Status, statements, UNIQUE_IDS } from "../src/graph.ts";
 import { register, webTools } from "./tools.ts";
 
 type Msg =
@@ -18,7 +18,7 @@ type Msg =
   | { type: "states"; states: Status[] };
 
 type QNode = { id: string; text: string; asker: string | null; seq: number; inputs: string[] };
-type QRun = { id: string; seq: number; answer: "yes" | "no" | "failed"; reason: string | null };
+type QRun = RecordedRun & { seq: number };
 type QLink = { source: string; target: string };
 type Row = Record<string, unknown>;
 
@@ -68,6 +68,7 @@ const unplaced: QNode[] = [];
 let statuses = new Map<string, Status>();
 let maxSeq = 0;
 let atSeq: number | null = null;
+let historyStatuses: Map<string, Status> | null = null;
 let selected: string | null = null;
 let hovered: string | null = null;
 let selectedGoal = "";
@@ -77,22 +78,28 @@ type Neighborhood = { nodes: Set<string>; links: Set<string> };
 type QuestionVisit = { id: string; scroll: number; lanes: number; probeOpen: boolean; runsOpen: boolean; marked: Set<string> };
 const questionHistory: QuestionVisit[] = [];
 const linkId = (l: QLink) => `${l.source}:${l.target}`;
+const questionVisible = (id: string) => nodes.has(id) && (atSeq === null || nodes.get(id)!.seq <= atSeq);
 function statusOf(q: string): Status | undefined {
   if (atSeq === null) return statuses.get(q);
-  const node = nodes.get(q);
-  if (!node || node.seq > atSeq) return undefined;
-  const runs = (runsOf.get(q) ?? []).filter((r) => r.seq <= atSeq!);
-  const last = runs.at(-1);
-  if (last) return { id: q, state: last.answer, run: last.id, was: null, reason: last.reason };
-  const waiting = (needs.get(q) ?? []).some((u) => !(runsOf.get(u) ?? []).some((r) => r.seq <= atSeq!));
-  return { id: q, state: waiting ? "waiting" : "pending", run: null, was: null, reason: null };
+  if (!historyStatuses) {
+    const visible = [...nodes.values()].filter((q) => questionVisible(q.id));
+    const latest = new Map<string, QRun>();
+    for (const node of visible) {
+      const last = (runsOf.get(node.id) ?? []).findLast((r) => r.seq <= atSeq!);
+      if (last) latest.set(node.id, last);
+    }
+    historyStatuses = recordedStatuses(visible, latest);
+  }
+  return historyStatuses.get(q);
 }
 const stateOf = (q: string): State => statusOf(q)?.state ?? "waiting";
 const colour = (s: State) => `var(--${s === "pending" ? "running" : s})`;
 /** The goals and their acceptance questions, read again when a goal or a binding arrives. */
 let goalList: Goal[] = [];
 let accepted = new Set<string>();
-const goals = () => goalList;
+const goals = () => atSeq === null ? goalList : goalList
+  .filter((g) => (goalSeq.get(g.id) ?? Infinity) <= atSeq!)
+  .map((g) => ({ ...g, acceptance: g.acceptance && questionVisible(g.acceptance) ? g.acceptance : null }));
 function readGoals() {
   goalList = cypher(GOALS) as Goal[];
   accepted = new Set(goalList.flatMap((g) => (g.acceptance ? [g.acceptance] : [])));
@@ -192,7 +199,7 @@ const laneOf = (asker: string | null) => {
 };
 
 function renderHover() {
-  const activeId = hovered && nodes.has(hovered) ? hovered : selected && nodes.has(selected) ? selected : null;
+  const activeId = hovered && questionVisible(hovered) ? hovered : selected && questionVisible(selected) ? selected : null;
   if (!activeId) {
     hoverBar.replaceChildren(nodes.size ? h("span", { class: "hint" }, "All questions") : "");
     return;
@@ -210,6 +217,7 @@ function renderHover() {
 
 /** Updates hover state without a render. */
 function setHovered(id: string | null) {
+  if (id && !questionVisible(id)) return;
   if (hovered === id) return;
   if (hovered) glyphEls.get(hovered)?.querySelector(".hover-ring")?.setAttribute("opacity", "0");
   hovered = id;
@@ -239,7 +247,7 @@ svg.addEventListener("keydown", (e) => {
 function focusNeighbor(fromId: string, key: string) {
   const cur = place.get(fromId);
   if (!cur) return;
-  const candidates = [...place.entries()].filter(([id]) => id !== fromId);
+  const candidates = [...place.entries()].filter(([id]) => id !== fromId && questionVisible(id));
   let target: string | undefined;
   if (key === "ArrowRight" || key === "ArrowLeft") {
     const dir = key === "ArrowRight" ? 1 : -1;
@@ -432,6 +440,7 @@ function panelQuestions() {
 function apply(m: Msg) {
   let evidence = false;
   if (m.type === "graph") {
+    historyStatuses = null;
     for (const st of statements(m.nodes, m.rels)) cypher(st.cypher, st.params);
     if (m.nodes.some((n) => n.label === "Goal") || m.rels.some((r) => r.type === "ACCEPTED_BY")) readGoals();
     evidence = selected !== null && m.rels.some((r) =>
@@ -453,7 +462,8 @@ function apply(m: Msg) {
         if (qid) {
           const list = runsOf.get(qid) ?? [];
           if (!list.some((x) => x.id === n.id)) {
-            list.push({ id: n.id, seq, answer: n.props.answer as QRun["answer"], reason: (n.props.reason as string | null) ?? null });
+            list.push({ id: n.id, seq, answer: n.props.answer as QRun["answer"], reason: (n.props.reason as string | null) ?? null,
+              measured: n.props.measured === true, saved: m.rels.filter((r) => r.type === "SAVED" && r.from === n.id).map((r) => r.name!) });
             list.sort((a, b) => a.seq - b.seq);
             runsOf.set(qid, list);
           }
@@ -506,10 +516,19 @@ function setSeq(n: number | null) {
   const next = n === null || n >= maxSeq ? null : Math.max(1, Math.floor(n));
   if (atSeq === next) return;
   atSeq = next;
+  historyStatuses = null;
+  if (selected && !questionVisible(selected)) selected = null;
+  if (hovered && !questionVisible(hovered)) setHovered(null);
+  if (selectedGoal && !goals().some((g) => g.id === selectedGoal)) selectedGoal = "";
+  marked = new Set([...marked].filter(questionVisible));
+  for (let i = questionHistory.length - 1; i >= 0; i--) if (!questionVisible(questionHistory[i]!.id)) questionHistory.splice(i, 1);
+  updateEvidenceBack();
+  renderGoals();
   renderSeq();
   if (!querySection.hidden) runQuery();
   else render();
   if (selected) showQuestion(selected);
+  else showEmptyQuestion();
 }
 seqInput.oninput = () => setSeq(Number(seqInput.value));
 
@@ -553,12 +572,17 @@ function chooseGoal(id: string) {
   if (g?.acceptance) select(g.acceptance);
   else {
     if (!id) scroller.scrollLeft = 0;
-    document.getElementById("question")!.replaceChildren(
-      ...(g ? [h("h2", {}, g.text)] : []),
-      h("p", { class: "hint" }, g ? "No acceptance question." : "Select a question."),
-    );
+    showEmptyQuestion();
     render();
   }
+}
+
+function showEmptyQuestion() {
+  const g = goals().find((g) => g.id === selectedGoal);
+  document.getElementById("question")!.replaceChildren(
+    ...(g ? [h("h2", {}, g.text)] : []),
+    h("p", { class: "hint" }, g ? "No acceptance question." : "Select a question."),
+  );
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -590,6 +614,7 @@ const IMAGE = /\.(png|jpe?g|gif|svg|webp)$/i;
 
 /** What the panel shows about a question. A browser agent gets the same (page/tools.ts). */
 function details(qid: string) {
+  if (!questionVisible(qid)) return null;
   const [q] = cypher("MATCH (q:Question {id: $selected}) RETURN q.text AS text, q.rule AS rule, q.probe AS probe, q.inputs AS inputs, q.asker AS asker", { selected: qid });
   if (!q) return null;
   const st = statusOf(qid);
@@ -620,10 +645,10 @@ function details(qid: string) {
     probe: String(q.probe),
     inputs: ids(q.inputs),
     asker: (q.asker as string | null) ?? null,
-    accepts: cypher("MATCH (g:Goal)-[:ACCEPTED_BY]->(:Question {id: $id}) RETURN g.id AS id, g.text AS text", { id: qid }),
+    accepts: goals().filter((g) => g.acceptance === qid).map(({ id, text }) => ({ id, text })),
     status: st,
-    restsOn: ids(l?.needs),
-    usedBy: ids(l?.neededBy).filter((id) => atSeq === null || (nodes.get(id)?.seq ?? 0) <= atSeq),
+    restsOn: ids(l?.needs).filter(questionVisible),
+    usedBy: ids(l?.neededBy).filter(questionVisible),
     ran: Boolean(shown),
     results,
     read: files(read),
@@ -768,6 +793,7 @@ function showQuestion(qid: string) {
 }
 
 function select(qid: string, previous?: QuestionVisit) {
+  if (!questionVisible(qid)) return;
   if (!previous) rememberQuestion(qid);
   if (previous) marked = new Set(previous.marked);
   selected = qid;
@@ -829,20 +855,14 @@ preset.onchange = () => {
 text.value = PRESETS[0]![1];
 
 /** Question ids in a value: the value itself, or the items of a list. */
-const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.flatMap(idsIn) : typeof v === "string" && nodes.has(v) ? [v] : []);
+const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.flatMap(idsIn) : typeof v === "string" && questionVisible(v) ? [v] : []);
 
 /** The parameters every query in the page gets: the answers now (or at the chosen seq), and the selected question and its current run. */
 const params = () => {
   const activeStatuses =
     atSeq === null ? [...statuses.values()] : [...nodes.values()].filter((q) => q.seq <= atSeq!).map((q) => statusOf(q.id)!);
-  const activeGoals =
-    atSeq === null
-      ? goals()
-      : goals()
-          .filter((g) => (goalSeq.get(g.id) ?? 0) <= atSeq!)
-          .map((g) => ({ ...g, acceptance: g.acceptance && (nodes.get(g.acceptance)?.seq ?? Infinity) <= atSeq! ? g.acceptance : null }));
   return {
-    ...answerParams(activeStatuses, activeGoals),
+    ...answerParams(activeStatuses, goals()),
     selected,
     run: (selected && statusOf(selected)?.run) ?? null,
   };
@@ -900,7 +920,7 @@ connect();
 const tools = webTools({
   query: showQuery,
   question(qid) {
-    if (!nodes.has(qid)) return null;
+    if (!questionVisible(qid)) return null;
     select(qid);
     return details(qid);
   },

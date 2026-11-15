@@ -79,6 +79,31 @@ export type Status = {
   reason: string | null; // why it failed, or what it waits for
 };
 
+export type RecordedRun = { id: string; answer: "yes" | "no" | "failed"; reason: string | null; measured: boolean; saved: string[] };
+
+/** Answers from recorded runs alone. An unrun consumer waits until its producers measured and saved its inputs. */
+export function recordedStatuses(questions: Iterable<{ id: string; inputs: string[] }>, latest: ReadonlyMap<string, RecordedRun>): Map<string, Status> {
+  const states = new Map<string, Status>();
+  for (const { id, inputs } of questions) {
+    const run = latest.get(id);
+    const status: Status = { id, state: run?.answer ?? "pending", run: run?.id ?? null, was: null, reason: run?.reason ?? null };
+    states.set(id, status);
+    if (run) continue;
+    for (const name of inputs) {
+      const ref = /^(q-[0-9a-f]{12})\/(.+)$/.exec(name);
+      if (!ref) continue;
+      const producer = latest.get(ref[1]!);
+      if (!producer) status.reason = `${ref[1]} has no recorded run yet`;
+      else if (!producer.measured) status.reason = `${ref[1]} did not measure, so its files cannot be read`;
+      else if (!producer.saved.includes(ref[2]!)) status.reason = `${ref[1]} saved no file named ${ref[2]}`;
+      else continue;
+      status.state = "waiting";
+      break;
+    }
+  }
+  return states;
+}
+
 export type Goal = { id: string; text: string; acceptance: string | null };
 export type GoalStatus = Goal & { state: State | "open"; complete: boolean; reason: string | null };
 

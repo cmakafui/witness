@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import page from "../page/index.html";
-import type { Status } from "./graph.ts";
+import { recordedStatuses, type RecordedRun, type Status } from "./graph.ts";
 import { snapshot } from "./hub.ts";
 import { Relate } from "./relate.ts";
 
@@ -13,11 +13,11 @@ export function replay(root: string, { port = 4748, hostname = "127.0.0.1" } = {
   let states: Status[];
   try {
     graph = snapshot(db);
-    const latest = new Map<string, Status>();
-    for (const r of db.query("MATCH (r:Run)-[:OF]->(q:Question) RETURN q.id AS question, r.id AS run, r.answer AS answer, r.reason AS reason ORDER BY r.seq"))
-      latest.set(String(r.question), { id: String(r.question), state: r.answer as Status["state"], run: String(r.run), was: null, reason: r.reason as string | null });
-    states = graph.nodes.filter((n) => n.label === "Question").map((q) =>
-      latest.get(q.id) ?? { id: q.id, state: "pending", run: null, was: null, reason: null });
+    const latest = new Map<string, RecordedRun>();
+    for (const r of db.query(`MATCH (r:Run)-[:OF]->(q:Question) OPTIONAL MATCH (r)-[s:SAVED]->(:File)
+      RETURN q.id AS question, r.id AS run, r.answer AS answer, r.reason AS reason, r.measured AS measured, collect(s.name) AS saved, r.seq AS seq ORDER BY seq`))
+      latest.set(String(r.question), { id: String(r.run), answer: r.answer as RecordedRun["answer"], reason: r.reason as string | null, measured: r.measured === true, saved: r.saved as string[] });
+    states = [...recordedStatuses(graph.nodes.filter((n) => n.label === "Question").map((q) => ({ id: q.id, inputs: q.props.inputs as string[] })), latest).values()];
   } finally {
     db.close();
   }

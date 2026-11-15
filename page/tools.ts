@@ -44,7 +44,7 @@ export function webTools(page: Page): Tool[] {
   return [
     {
       name: "query",
-      description: `Run a Cypher query on a throwaway copy of the Witness graph in this page, and show it to the person in the Query drawer. A query cannot change the graph. $selected is the question the person has selected. At most ${LIMIT} rows.\n\n${SCHEMA}`,
+      description: `Run a Cypher query on a throwaway copy of the Witness graph in this page, and show it to the person in the Query drawer. A query cannot change the graph. In history, the copy contains only records at the selected seq. $selected is the question the person has selected. At most ${LIMIT} rows.\n\n${SCHEMA}`,
       inputSchema: { type: "object", properties: { cypher: { type: "string", description: "A Cypher query." } }, required: ["cypher"] },
       annotations: hints,
       execute: reply(({ cypher }) => {
@@ -57,7 +57,7 @@ export function webTools(page: Page): Tool[] {
     {
       name: "show_question",
       description:
-        "Select a question in the Witness graph, highlight its upstream artifact dependencies, and show its evidence. Returns its text, rule, answer now, the goals it accepts, dependencies and consumers, measurements of its current run, archived inputs, saved files, and runs. File URLs refer to the bytes that run read or saved. Only an acceptance question determines goal completion.",
+        "Select a question in the Witness graph, highlight its upstream artifact dependencies, and show its evidence. In history, only questions created by the selected seq can be opened, and evidence uses runs recorded by then. Returns its text, rule, answer, the goals it accepts, dependencies and consumers, measurements of its current run, archived inputs, saved files, and runs. File URLs refer to the bytes that run read or saved. Only an acceptance question determines goal completion.",
       inputSchema: { type: "object", properties: { id: { type: "string", description: "The question's id: q- and 12 hex digits." } }, required: ["id"] },
       annotations: hints,
       execute: reply(({ id }) => {

@@ -122,6 +122,8 @@ For more syntax, see [Relate's Cypher guide](https://github.com/relatedb/relate/
 
 `look` shows a saved file. Images come back as images.
 
+In the page, the `seq` slider selects a recorded step. The goal dropdown, Evidence, question links and WebMCP `query` and `show_question` use that same step. Query first to find questions available there; a future question cannot be opened. Rewinding clears selections and Back entries for questions not yet asked. An unrun question stays `waiting` if a producer has not measured or has not saved the required file. Measured `no` and rule-failed runs can still supply saved files. History shows completed runs, not past running intervals. Move the slider to the end to return to the latest view. The slider does not execute probes or change the record.
+
 ## Reporting
 
 Report the goal id, its completion and acceptance question, then question ids and answers. Do not infer completion from the number of exploratory yes answers:
