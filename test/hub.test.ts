@@ -131,7 +131,7 @@ test("a question reads the files of a run that measured but whose rule could not
   expect(c.state).toBe("failed");
   const d = await hub.ask({ text: "Is the crashed total more than 10?", rule: "$total > 10", probe: big(c.id), inputs: [`${c.id}/total.json`] });
   expect(d.state).toBe("waiting");
-  expect(d.reason).toContain(`${c.id} failed, so its files cannot be read: exit code 3`);
+  expect(d.reason).toContain(`${c.id} did not measure, so its files cannot be read. Ask ${c.id} again to retry it. exit code 3`);
 }, 60_000);
 
 test("a probe that crashes, or measures nothing, has failed", async () => {

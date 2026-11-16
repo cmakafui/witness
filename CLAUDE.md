@@ -8,7 +8,7 @@ AI agents do research together. Each finding is a yes/no question with a rule. A
 - The graph holds Goal, Question, Run and File nodes. It does not hold agents. A goal has at most one ACCEPTED_BY question, bound atomically before execution; no other question votes on completion. Goals and bindings are immutable. A different acceptance contract requires a new goal.
 - A goal is complete only while its acceptance question currently answers yes. Completion is derived, never stored; changed inputs invalidate it and restored inputs restore it. An unbound goal is open and incomplete.
 - The same question asked again is the same question: it reuses the cached or running execution and keeps the first asker. An acceptance question is a separate question, bound before execution.
-- ask.rerun requests another execution of the unchanged question and rule. Append a uniquely identified Run, even on the same key. The latest finished run on current inputs supplies the cached answer, including failed results. Coalesce queued requests and join a running execution; honor the worker limit.
+- A run that measured is final for its inputs. Another try needs a changed input or a new question. A run that crashed or timed out settles nothing: the hub never retries it on its own, and the next ask of that question runs it again, as a new Run on the same key. Concurrent asks join one queued or running execution; honor the worker limit.
 - The hub never changes or deletes a record. It only creates records. The answer to a question comes from its runs and from the inputs as they are now.
 - The hub is the only process that writes to Relate. Probes never touch the store.
 - Keep it small. Build what the task needs and nothing more.
@@ -26,7 +26,7 @@ Use Bun for dependency installation, scripts, tests and builds. Bundle the page 
 
 ## Code
 
-- `src/hub.ts`: the only writer. It evaluates each rule with Relate on an empty, read-only in-memory store, writes a run once when it ends, works out each answer from the runs and the inputs now, and reruns what changed or was explicitly requested. It keeps the questions, runs and saved files in memory and adds each record as it writes it, so working out answers reads no store.
+- `src/hub.ts`: the only writer. It evaluates each rule with Relate on an empty, read-only in-memory store, writes a run once when it ends, works out each answer from the runs and the inputs now, and runs what changed, or what crashed and was asked again. It keeps the questions, runs and saved files in memory and adds each record as it writes it, so working out answers reads no store.
 - `src/probe.ts`: runs one probe with uv in a folder that holds only its declared inputs.
 - Probes use one asynchronous `uv run --script`. Keep structured measurements and a bounded diagnostic tail for failures. Archive only declared inputs and saved outputs.
 - `src/graph.ts`: the four node types (Goal, Question, Run, File) and the Cypher that writes them, and what a rule may be. The hub (ffi) and the page (WASM) both use it.

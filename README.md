@@ -92,9 +92,9 @@ RETURN g.id, g.text, g.id IN $complete AS complete, q.id AS acceptance
 ORDER BY g.seq
 ```
 
-To measure again, send the same `ask` with `rerun: true`. The question stays unchanged and a new Run is appended. The latest finished run on the current inputs gives the answer, even when it failed. A call for a question that is already queued or running joins that execution. Earlier runs and files remain.
+A run that measured is final for its inputs: the same `ask` returns it. To measure again, change an input or ask a new question. A run that crashed or timed out settles nothing. The hub does not retry it on its own, but the same `ask` runs it again and appends a new Run. Asks for a question that is already queued or running join that execution. To measure a noisy quantity, loop inside the probe and let the rule judge the distribution.
 
-The cache key covers the probe and declared input hashes, not the full environment. A probe that installs packages must set a fixed package upload cutoff with [`exclude-newer`](https://docs.astral.sh/uv/guides/scripts/#improving-reproducibility), keeping that cutoff in the hashed probe text. It does not lock Python or the full environment. A rerun measures again; it does not guarantee the same result.
+The cache key covers the probe and declared input hashes, not the full environment. A probe that installs packages must set a fixed package upload cutoff with [`exclude-newer`](https://docs.astral.sh/uv/guides/scripts/#improving-reproducibility), keeping that cutoff in the hashed probe text. It does not lock Python or the full environment.
 
 A probe is a uv script. It prints what it measured. It does not answer:
 

@@ -43,11 +43,12 @@ RETURN g.id AS goal, g.text, g.id IN $complete AS complete, q.id AS acceptance
 ORDER BY g.seq
 ```
 
-## Rerunning
+## Asking again
 
-- Send the same `ask` arguments with `rerun: true` to measure again, including after a cached failure. Keep the text, rule, probe, inputs and `accepts` unchanged.
-- A new Run is appended. The latest finished run on the current inputs gives the answer, even if it failed. Until it ends, the question is pending or running, and an acceptance goal is incomplete. Older runs and their files remain available through `query` and `look` with `r-…/name`.
-- A call for a question already queued or running joins that execution. Wait for it to finish before you ask for another. A rerun measures again; it does not make the trials independent.
+- A run that measured is final for its inputs. The same `ask` returns it, whether the answer is yes, no or failed. To measure again, change an input or ask a new question.
+- A run that crashed or timed out settles nothing. Send the same `ask` arguments to retry it. Keep the text, rule, probe, inputs and `accepts` unchanged. Witness does not retry on its own.
+- A call for a question already queued or running joins that execution.
+- To measure a noisy quantity, do not ask again. Loop inside the probe, print each trial, and write the rule over `$results`.
 
 ## The rule
 

@@ -48,12 +48,9 @@ test("an agent asks over MCP, queries the graph, and gets a refusal it can fix",
   expect(g).toMatchObject({ state: "open", complete: false });
   const a = json(await client.callTool({ name: "ask", arguments: { accepts: g.id, text: "Is the total of data.txt more than 10?", rule: "$total > 10", probe: PROBE, inputs: ["data.txt"], asker: "tester" } }));
   expect(a).toMatchObject({ state: "yes", results: [{ total: 15 }], goal: { id: g.id, complete: true, acceptance: a.id } });
-  const again = json(await client.callTool({ name: "ask", arguments: { accepts: g.id, text: "Is the total of data.txt more than 10?", rule: "$total > 10", probe: PROBE, inputs: ["data.txt"], rerun: true } }));
-  expect(again.id).toBe(a.id);
-  expect(again.run).not.toBe(a.run);
-  expect(again.goal).toMatchObject({ acceptance: a.id, complete: true });
   const cached = json(await client.callTool({ name: "ask", arguments: { accepts: g.id, text: "Is the total of data.txt more than 10?", rule: "$total > 10", probe: PROBE, inputs: ["data.txt"] } }));
-  expect(cached.run).toBe(again.run);
+  expect([cached.id, cached.run]).toEqual([a.id, a.run]);
+  expect(cached.goal).toMatchObject({ acceptance: a.id, complete: true });
   const q = json(await client.callTool({ name: "query", arguments: { cypher: "MATCH (q:Question) WHERE q.id IN $yes RETURN q.asker AS asker" } }));
   expect(q.rows).toEqual([{ asker: "tester" }]);
   expect(json(await client.callTool({ name: "query", arguments: { cypher: "RETURN $complete AS ids" } })).rows).toEqual([{ ids: [g.id] }]);

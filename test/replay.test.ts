@@ -25,7 +25,8 @@ beforeAll(async () => {
     probe: `${head}n=[int(x) for x in open("data.txt").read().split()]\nassert n\njson.dump(n, open(os.path.join(os.environ["WITNESS_OUT"], "n.json"), "w"))\nprint("WITNESS_RESULT", json.dumps({"count": len(n)}))`,
   };
   const first = await hub.ask(inspect);
-  const a = await hub.ask({ ...inspect, rerun: true });
+  writeFileSync(join(root, "data.txt"), "4 5 6 0");
+  const a = await hub.ask(inspect);
   Object.assign(ids, { oldRun: first.run, latestRun: a.run });
   const b = await hub.ask({
     text: "Is the total above 100?",
@@ -62,10 +63,10 @@ test("a viewer receives the whole recorded graph and answers immediately, withou
       .toEqual({ [ids.a!]: "yes", [ids.b!]: "no", [ids.c!]: "failed", [ids.d!]: "no" });
     expect(messages[1].states.find((s: any) => s.id === ids.a).run).toBe(ids.latestRun);
     expect(messages[0].nodes.some((n: any) => n.id === ids.oldRun)).toBe(true);
-    const run = messages[0].rels.find((r: any) => r.type === "OF" && r.to === ids.a).from;
+    const run = ids.latestRun;
     const file = messages[0].rels.find((r: any) => r.type === "SAVED" && r.from === run).to;
     const output = await fetch(new URL(`/files/${file}?name=n.json`, server.url));
-    expect(await output.json()).toEqual([4, 5, 6]);
+    expect(await output.json()).toEqual([4, 5, 6, 0]);
   } finally {
     ws.close();
     server.stop(true);
@@ -157,7 +158,7 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     expect(await view.evaluate("document.querySelector('#question .measurements')")).toBeNull();
     expect(await view.evaluate("[...document.querySelectorAll('.q')].map(q => q.dataset.id)")).toContain(ids.c);
     const inputUrl = await view.evaluate("document.querySelector('#question .files a').href") as string;
-    expect(await (await fetch(inputUrl)).json()).toEqual([4, 5, 6]);
+    expect(await (await fetch(inputUrl)).json()).toEqual([4, 5, 6, 0]);
 
     // Every entry point derives the same upstream highlight from the selected question.
     const lit = () => view.evaluate("[...document.querySelectorAll('.q:not(.dim)')].map(q => q.dataset.id)");
@@ -205,7 +206,7 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     expect(await view.evaluate("[document.getElementById('seq-value').textContent, window.witness.state(" + JSON.stringify(ids.a) + "), document.querySelector('#question .badge').textContent, document.querySelector('#question .clause .mark').textContent]"))
       .toEqual(["seq 4 / 12", "pending", "pending", "not run yet"]);
     expect(await view.evaluate("[...document.querySelectorAll('.q')].filter(q => q.getAttribute('display') !== 'none').map(q => q.dataset.id)")).toEqual([ids.a]);
-    // At seq 5, the first run finished (oldRun); the rerun at seq 6 has not happened yet.
+    // At seq 5, the first run finished (oldRun); the run on changed data at seq 6 has not happened yet.
     await view.evaluate("window.witness.setSeq(5)");
     expect(await view.evaluate("[window.witness.state(" + JSON.stringify(ids.a) + "), document.querySelector('#question details.runs-disclosure summary').textContent]"))
       .toEqual(["yes", "1 run"]);
