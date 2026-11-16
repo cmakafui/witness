@@ -6,6 +6,8 @@ Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 �
 
 ## See it
 
+`witness replay examples/human-rng` opens a recorded session: five agents recover a flag hidden in a QR code, and two failed searches feed the one that succeeds. [`examples/human-rng`](examples/human-rng/README.md) says what to look at.
+
 `witness replay DIR` opens a recorded session from its store alone. It needs only [Bun](https://bun.com) 1.4 or later. It needs no AI agent, no API key and no uv. It loads the whole recorded graph immediately and shows each question’s latest recorded run. Replay derives goal completion from those recorded answers; it does not check today’s workspace inputs.
 
 Choose a goal to open its acceptance question, marked `◎`. Each row of the graph is one direction of work, and a curve joins a question to the questions that read its files. Select a question to see its evidence: the answer, each part of the rule with the values it used, saved images, files and run history. Drag the `seq` slider in the goal bar to step through recorded history. [`page/DESIGN.md`](page/DESIGN.md) describes the page in full.

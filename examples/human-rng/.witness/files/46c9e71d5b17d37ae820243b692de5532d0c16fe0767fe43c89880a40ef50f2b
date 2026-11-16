@@ -1,0 +1,90 @@
+{
+  "visible_bits": 1999,
+  "training_bits": 1400,
+  "heldout_bits": 599,
+  "models": [
+    {
+      "order": 0,
+      "bits_per_bit": 1.0008796732904288,
+      "accuracy": 0.5108514190317195,
+      "contexts": 1
+    },
+    {
+      "order": 1,
+      "bits_per_bit": 0.8821365479424593,
+      "accuracy": 0.7011686143572621,
+      "contexts": 2
+    },
+    {
+      "order": 2,
+      "bits_per_bit": 0.8842892120222163,
+      "accuracy": 0.7011686143572621,
+      "contexts": 4
+    },
+    {
+      "order": 3,
+      "bits_per_bit": 0.8871045617333028,
+      "accuracy": 0.7011686143572621,
+      "contexts": 8
+    },
+    {
+      "order": 4,
+      "bits_per_bit": 0.8840965963772661,
+      "accuracy": 0.6911519198664441,
+      "contexts": 16
+    },
+    {
+      "order": 5,
+      "bits_per_bit": 0.8948818498269793,
+      "accuracy": 0.6928213689482471,
+      "contexts": 32
+    },
+    {
+      "order": 6,
+      "bits_per_bit": 0.9052968377210782,
+      "accuracy": 0.666110183639399,
+      "contexts": 63
+    },
+    {
+      "order": 7,
+      "bits_per_bit": 0.9538763856828112,
+      "accuracy": 0.657762938230384,
+      "contexts": 118
+    },
+    {
+      "order": 8,
+      "bits_per_bit": 0.9410356047168783,
+      "accuracy": 0.6527545909849749,
+      "contexts": 201
+    },
+    {
+      "order": 9,
+      "bits_per_bit": 0.948627393389839,
+      "accuracy": 0.6327212020033389,
+      "contexts": 324
+    },
+    {
+      "order": 10,
+      "bits_per_bit": 0.9632768651947158,
+      "accuracy": 0.6176961602671118,
+      "contexts": 465
+    },
+    {
+      "order": 11,
+      "bits_per_bit": 0.9671335721338226,
+      "accuracy": 0.5909849749582637,
+      "contexts": 616
+    },
+    {
+      "order": 12,
+      "bits_per_bit": 0.9691939121843505,
+      "accuracy": 0.5709515859766278,
+      "contexts": 772
+    }
+  ],
+  "known_key_bits": 298,
+  "known_adjacent_pairs": 252,
+  "known_switch_rate": 0.7658730158730159,
+  "visible_switch_rate": 0.7017017017017017,
+  "best_holdout_loss": 0.8821365479424593
+}

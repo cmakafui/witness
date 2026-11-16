@@ -1,0 +1,8 @@
+{
+  "fixed_modules": 298,
+  "variable_modules": 1383,
+  "codewords": 172,
+  "layout_exact": true,
+  "affine_exact": true,
+  "known_key": ""
+}

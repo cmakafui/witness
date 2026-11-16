@@ -1,0 +1,23 @@
+{
+  "solver_status": "FEASIBLE",
+  "objective": 110198.0,
+  "bound": 72782.0,
+  "baseline_cost": 122882,
+  "branches": 9576,
+  "conflicts": 0,
+  "walltime": 45.107227,
+  "cost_table": [
+    [
+      110,
+      40
+    ],
+    [
+      30,
+      134
+    ]
+  ],
+  "candidate_exists": true,
+  "qr_exact": true,
+  "flag": "FortID{aomcwz_evflniy_qg_frzecto_obimbog_auzmrcumrz}",
+  "sha256": "1d475d50153950477f81f688aae2ecf4bb1f01c4e69e0eeeccf3978472c8f28e"
+}

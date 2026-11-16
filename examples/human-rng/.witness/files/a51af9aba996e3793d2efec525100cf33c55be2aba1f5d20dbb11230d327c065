@@ -1,0 +1,100 @@
+{
+  "sites": 785,
+  "single_character_sites": 264,
+  "constant_sites": 521,
+  "edges": 49,
+  "informative_edges": 49,
+  "max_score_error": 3.183231456205249e-12,
+  "T": [
+    [
+      0.33269961977186313,
+      0.6673003802281369
+    ],
+    [
+      0.7389473684210527,
+      0.26105263157894737
+    ]
+  ],
+  "best_alphabet_solutions": [
+    [
+      -421.54349355487614,
+      "homswz_ezflnix_yaqfrzeato_obemfob_aszercuopx"
+    ],
+    [
+      -422.89694878993964,
+      "hom_wkoezflnilgywqfzbeato_obemhob_hszercuopx"
+    ],
+    [
+      -423.0374804626639,
+      "lomcwz_ezm_nilgya_frzaqto_obemfob_aszercunpx"
+    ],
+    [
+      -423.143315639969,
+      "lolcws_ezflnilayg_frzeato_omemfob_asze_crnpx"
+    ],
+    [
+      -423.72648928178955,
+      "lomsoskezm_nix_ywqnrbaqtooobemhob_hszercunpx"
+    ],
+    [
+      -423.97599880646726,
+      "lol_ok_ezflnilaywqnzzeato_omemhob_aszercpnpx"
+    ],
+    [
+      -424.0779851333584,
+      "iom_okoewflmix_ywqnzreato_hbemhob_aszercuapx"
+    ],
+    [
+      -424.2185168060827,
+      "lom_oj_ezm_nilgyqqnzzaqto_obemhob_aszercunpx"
+    ],
+    [
+      -424.49292210767493,
+      "iomcwsoeznlnilgyw_frbeqto_hbemhob_hszercuapx"
+    ],
+    [
+      -424.8798205473721,
+      "homsws_ezflnix_ygqfrzeato_hlemfoc_asze_crep_"
+    ],
+    [
+      -425.0869361005487,
+      "iomcoz_eznlnilgyq_nrjeqto_hbemhob_hszercuapx"
+    ],
+    [
+      -425.0907847848499,
+      "homcwz_izflnilcya_frzeat__oaemfoc_aszercqop_"
+    ],
+    [
+      -425.22746763158335,
+      "hom_wk_ewmnmix_ygqfzzeqto_hbemfob_aszercuepx"
+    ],
+    [
+      -425.2274676315834,
+      "hol_wk_ezflnilaygqfzzeato_hmemfob_aszercpepx"
+    ],
+    [
+      -425.469985714255,
+      "hom_oj_ezmnnilcyqqnzzeqto_kaemhob_aszercqmpx"
+    ],
+    [
+      -425.7829362786241,
+      "lom_wk_ewenmilgygqfzjeato_obemfob_hszercunpx"
+    ],
+    [
+      -425.7829362786241,
+      "homcwz_ewflmilgyq_frzeato_hbemhob_aszercuepx"
+    ],
+    [
+      -425.81449012381785,
+      "iomcos_eze_nilgyg_nrzaato_obemfoc_aszercucp_"
+    ],
+    [
+      -425.8849226885715,
+      "lomcws_ewenmilgyg_frjeato_obemfob_hszercunpx"
+    ],
+    [
+      -425.9907577583972,
+      "homswzoewnlmix_yqqfrbeqto_olemhoc_hsze_crop_"
+    ]
+  ]
+}
