@@ -33,7 +33,8 @@ test("history hides future evidence and waits for usable producer outputs", asyn
     await using view = new Bun.WebView({ width: 1100, height: 800 });
     await view.navigate(server.url.href);
     for (let i = 0; i < 100; i++) {
-      if (await view.evaluate("window.witness?.questions() === 8").catch(() => false)) break;
+      // The graph and the states arrive as two messages: wait for both.
+      if (await view.evaluate(`window.witness?.questions() === 8 && window.witness.state(${JSON.stringify(usable.id)}) !== null`).catch(() => false)) break;
       await Bun.sleep(50);
     }
     const state = (id: string) => view.evaluate(`window.witness.state(${JSON.stringify(id)})`);
