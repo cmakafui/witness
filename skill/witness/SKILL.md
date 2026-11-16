@@ -20,11 +20,22 @@ Witness keeps the tested answers of all agents in this workspace in one graph. N
 ## Steps
 
 1. Call `query` before you ask. Use an answer that exists.
-2. Run the probe yourself on a small case. This shows that the probe works. It is not evidence.
+2. Test the probe yourself on a small case: `uv run --script probe.py`. This shows that the probe works. It is not evidence.
 3. Call `ask` with the question, the rule, the probe and all inputs. Give `asker` your direction of work. The page gives each direction its own row.
 4. Read the answer, the measurements and the saved files.
 
+## Working with other agents
+
+The graph is the only record that agents share.
+
+- Call `query` before you start. Another agent may have asked your question, or ruled out your idea.
+- A finding exists for another agent only as a question id. Hand over question ids and saved files, not summaries.
+- Before you build on a result, read its question: the rule, the probe, the inputs and the current answer.
+- Give `asker` your direction of work. Witness does not record agents.
+
 ## Goals and acceptance
+
+A goal is optional. Use one where the work needs a stopping condition: one for the whole task, one for each part, or none while you explore. Any agent can create a goal.
 
 Call `query` to find the goal before creating one. `goal({text: "…"})` creates a new goal every time, even for identical text. Its id starts with `g-`. An unbound goal is open and incomplete.
 
@@ -35,6 +46,8 @@ Call `query` to find the goal before creating one. `goal({text: "…"})` creates
 - An `ask` with `accepts` returns the goal’s completion alongside the question’s answer. Query `$complete` and `$incomplete` for goal ids.
 
 An acceptance question can read a candidate file directly or consume `q-…/name`. Its rule tests the solved condition. Exploration can keep producing negative answers while the goal is complete.
+
+An acceptance question can read a file that another acceptance question saved. That link carries files, not completion: a run that measured and answered no still supplies its files. If one goal requires the result of another, check that result in the probe and the rule.
 
 ```cypher
 MATCH (g:Goal)
@@ -129,7 +142,7 @@ In the page, the `seq` slider selects a recorded step. The goal dropdown, Eviden
 
 ## Reporting
 
-Report the goal id, its completion and acceptance question, then question ids and answers. Do not infer completion from the number of exploratory yes answers:
+Report question ids and answers. For each goal you worked on, give its id, its completion and its acceptance question first. Do not infer completion from the number of exploratory yes answers:
 
 ```
 q-3f9a1c0b7e2d yes      the total is exact (2,000 cases)

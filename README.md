@@ -114,7 +114,7 @@ print("WITNESS_RESULT", json.dumps({"mean": float(x.mean())}))
 
 Asked with the rule `$mean > 10`, this probe answers yes when the mean is above 10. It runs in an empty folder that holds only its declared inputs. It saves files for other questions in `$WITNESS_OUT`. A crash, a timeout, or a missing measurement that the rule needs gives "failed". It never gives "no". The skill in [`skill/witness`](skill/witness/SKILL.md) teaches agents the rest.
 
-To set agents on a problem, start one in the problem's folder. Paste the prompt in [`method/prompt.md`](method/prompt.md).
+To set agents on a problem, start one in the problem's folder and give it your task. Add the text in [`method/prompt.md`](method/prompt.md). It states no problem and no arrangement of agents: it is the same for every task.
 
 To develop, run `bun test` (real uv probes, MCP over HTTP and stdio, the page in a real browser engine) and `bun check`.
 

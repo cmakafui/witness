@@ -10,7 +10,8 @@ import { VERSION } from "./version.ts";
 
 const GUIDE = `Witness keeps the tested answers of a team of agents in one graph. No agent writes an answer. A probe measures, and a rule decides.
 
-- goal: create an immutable goal that states the solved condition. It starts open and incomplete. Each call creates a new goal.
+- The graph is the only record agents share. Give another agent question ids and saved files, not summaries.
+- goal: create an immutable goal that states a solved condition. A goal is optional, and the work can have many. It starts open and incomplete. Each call creates a new goal.
 - ask: give a yes/no question, a rule, a probe, and the files that the probe reads. Witness runs the probe and returns the answer.
 - The same ask on unchanged inputs returns the cached answer. A run that measured is final for its inputs. A run that crashed or timed out is not: the same ask runs it again. Concurrent asks join one execution.
 - Set accepts to a goal id to bind that goal's only acceptance question before it runs. The goal is complete only while that question currently answers yes. No other question votes on completion. Changing the acceptance contract requires a new goal.
