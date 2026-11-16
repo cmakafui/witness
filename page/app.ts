@@ -588,10 +588,10 @@ function showEmptyQuestion() {
 // ---------------------------------------------------------------------------------------------------------------
 // The evidence panel
 
-function badge(st: Status | undefined) {
+/** The answer as a word after its glyph: the same shape as in the lanes. */
+function badge(st: Pick<Status, "state"> | undefined) {
   const state = st?.state ?? "waiting";
-  const answered = state === "yes" || state === "no";
-  return h("span", { class: `badge${answered ? "" : " hollow"}`, style: `--c: ${colour(state)}` }, state);
+  return h("span", { class: "badge", style: `--c: ${colour(state)}` }, mark(state, 11), state);
 }
 
 /** An id in a table: clickable, with its answer's glyph. */
@@ -698,7 +698,7 @@ function measurementTable(entries: [string, unknown][], multipleRecords: boolean
   return h(
     "table",
     { class: "measurements", "aria-label": "Measurements" },
-    h("thead", {}, h("tr", {}, h("th", {}, "Measurement"), h("th", {}, multipleRecords ? "Last value" : "Value"))),
+    multipleRecords ? h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", {}, "Last value"))) : null,
     h("tbody", {}, ...entries.map(([key, value]) => h("tr", {}, h("th", { scope: "row" }, key), h("td", {}, h("code", {}, show(value)))))),
   );
 }
@@ -733,7 +733,7 @@ function showQuestion(qid: string) {
             h(
               "li",
               {},
-              h("span", { class: "badge", style: `--c: ${colour(r.answer as State)}` }, r.answer),
+              badge({ state: r.answer as State }),
               h("span", { class: "id", title: `#${r.seq}` }, r.run),
               h("span", { class: "hint" }, `${r.ms} ms`),
               r.current ? h("span", { class: "hint" }, "current") : null,

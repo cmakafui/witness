@@ -67,22 +67,16 @@ spacing:
   xl: 40px
 components:
   verdict-yes:
-    backgroundColor: "{colors.yes}"
-    textColor: "{colors.surface}"
-    rounded: "{rounded.full}"
+    textColor: "{colors.yes}"
   verdict-no:
-    backgroundColor: "{colors.no}"
-    textColor: "{colors.surface}"
-    rounded: "{rounded.full}"
+    textColor: "{colors.no}"
   verdict-failed:
-    backgroundColor: "{colors.surface}"
     textColor: "{colors.failed}"
-    rounded: "{rounded.full}"
   clause:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
     typography: "{typography.rule}"
-    rounded: "{rounded.none}"
+    rounded: "{rounded.sm}"
     padding: 12px
   button:
     backgroundColor: "{colors.surface}"
@@ -121,7 +115,7 @@ The dark set keeps the same roles with lighter answer colours, so each still pas
 
 ## Typography
 
-One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It was drawn for legibility, and its numerals and letters cannot be confused, which suits a page whose job is to be read exactly. Atkinson Hyperlegible Mono sets code only: rules, probes, Cypher, ids and measured values. Measured values use tabular figures so columns of numbers line up.
+One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It was drawn for legibility, and its numerals and letters cannot be confused, which suits a page whose job is to be read exactly. Atkinson Hyperlegible Mono sets code only: rules, probes, Cypher and measured values. Ids are labels and use the sans with tabular figures. Measured values use tabular figures so columns of numbers line up.
 
 - Question text is the largest type on the page, at 20px.
 - Labels are sentence case at 13px semibold. No all-caps, no tracking.
@@ -130,8 +124,7 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 ## Layout
 
 ```
-┌ Witness                                                       connected ┐
-│ Sort records without losing duplicates                              ▾ │
+┌ Witness │ Sort records without losing duplicates ▾      ──●  seq 19  ● Hide evidence ┐
 ├─────────────────────────────────────────────────────────┬───────────────┤
 │ ● yes · With warm-start B&B, all 50 ≤ 200 ms     branch │ yes  q-…      │
 ├─────────────────────────────────────────────────────────┤ Question text │
@@ -144,8 +137,9 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 └─────────────────────────────────────────────────────────┴───────────────┘
 ```
 
-- **Goal dropdown.** A native dropdown below the header names the chosen goal. Selecting a goal opens its acceptance question; a goal without one shows No acceptance question in the panel. All questions clears the selection. First load opens the first goal when there is no selection. Live arrivals preserve the reader’s choice. There are no completion banners.
-- **Step slider (`seq`).** A range control on the right of the goal bar steps across recorded `seq` order. Glyphs, goal options, Evidence, links, hover previews, Back and browser tools share that step. Rewinding clears selections and Back entries for questions not yet asked. An existing goal with no acceptance question at that step shows No acceptance question. An unrun consumer stays waiting until the producer measured and saved the named input. The slider shows committed runs, not past running intervals, and its last step restores the latest view.
+- **Header.** One bar: the name, the goal, the step slider, the connection dot and the evidence toggle. Nothing else sits above the lanes except the hover strip.
+- **Goal dropdown.** A borderless native dropdown in the header names the chosen goal. It reads as the page's title. Selecting a goal opens its acceptance question; a goal without one shows No acceptance question in the panel. All questions clears the selection. First load opens the first goal when there is no selection. Live arrivals preserve the reader’s choice. There are no completion banners.
+- **Step slider (`seq`).** A thin range control on the right of the header steps across recorded `seq` order. Glyphs, goal options, Evidence, links, hover previews, Back and browser tools share that step. Rewinding clears selections and Back entries for questions not yet asked. An existing goal with no acceptance question at that step shows No acceptance question. An unrun consumer stays waiting until the producer measured and saved the named input. The slider shows committed runs, not past running intervals, and its last step restores the latest view.
 - **Hover strip.** A steady single-line bar above the lanes shows the hovered or focused question’s state, full text and lane without covering nearby dots or shifting the layout.
 - **Lanes.** One row per direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. Glyphs carry no inline text labels; parallel work shares columns while preserving creation order within each lane and left-to-right causal order across dependencies. Arrow keys move across dots.
 - **Links.** A curve runs from a question to each question that reads its output. Selecting any question highlights its upstream chain; choosing a goal selects its acceptance question. Other exploration stays readable. Links carry the consumed artifact names as hover titles.
@@ -164,16 +158,16 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 - Exploratory question glyphs are 8.5px discs: filled for an answer, hollow for no answer yet, a slashed ring for failed.
 - Acceptance questions add an outer ring in the verdict colour (`◎`) so they stand out from exploration.
 - The selected question gets an outer ink ring; hovered questions get a muted ring; query matches get an accent ring.
-- Buttons and chips use a 4px radius. Verdict badges are fully rounded. Panels and clauses have square corners.
+- Buttons, chips, the rule block and code blocks use a 4px radius. Panels have square corners.
 
 ## Components
 
-- **Verdict badge.** The answer as a word on its colour: `yes`, `no`, `failed`. `pending`, `running` and `waiting` are outlined, because they are not answers.
-- **Rule check.** The rule split at its top-level `AND`s, one clause per row. Each row shows the clause in mono, the measured values it names, and whether it is true, false or not measured. A 4px bar on the left takes the colour of that result. The page evaluates each clause on its own empty, read-only Relate store, on the run's measurements. The answer itself still comes from the run.
-- **Measurements.** Measurements already displayed beside a rule clause are not repeated below. Additional recorded names and exact JSON values appear in a Measurements table. With multiple result records, label the values Last value and expose every record under All measurements. Never infer units, rename measurements or round them. Pending and running tests show no stale values as current.
+- **Verdict.** The question's glyph, the same shape as in the lanes, then the answer as a word in its colour: `yes`, `no`, `failed`. No pill and no fill behind the word.
+- **Rule check.** One bordered block on `paper`. The rule is split at its top-level `AND`s, one clause per row, with hairlines between rows. Each row shows the clause in mono, the measured values it names in a quiet line below, and whether it is true, false or not measured, as a coloured word after a dot. No coloured side bars. The page evaluates each clause on its own empty, read-only Relate store, on the run's measurements. The answer itself still comes from the run.
+- **Measurements.** Measurements already displayed beside a rule clause are not repeated below. Additional recorded names and exact JSON values appear in a Measurements table without a header row. With multiple result records, a header labels the values Last value and expose every record under All measurements. Never infer units, rename measurements or round them. Pending and running tests show no stale values as current.
 - **Files.** A table of input and saved files. Input links refer to the content hash read by the displayed run, not the mutable workspace path. Declared inputs without a committed run remain plain names.
 - **Question chip.** A link to another question: its glyph, then the start of its text. Never a bare id.
-- **Header.** The name, connection state and evidence toggle. The selected question’s result appears in evidence.
+- **Ids.** Question, run and goal ids are labels, set in tabular sans at 12px. Mono is for rules, probes, Cypher and measured values.
 
 ## Do's and Don'ts
 

@@ -9,16 +9,16 @@
   <body>
     <header>
       <h1>Witness</h1>
-      <div id="link" class="off">Connecting</div>
-      <button id="sidebar-toggle" class="button" aria-controls="sidebar" aria-expanded="true">Hide evidence</button>
-    </header>
-    <div id="goal-picker">
-      <select id="goal" aria-label="Goal"><option value="">All questions</option></select>
+      <div id="goal-picker">
+        <select id="goal" aria-label="Goal"><option value="">All questions</option></select>
+      </div>
       <div id="seq-bar" hidden>
         <input id="seq" type="range" min="1" max="1" value="1" aria-label="Step" />
-        <span id="seq-value" class="id"></span>
+        <span id="seq-value"></span>
       </div>
-    </div>
+      <div id="link" class="off">Connecting</div>
+      <button id="sidebar-toggle" class="button quiet" aria-controls="sidebar" aria-expanded="true">Hide evidence</button>
+    </header>
     <main>
       <div id="graph-stage">
         <div id="hover-bar" aria-live="polite"></div>
