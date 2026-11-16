@@ -20,7 +20,7 @@ Witness keeps the tested answers of all agents in this workspace in one graph. N
 ## Steps
 
 1. Call `query` before you ask. Use an answer that exists.
-2. Test the probe yourself on a small case: `uv run --script probe.py`. This shows that the probe works. It is not evidence.
+2. Draft the probe in `scratch/` and test it yourself on a small case: `uv run --script scratch/probe.py`. This shows that the probe works. It is not evidence. Keep drafts out of `.witness/`: only the hub writes there.
 3. Call `ask` with the question, the rule, the probe and all inputs. Give `asker` your direction of work. The page gives each direction its own row.
 4. Read the answer, the measurements and the saved files.
 
@@ -122,6 +122,7 @@ Relate query basics:
 - `WITH` carries variables to the next clause. Keep each variable you still need.
 - Bound traversals (`*0..5`) and returned rows (`LIMIT 50`).
 - Use `$current` for current runs. A stored `r.answer` can describe an old run.
+- The graph keeps each question's probe text (`q.probe`). To reuse or check a probe, read it from the graph. A draft in `scratch/` may have changed since the run.
 - Do not assume Neo4j procedures or APOC functions are available.
 
 ```cypher
