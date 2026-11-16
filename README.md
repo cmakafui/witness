@@ -10,6 +10,8 @@ Made for the [Relate by Neo4j Hackathon](https://relate.devpost.com/) (Nov 11 â€
 
 Choose a goal to open its acceptance question, marked `â—Ž`. Each row of the graph is one direction of work, and a curve joins a question to the questions that read its files. Select a question to see its evidence: the answer, each part of the rule with the values it used, saved images, files and run history. Drag the `seq` slider in the goal bar to step through recorded history. [`page/DESIGN.md`](page/DESIGN.md) describes the page in full.
 
+Measured values beside rule clauses and in the Measurements table use larger, semibold text with full contrast. Their names stay smaller and muted. Values retain their exact recorded precision.
+
 At an earlier step, the goal dropdown, question links, Evidence and WebMCP all use that step. Rewinding before a selected question was asked clears its selection, hover preview and Back entries. An unrun consumer stays `waiting` until its producer has measured and saved the named input file; a crashed producer or a missing output does not make it `pending`. A measured run can supply files even when its rule answers `no` or `failed`. History shows committed runs; it does not reconstruct when probes were running. Moving the slider to the end returns to the latest view without running probes.
 
 The Query drawer runs Cypher on the graph in the page:

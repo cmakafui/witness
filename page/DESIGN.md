@@ -46,9 +46,9 @@ typography:
     lineHeight: 1.4
   value:
     fontFamily: Atkinson Hyperlegible Mono Variable
-    fontSize: 1.0625rem
+    fontSize: 1rem
     fontWeight: 600
-    lineHeight: 1.2
+    lineHeight: 1.4
     fontFeature: '"tnum"'
   code:
     fontFamily: Atkinson Hyperlegible Mono Variable
@@ -163,8 +163,8 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 ## Components
 
 - **Verdict.** The question's glyph, the same shape as in the lanes, then the answer as a word in its colour: `yes`, `no`, `failed`. No pill and no fill behind the word.
-- **Rule check.** One bordered block on `paper`. The rule is split at its top-level `AND`s, one clause per row, with hairlines between rows. Each row shows the clause in mono, the measured values it names in a quiet line below, and whether it is true, false or not measured, as a coloured word after a dot. No coloured side bars. The page evaluates each clause on its own empty, read-only Relate store, on the run's measurements. The answer itself still comes from the run.
-- **Measurements.** Measurements already displayed beside a rule clause are not repeated below. Additional recorded names and exact JSON values appear in a Measurements table without a header row. With multiple result records, a header labels the values Last value and expose every record under All measurements. Never infer units, rename measurements or round them. Pending and running tests show no stale values as current.
+- **Rule check.** One bordered block on `paper`. The rule is split at its top-level `AND`s, one clause per row, with hairlines between rows. Each row shows the clause in mono, its measured values below in 16px semibold tabular mono in ink, and whether it is true, false or not measured, as a coloured word after a dot. Measurement names stay smaller and muted. No coloured side bars. The page evaluates each clause on its own empty, read-only Relate store, on the run's measurements. The answer itself still comes from the run.
+- **Measurements.** Measurements already displayed beside a rule clause are not repeated below. Additional recorded names and exact JSON values appear in a Measurements table without a header row. Values use the same 16px semibold tabular mono in ink as the rule measurements; names stay smaller and muted. With multiple result records, a header labels the values Last value and expose every record under All measurements. Never infer units, rename measurements or round them. Pending and running tests show no stale values as current.
 - **Files.** A table of input and saved files. Input links refer to the content hash read by the displayed run, not the mutable workspace path. Declared inputs without a committed run remain plain names.
 - **Question chip.** A link to another question: its glyph, then the start of its text. Never a bare id.
 - **Ids.** Question, run and goal ids are labels, set in tabular sans at 12px. Mono is for rules, probes, Cypher and measured values.

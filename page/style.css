@@ -274,7 +274,7 @@ h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 28px 0 8px;
 .clause .mark { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--c); white-space: nowrap; }
 .clause .mark::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
 .clause .values { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 20px; }
-.clause .values span { font: 400 13px/1.4 var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.clause .values span { font: 600 16px/1.4 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .clause .values small { font: 400 12px var(--sans); color: var(--muted); margin-right: 8px; }
 .reason {
   margin: 12px 0 0;
@@ -357,7 +357,7 @@ th { color: var(--muted); font-weight: 500; font-size: 12px; }
 .measurements th[scope="row"], .measurements thead th:first-child { width: 38%; }
 .measurements th, .measurements td, .files td { overflow-wrap: anywhere; }
 .measurements th[scope="row"] { color: var(--muted); font-weight: 400; font-size: 13px; }
-.measurements code { font-size: 13px; }
+.measurements code { font: 600 16px/1.4 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
 .measurements td { white-space: pre-wrap; }
 .files td:last-child { width: 56px; color: var(--muted); text-align: right; font-size: 12px; }
 .raw-measurements { margin-top: 8px; }
