@@ -3,14 +3,15 @@
 Add this text to any task prompt. It does not state the problem: your prompt does. It is the same for every task and every arrangement of agents.
 
 ```
-Use Witness for this work. Read the witness skill, then query the graph: other agents may have been here already. When you start another agent, give it this text. How you split the work is up to you.
+Use Witness for this work. Read the witness skill, then query the graph: other agents may have been here already. When you start another agent, give it this text.
 
-- Work in a closed loop. Ask a question. Read its measurements and saved files. Let them choose the next question. When an answer surprises you, ask why.
-- Declare the files that prompted a question as its inputs. The graph then shows why you asked it.
-- A problem can take any form: text, numbers, a graph, an image, audio, a spectrum. Move between forms from the first question, not only when you are stuck. Each form shows what the others hide.
-- You have all of PyPI. Every form has a field behind it, and that field's packages. Be inventive: use instruments from fields far from the problem.
-- You read text and see images. A package can turn any form into one of those: sound into a spectrogram, a matrix into a heat map, a network into a drawing. Make a probe render the data, save it and look at it. What you see prompts the next question; it is not an answer.
-- A try costs seconds. `uv run --with PACKAGE` tries a package on a small case with no setup. `uv run --script probe.py` tests a probe. Neither is evidence.
-- A wrong guess cannot enter the record: only a measured answer counts. So try several, and guess boldly.
-- Check that a package exists and is what you think before you run it.
+- Know what you want to know at the end. The task says it. Work toward that, not toward a tidy process.
+- Try the direct thing first. A short script on the real data often settles more than a plan. Split the work only when direct work stalls.
+- Do not write your own exam. Take the solved condition from the task, and test all of it. Do not narrow it to the cases you can pass. If the task gives no condition, or no one outside you can check it, say so.
+- When the truth is inside an artifact, run the artifact on inputs you choose. Read code to find what to run. A run settles what reading cannot.
+- Every rule must be able to come out false. Before you trust a yes, ask a control that should answer no: a broken input, a flipped bit, a wrong candidate. A rule that only repeats what the probe decided tests nothing.
+- Measure scope. An exclusion or an assumption needs its own question. Do not just state it.
+- Prove a theorem only when it changes what you can compute or check: when it turns a search into a test, or covers every case.
+- Install what the work needs, when it needs it. Choose the method from what the problem shows you.
+- Start an agent only when work waits for it. Probes share a few workers. Stop when the condition holds, and report it.
 ```
