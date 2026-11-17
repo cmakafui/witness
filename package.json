@@ -1,6 +1,6 @@
 {
   "name": "witness",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Tested answers for a team of AI agents, in a Relate graph you can watch live.",
   "type": "module",
   "private": true,

@@ -71,7 +71,7 @@ curl -fsSL https://bun.com/install | bash      # Bun
 curl -LsSf https://astral.sh/uv/install.sh | sh  # uv
 git clone https://github.com/cmakafui/witness && cd witness
 bun install && bun link        # puts `witness` on your PATH
-witness setup                  # adds the skill and the MCP server to Claude Code and Codex
+witness setup                  # adds the skill and the MCP server to Claude Code, Codex and Pi
 ```
 
 Start an agent in any folder. Its first Witness call starts the hub for that folder. Every agent in the folder shares that hub. The hub stops after 10 minutes without use.

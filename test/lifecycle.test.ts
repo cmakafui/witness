@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hub, running } from "../src/connect.ts";
-import { codexTimeout } from "../src/setup.ts";
+import { codexTimeout, piTimeout } from "../src/setup.ts";
 
 const roots: string[] = [];
 const workspace = () => {
@@ -46,4 +46,15 @@ test("setup gives Codex's witness server a tool timeout once, and changes nothin
   expect(once).toBe(`model = "x"\n\n[mcp_servers.witness]\ntool_timeout_sec = 300\ncommand = "bun"\nargs = ["main.ts", "mcp"]\n\n[mcp_servers.other]\ncommand = "o"\n`);
   expect(codexTimeout(once)).toBe(once);
   expect(codexTimeout(`[mcp_servers.other]\ncommand = "o"\n`)).toBe(`[mcp_servers.other]\ncommand = "o"\n`);
+});
+
+test("setup gives Pi's witness server a timeout once, and changes nothing else", () => {
+  const other = { command: "o", exposure: "direct", enabled: false };
+  const config = JSON.stringify({ mcpServers: { other, witness: { command: "bun", args: ["main.ts", "mcp"], exposure: "direct" } } });
+  const once = piTimeout(config);
+  expect(JSON.parse(once)).toEqual({ mcpServers: { other, witness: { command: "bun", args: ["main.ts", "mcp"], exposure: "direct", timeout: 300 } } });
+  expect(piTimeout(once)).toBe(once);
+  const kept = JSON.stringify({ mcpServers: { witness: { command: "bun", timeout: 900 } } });
+  expect(piTimeout(kept)).toBe(kept);
+  expect(piTimeout(JSON.stringify({ mcpServers: { other } }))).toBe(JSON.stringify({ mcpServers: { other } }));
 });
