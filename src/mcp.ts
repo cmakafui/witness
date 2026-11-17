@@ -18,7 +18,7 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 - The rule is a Cypher expression over the measurements, for example $p < 0.01 AND $gain >= 0.1. $name is a measurement. $results is the list of all measurements. True gives yes. False gives no. All other results give failed.
 - The probe is a Python script with a PEP 723 header. A probe with dependencies sets exclude-newer under [tool.uv] to a fixed date, keeping the package upload cutoff in the probe text. uv runs it in an empty folder that holds the declared inputs only. It prints each measurement as WITNESS_RESULT and one JSON object. It saves files for other questions in $WITNESS_OUT.
 - An input is a workspace path, or q-…/name for a file that another question saved.
-- When an input changes, the question runs again. When the inputs change back, their latest recorded answer comes back. So a probe must not act: do not send, deploy, or use a budget in a probe.
+- When an input changes, the question runs again. When the inputs change back, their latest recorded answer comes back. So a probe must not act: do not send or deploy in a probe.
 - query: read the graph with Cypher. look: show a file that a run saved.`;
 
 const text = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });

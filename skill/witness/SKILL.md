@@ -100,7 +100,7 @@ Rule: `$mean > 10`.
 - The probe runs in an empty folder. The folder holds the probe and the declared inputs only.
 - Save files for other questions in `$WITNESS_OUT`.
 - If the measurement did not occur, stop the probe with an error. A crash gives `failed`, not `no`.
-- Do not act in a probe. Do not send, deploy, or use a budget. Witness runs a question again when its inputs change, so the action occurs again.
+- Do not act in a probe. Do not send or deploy. Witness runs a question again when its inputs change, so the action occurs again.
 - The time limit is 600 seconds (`timeout_s`). `ask` waits 120 seconds (`wait_s`). After that, the run continues.
 
 Start from [assets/probe.py](assets/probe.py).
