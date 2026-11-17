@@ -137,7 +137,7 @@ RETURN q.id, q.text, r.answer, r.ms ORDER BY r.ms DESC LIMIT 50
 
 For more syntax, see [Relate's Cypher guide](https://github.com/relatedb/relate/blob/main/surfaces/relate-cli/src/skill/bundle/SKILL.md#cypher). It tracks upstream; check newer features against Witness's pinned Relate version.
 
-`look` shows a saved file. Images come back as images.
+`look` shows a saved file. Images come back as images. Each tool returns structured content: `query` gives `{rows, truncated}`, `look` gives `{name, file, type, bytes, text, truncated}`, and `ask` and `goal` give the status they report.
 
 In the page's Evidence panel, read measured values beside their rule clauses and any extra values in Measurements. Values use larger, semibold mono text; names stay smaller and muted. The page displays the exact recorded JSON values, without rounding, renamed fields or inferred units.
 

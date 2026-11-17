@@ -2,6 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { readFileSync } from "node:fs";
+import { basename } from "node:path";
 import { z } from "zod";
 import { SCHEMA } from "./graph.ts";
 import { type Hub, Refusal } from "./hub.ts";
@@ -24,10 +25,49 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 
 const text = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
 
+// What each tool returns, so a client knows the shape before it calls: code mode can chain calls in one program.
+// The SDK checks every result against its schema. The same value also goes out as JSON text for older clients.
+const STATE = z.enum(["yes", "no", "failed", "running", "pending", "waiting"]);
+const GOAL = z.object({
+  id: z.string().describe("The goal id, g-…"),
+  text: z.string().describe("The solved condition"),
+  acceptance: z.string().nullable().describe("The acceptance question id, or null when none is bound"),
+  state: z.union([STATE, z.literal("open")]).describe("The acceptance question's answer now; open when none is bound"),
+  complete: z.boolean().describe("True only while the acceptance question answers yes"),
+  reason: z.string().nullable(),
+});
+const ASKED = {
+  id: z.string().describe("The question id, q-…"),
+  state: STATE.describe("The answer now"),
+  run: z.string().nullable().describe("The run that gives the answer, r-…"),
+  was: z.enum(["yes", "no"]).nullable().describe("When pending or running: the answer on the inputs before"),
+  reason: z.string().nullable().describe("Why it failed, or what it waits for"),
+  question: z.string(),
+  results: z.array(z.record(z.string(), z.unknown())).describe("The measurements the run printed, in order"),
+  saved: z.array(z.string()).describe("The files the run saved, as q-…/name inputs for other questions"),
+  goal: GOAL.nullable().describe("With accepts: that goal's completion"),
+};
+const ROWS = {
+  rows: z.array(z.record(z.string(), z.unknown())).describe("One object per row, keyed by the RETURN column names"),
+  truncated: z.boolean().describe("True when the query had more than 200 rows"),
+};
+const LOOKED = {
+  name: z.string(),
+  file: z.string().describe("The file's SHA-256"),
+  type: z.string().describe("Its media type"),
+  bytes: z.number().int().describe("Its size in bytes"),
+  text: z.string().nullable().describe("Its text, up to 50,000 characters; null for an image or binary data"),
+  truncated: z.boolean().describe("True when text holds only the start of the file"),
+};
+const LIMIT = 50_000;
+
+/** A result with its structured value, and the same value as JSON text. */
+const structured = (value: Record<string, unknown>) => ({ ...text(value), structuredContent: value });
+
 /** Runs a tool. A refusal or a rejected query goes back to the agent as an error it can fix. */
 async function tool(fn: () => unknown) {
   try {
-    return text(await fn());
+    return structured((await fn()) as Record<string, unknown>);
   } catch (e) {
     if (e instanceof Refusal || (e as Error).name === "RelateError") return { ...text((e as Error).message), isError: true };
     throw e;
@@ -42,6 +82,7 @@ function server(hub: Hub): McpServer {
     {
       description: "Create a new immutable goal with its solved condition. Returns its id and open, incomplete state. Each call creates a new goal, even for the same text. Query first to reuse an existing goal.",
       inputSchema: { text: z.string().describe("The solved condition: what a successful result must satisfy.") },
+      outputSchema: GOAL.shape,
     },
     ({ text: condition }) => tool(() => hub.goal(condition)),
   );
@@ -67,6 +108,7 @@ function server(hub: Hub): McpServer {
         timeout_s: z.number().int().positive().max(3600).optional().describe("The time limit of one run, in seconds. Default 600."),
         wait_s: z.number().int().min(0).max(240).optional().describe("The time to wait for the answer, in seconds, at most 240. Default 120. After that, the run continues."),
       },
+      outputSchema: ASKED,
     },
     (a) => tool(() => hub.ask({ ...a, timeoutS: a.timeout_s, waitS: a.wait_s })),
   );
@@ -79,6 +121,7 @@ function server(hub: Hub): McpServer {
         cypher: z.string().describe("A read-only Cypher query."),
         params: z.record(z.string(), z.unknown()).default({}).describe("More parameters for the query."),
       },
+      outputSchema: ROWS,
       annotations: { readOnlyHint: true },
     },
     (a) => tool(() => hub.query(a.cypher, a.params as Record<string, Param>)),
@@ -89,17 +132,27 @@ function server(hub: Hub): McpServer {
     {
       description: "See a file that a run saved: q-…/name (the file from the question's current run), r-…/name, or a file's SHA-256. Images come back as images.",
       inputSchema: { file: z.string() },
+      outputSchema: LOOKED,
       annotations: { readOnlyHint: true },
     },
     async ({ file }) => {
       try {
         const f = hub.look(file);
-        if (f.type.startsWith("image/"))
-          return { content: [{ type: "image" as const, data: readFileSync(f.path).toString("base64"), mimeType: f.type.split(";")[0]! }] };
+        const meta = { name: f.name, file: basename(f.path), type: f.type, bytes: f.bytes };
         const body = readFileSync(f.path);
-        if (body.includes(0)) return text(`${f.name}: ${f.bytes} bytes of binary data (${f.type}).`);
-        const s = body.toString("utf8");
-        return text(s.length > 50_000 ? `${s.slice(0, 50_000)}\n… (${f.bytes} bytes; the rest is cut)` : s);
+        if (f.type.startsWith("image/"))
+          return {
+            content: [{ type: "image" as const, data: body.toString("base64"), mimeType: f.type.split(";")[0]! }],
+            structuredContent: { ...meta, text: null, truncated: false },
+          };
+        if (body.includes(0)) {
+          const value = { ...meta, text: null, truncated: false };
+          return { content: [{ type: "text" as const, text: `${f.name}: ${f.bytes} bytes of binary data (${f.type}).` }], structuredContent: value };
+        }
+        const all = body.toString("utf8");
+        const value = { ...meta, text: all.slice(0, LIMIT), truncated: all.length > LIMIT };
+        const shown = value.truncated ? `${value.text}\n… (${f.bytes} bytes; the rest is cut)` : all;
+        return { content: [{ type: "text" as const, text: shown }], structuredContent: value };
       } catch (e) {
         if (e instanceof Refusal) return { ...text(e.message), isError: true };
         throw e;

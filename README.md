@@ -88,6 +88,8 @@ Agents get four tools:
 - `query`: read-only Cypher.
 - `look`: a saved file. Images come back as images.
 
+Each tool declares an output schema and returns structured content, so a client knows each result's shape before it calls. A code-mode client can then chain `query` and `look` in one program.
+
 For example, create a goal with `goal({text: "The candidate is correct on the independent suite and at least twice as fast as baseline."})`. Search for candidates and measure them with ordinary `ask` calls. Then bind `ask({accepts: "g-…", ...})` with a rule such as `$correct AND $speedup >= 2`, declaring the candidate and suite as inputs. A failed candidate search does not prevent completion; the acceptance question decides it. Choose that contract before executing its test.
 
 ```cypher

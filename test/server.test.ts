@@ -59,6 +59,37 @@ test("an agent asks over MCP, queries the graph, and gets a refusal it can fix",
   await client.close();
 }, 60_000);
 
+// Code mode chains calls in one program only when it knows what each tool returns.
+test("every tool declares its output schema, and results carry structured content that matches it", async () => {
+  const client = await agent();
+  const tools = (await client.listTools()).tools;
+  for (const t of tools) expect(t.outputSchema?.type, t.name).toBe("object");
+  const props = (name: string) => Object.keys(tools.find((t) => t.name === name)!.outputSchema!.properties!).sort();
+  expect(props("query")).toEqual(["rows", "truncated"]);
+  expect(props("look")).toEqual(["bytes", "file", "name", "text", "truncated", "type"]);
+  expect(props("ask")).toEqual(["goal", "id", "question", "reason", "results", "run", "saved", "state", "was"]);
+  expect(props("goal")).toEqual(["acceptance", "complete", "id", "reason", "state", "text"]);
+
+  // The client checks each result against the schema it listed. The JSON text is still there for older clients.
+  const g = await client.callTool({ name: "goal", arguments: { text: "Structured." } });
+  expect(g.structuredContent).toEqual(json(g));
+  const a = await client.callTool({ name: "ask", arguments: { text: "Is the total of data.txt above 1?", rule: "$total > 1", probe: PROBE, inputs: ["data.txt"] } });
+  expect(a.structuredContent).toMatchObject({ state: "yes", results: [{ total: 15 }], goal: null });
+  const saved = (a.structuredContent as { saved: string[] }).saved[0]!;
+  const q = await client.callTool({ name: "query", arguments: { cypher: "MATCH (q:Question {id: $id}) RETURN q.id IN $yes AS yes", params: { id: (a.structuredContent as { id: string }).id } } });
+  expect(q.structuredContent).toEqual({ rows: [{ yes: true }], truncated: false });
+  const l = await client.callTool({ name: "look", arguments: { file: saved } });
+  expect(l.structuredContent).toMatchObject({ name: "total.json", type: expect.stringContaining("json"), bytes: 13, truncated: false });
+  expect(JSON.parse((l.structuredContent as { text: string }).text)).toEqual({ total: 15 });
+  expect((l.content as { text: string }[])[0]!.text).toBe((l.structuredContent as { text: string }).text);
+  expect((l.structuredContent as { file: string }).file).toMatch(/^[0-9a-f]{64}$/);
+
+  // A refusal is an error, with no structured content to check.
+  const missing = await client.callTool({ name: "look", arguments: { file: "nonsense" } });
+  expect([missing.isError, missing.structuredContent]).toEqual([true, undefined]);
+  await client.close();
+}, 60_000);
+
 test("ask waits over HTTP for a probe that takes longer than Bun's default idle limit", async () => {
   const client = await agent();
   const slow = PROBE.replace("import json, os", "import json, os, time\ntime.sleep(12)");

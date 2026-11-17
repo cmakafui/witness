@@ -31,7 +31,7 @@ Use Bun for dependency installation, scripts, tests and builds. Bundle the page 
 - `src/probe.ts`: runs one probe with uv in a folder that holds only its declared inputs.
 - Probes use one asynchronous `uv run --script`. Keep structured measurements and a bounded diagnostic tail for failures. Archive only declared inputs and saved outputs.
 - `src/graph.ts`: the four node types (Goal, Question, Run, File) and the Cypher that writes them, and what a rule may be. The hub (ffi) and the page (WASM) both use it.
-- `src/mcp.ts`, `src/server.ts`, `src/main.ts`: the four tools (goal, ask, query, look), one `Bun.serve`, the CLI.
+- `src/mcp.ts`, `src/server.ts`, `src/main.ts`: the four tools (goal, ask, query, look), one `Bun.serve`, the CLI. Each tool declares an `outputSchema` and returns `structuredContent`, with the same value as JSON text. Code-mode clients need the schemas to chain calls in one program. Change a schema with the value it describes.
 - `src/connect.ts`: finds or starts a workspace's hub, and bridges stdio MCP to it. `src/setup.ts`: `witness setup`.
 - `src/replay.ts`: `witness replay` loads a recorded store into the page, read-only. It sends the whole graph and each question’s latest recorded run immediately. The page provides the goal bar, graph selection and evidence navigation.
 - A recorded session for the hackathon judges goes in `examples/`. Never write to a recorded store: a new session goes in a new folder.
