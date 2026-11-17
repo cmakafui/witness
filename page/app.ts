@@ -10,7 +10,7 @@
 // glyph and link, and a render changes only the attributes that differ.
 import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
-import { ALL_NODES, ALL_RELS, answerParams, clauses, type Goal, GOALS, type GNode, type GRel, measurements, named, recordedStatuses, type RecordedRun, type State, type Status, statements, UNIQUE_IDS } from "../src/graph.ts";
+import { ALL_NODES, ALL_RELS, answerParams, clauses, replacedIds, type Goal, GOALS, type GNode, type GRel, measurements, named, recordedStatuses, type RecordedRun, type State, type Status, statements, UNIQUE_IDS } from "../src/graph.ts";
 import { register, webTools } from "./tools.ts";
 
 type Msg =
@@ -64,6 +64,8 @@ const goalSeq = new Map<string, number>();
 const links: QLink[] = [];
 /** Each question's dependencies, and the questions not placed in a lane yet. */
 const needs = new Map<string, string[]>();
+/** Each fix and the crashed question it replaces. */
+const replaces: { from: string; to: string }[] = [];
 const unplaced: QNode[] = [];
 let statuses = new Map<string, Status>();
 let maxSeq = 0;
@@ -93,6 +95,8 @@ function statusOf(q: string): Status | undefined {
   return historyStatuses.get(q);
 }
 const stateOf = (q: string): State => statusOf(q)?.state ?? "waiting";
+/** The REPLACES links whose fix is visible at the chosen seq. */
+const visibleReplaces = () => replaces.filter((r) => questionVisible(r.from) && questionVisible(r.to));
 const colour = (s: State) => `var(--${s === "pending" ? "running" : s})`;
 /** The goals and their acceptance questions, read again when a goal or a binding arrives. */
 let goalList: Goal[] = [];
@@ -295,6 +299,7 @@ function render() {
   el.style.setProperty("--lane", `${lane}px`);
   const width = Math.max(scroller.clientWidth, PAD * 2 + maxCol * STEP);
   const highlight = selected ? upstream(selected) : null;
+  const replacedNow = new Set(replacedIds([...nodes.keys()].flatMap((q) => statusOf(q) ?? []), visibleReplaces()));
   put(svg, "width", width);
   put(svg, "height", TOP + lane * lanes.length + 20);
 
@@ -327,12 +332,14 @@ function render() {
     const [, , hoverRing, body, ring] = g.children as unknown as SVGElement[];
     const state = stateOf(id);
     const accepts = accepted.has(id);
+    const replaced = replacedNow.has(id);
     if (atSeq !== null && q.seq > atSeq) put(g, "display", "none");
     else if (g.hasAttribute("display")) g.removeAttribute("display");
     put(g, "transform", `translate(${p.x} ${p.y})`);
-    put(g, "class", `q${accepts ? " accepts" : ""}${highlight && !highlight.nodes.has(id) ? " dim" : ""}`);
-    put(g, "aria-label", `${state}${accepts ? " (acceptance)" : ""}: ${q.text}`);
+    put(g, "class", `q${accepts ? " accepts" : ""}${replaced ? " replaced" : ""}${highlight && !highlight.nodes.has(id) ? " dim" : ""}`);
+    put(g, "aria-label", `${state}${accepts ? " (acceptance)" : ""}${replaced ? " (replaced)" : ""}: ${q.text}`);
     put(hoverRing!, "opacity", hovered === id && selected !== id ? 1 : 0);
+    put(body!, "opacity", replaced ? 0.4 : 1);
     put(ring!, "class", `ring${id === selected ? " selected" : marked.has(id) ? " marked" : ""}`);
     // The glyph itself changes only with the answer or the acceptance binding.
     const shape = `${state}${accepts ? " accepts" : ""}`;
@@ -446,7 +453,7 @@ function apply(m: Msg) {
     evidence = selected !== null && m.rels.some((r) =>
       (r.type === "OF" && r.to === selected) ||
       (r.type === "ACCEPTED_BY" && r.to === selected) ||
-      (r.type === "NEEDS" && (r.from === selected || r.to === selected)));
+      ((r.type === "NEEDS" || r.type === "REPLACES") && (r.from === selected || r.to === selected)));
     const of = new Map(m.rels.filter((r) => r.type === "OF").map((r) => [r.from, r.to]));
     for (const n of m.nodes) {
       const seq = Number(n.props.seq ?? 0);
@@ -474,7 +481,7 @@ function apply(m: Msg) {
       if (r.type === "NEEDS" && !needs.get(r.from)?.includes(r.to)) {
         links.push({ source: r.from, target: r.to });
         needs.set(r.from, [...(needs.get(r.from) ?? []), r.to]);
-      }
+      } else if (r.type === "REPLACES" && !replaces.some((x) => x.from === r.from && x.to === r.to)) replaces.push({ from: r.from, to: r.to });
   } else if (m.type === "states") {
     const next = new Map(m.states.map((x) => [x.id, x]));
     evidence = [...panelQuestions()].some((id) => JSON.stringify(statuses.get(id)) !== JSON.stringify(next.get(id)));
@@ -649,6 +656,8 @@ function details(qid: string) {
     status: st,
     restsOn: ids(l?.needs).filter(questionVisible),
     usedBy: ids(l?.neededBy).filter(questionVisible),
+    replaces: visibleReplaces().filter((r) => r.from === qid).map((r) => r.to),
+    replacedBy: visibleReplaces().filter((r) => r.to === qid).map((r) => r.from),
     ran: Boolean(shown),
     results,
     read: files(read),
@@ -787,6 +796,8 @@ function showQuestion(qid: string) {
       : []),
     ...list("Depends on", d.restsOn),
     ...list("Used by", d.usedBy),
+    ...list("Replaces", d.replaces),
+    ...list("Replaced by", d.replacedBy),
     h("div", { class: "disclosures" }, probeDetails, runsDetails),
   ];
   panel.replaceChildren(...parts.filter((x) => x !== null));
@@ -862,7 +873,7 @@ const params = () => {
   const activeStatuses =
     atSeq === null ? [...statuses.values()] : [...nodes.values()].filter((q) => q.seq <= atSeq!).map((q) => statusOf(q.id)!);
   return {
-    ...answerParams(activeStatuses, goals()),
+    ...answerParams(activeStatuses, goals(), visibleReplaces()),
     selected,
     run: (selected && statusOf(selected)?.run) ?? null,
   };

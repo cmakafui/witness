@@ -4,6 +4,7 @@
 // The hub is the only writer. It only creates. It gives every write a number (seq), in order.
 // Goals, questions and runs are immutable records. Goal completion is derived from its acceptance question.
 // The hub binds at most one acceptance question per goal, before that question runs. A File's id is its SHA-256.
+// A question can replace a question whose run crashed or timed out. The hub writes REPLACES with the new question.
 
 CREATE GRAPH TYPE witness AS {
   (g:Goal => {id :: STRING NOT NULL, text :: STRING NOT NULL, seq :: INTEGER NOT NULL}),
@@ -16,6 +17,7 @@ CREATE GRAPH TYPE witness AS {
 
   (g)-[:ACCEPTED_BY]->(q),
   (q)-[:NEEDS]->(q),
+  (q)-[:REPLACES]->(q),
   (r)-[:OF]->(q),
   (r)-[:READ => {name :: STRING NOT NULL}]->(f),
   (r)-[:SAVED => {name :: STRING NOT NULL}]->(f)

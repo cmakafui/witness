@@ -19,6 +19,7 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 - The probe is a Python script with a PEP 723 header. A probe with dependencies sets exclude-newer under [tool.uv] to a fixed date, keeping the package upload cutoff in the probe text. uv runs it in an empty folder that holds the declared inputs only. It prints each measurement as WITNESS_RESULT and one JSON object. It saves files for other questions in $WITNESS_OUT.
 - An input is a workspace path, or q-…/name for a file that another question saved.
 - When an input changes, the question runs again. When the inputs change back, their latest recorded answer comes back. So a probe must not act: do not send or deploy in a probe.
+- Set replaces to the id of a question whose run crashed or timed out when you fix its probe. Witness refuses it for a measured answer. The old question stays failed and goes into $replaced.
 - query: read the graph with Cypher. look: show a file that a run saved.`;
 
 const text = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
@@ -58,6 +59,10 @@ function server(hub: Hub): McpServer {
         probe: z.string().describe('A Python script with a PEP 723 header. It prints each measurement as WITNESS_RESULT and one JSON object, for example {"p": 0.003}.'),
         inputs: z.array(z.string()).default([]).describe("The files that the probe reads: workspace paths, or q-…/name for a file that another question saved."),
         accepts: z.string().optional().describe("An existing goal id whose only acceptance question this will be. Binds before execution. Only its current yes completes the goal. An identical retry is allowed; a different acceptance question requires a new goal."),
+        replaces: z
+          .string()
+          .optional()
+          .describe("The id of a question whose run crashed or timed out, when this question is its fix. Witness refuses it for a question that measured. The old answer stays; queries get it in $replaced."),
         asker: z.string().optional().describe("Your direction of work, for example the approach you test. The page gives each direction its own row. It does not change the answer."),
         timeout_s: z.number().int().positive().max(3600).optional().describe("The time limit of one run, in seconds. Default 600."),
         wait_s: z.number().int().min(0).max(240).optional().describe("The time to wait for the answer, in seconds, at most 240. Default 120. After that, the run continues."),

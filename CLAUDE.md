@@ -9,6 +9,7 @@ AI agents do research together. Each finding is a yes/no question with a rule. A
 - A goal is complete only while its acceptance question currently answers yes. Completion is derived, never stored; changed inputs invalidate it and restored inputs restore it. An unbound goal is open and incomplete.
 - The same question asked again is the same question: it reuses the cached or running execution and keeps the first asker. An acceptance question is a separate question, bound before execution.
 - A run that measured is final for its inputs. Another try needs a changed input or a new question. A run that crashed or timed out settles nothing: the hub never retries it on its own, and the next ask of that question runs it again, as a new Run on the same key. Concurrent asks join one queued or running execution; honor the worker limit.
+- A question can replace only a question whose current run did not measure (a crash or a timeout). The hub writes REPLACES with the new question and refuses it for any measured run. The old answer stays. `$replaced` is derived, never stored. A crashed acceptance question is replaced only by the acceptance question of a new goal.
 - The hub never changes or deletes a record. It only creates records. The answer to a question comes from its runs and from the inputs as they are now.
 - The hub is the only process that writes to Relate. Probes never touch the store.
 - Keep it small. Build what the task needs and nothing more.

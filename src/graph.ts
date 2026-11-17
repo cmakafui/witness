@@ -9,7 +9,7 @@
 // question's inputs as they are now.
 
 export type Label = "Goal" | "Question" | "Run" | "File";
-export type RelType = "ACCEPTED_BY" | "NEEDS" | "OF" | "READ" | "SAVED";
+export type RelType = "ACCEPTED_BY" | "NEEDS" | "REPLACES" | "OF" | "READ" | "SAVED";
 
 export type GNode = { label: Label; id: string; props: Record<string, string | number | boolean | string[] | null> };
 export type GRel = { type: RelType; from: string; to: string; name?: string };
@@ -18,6 +18,7 @@ export type GRel = { type: RelType; from: string; to: string; name?: string };
 export const ENDS: Record<RelType, [Label, Label]> = {
   ACCEPTED_BY: ["Goal", "Question"],
   NEEDS: ["Question", "Question"],
+  REPLACES: ["Question", "Question"],
   OF: ["Run", "Question"],
   READ: ["Run", "File"],
   SAVED: ["Run", "File"],
@@ -61,11 +62,13 @@ export const SCHEMA = `The graph:
 (:Goal {id, text, seq})-[:ACCEPTED_BY]->(:Question)  the goal's only acceptance question, bound before it runs
 (:Question {id, text, rule, probe, inputs, asker, seq})
 (:Question)-[:NEEDS]->(:Question)      reads a file the other question saved
+(:Question)-[:REPLACES]->(:Question)   fixes a question whose run crashed or timed out; the old answer stays
 (:Run {id, key, seq, started, ms, answer, reason, measured, results})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File {id})    the inputs the run read; a File's id is its SHA-256
 (:Run)-[:SAVED {name}]->(:File)               the files the run saved for other questions
 rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is the measurements as JSON. measured is true when the probe measured, even if the rule could not decide: then other questions can read the files it saved. started is when the run began, in milliseconds since 1970. ms is how long it took.
 Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now. key names the inputs a run read. A run that measured is final for its key. Runs that did not measure can share a key with the retry that followed them: the latest run on the current inputs gives the answer.
+$replaced lists the questions that a newer question replaces and that still have no measured yes or no. Leave them out of open problems: WHERE NOT q.id IN $replaced.
 $complete and $incomplete are goal ids. A goal is complete only when its acceptance question currently answers yes. No acceptance question means open and incomplete. All other acceptance states mean incomplete. No other question determines completion. Goals and acceptance bindings cannot be edited; changing the acceptance contract requires a new goal.`;
 
 /** A question's answer as the hub works it out. It is never stored: it comes from the runs and the inputs now. */
@@ -120,11 +123,29 @@ export function goalStatuses(goals: Goal[], statuses: Status[]): GoalStatus[] {
 }
 
 /**
+ * The questions that a newer question replaces, while they still have no yes or no. The hub binds REPLACES only to a
+ * question whose run did not measure. If a later run on new inputs measures yes or no, that answer is evidence again.
+ */
+export function replacedIds(statuses: Status[], replaces: Iterable<{ from: string; to: string }>): string[] {
+  const byId = new Map(statuses.map((s) => [s.id, s]));
+  const out = new Set<string>();
+  for (const { from, to } of replaces) {
+    const s = byId.get(to);
+    if (byId.has(from) && s && s.state !== "yes" && s.state !== "no") out.add(to);
+  }
+  return [...out];
+}
+
+/**
  * The parameters every query gets, so a query can use the answers: $yes, $no, $failed, $running, $pending and
  * $waiting are lists of question ids, and $current is the list of runs that give the current answers.
- * $complete and $incomplete are goal ids, derived only from acceptance questions.
+ * $complete and $incomplete are goal ids, derived only from acceptance questions. $replaced comes from REPLACES.
  */
-export function answerParams(statuses: Status[], goals: Goal[] = []): Record<State | "current" | "complete" | "incomplete", string[]> {
+export function answerParams(
+  statuses: Status[],
+  goals: Goal[] = [],
+  replaces: Iterable<{ from: string; to: string }> = [],
+): Record<State | "current" | "complete" | "incomplete" | "replaced", string[]> {
   const ids = (s: State) => statuses.filter((x) => x.state === s).map((x) => x.id);
   const completion = goalStatuses(goals, statuses);
   return {
@@ -137,6 +158,7 @@ export function answerParams(statuses: Status[], goals: Goal[] = []): Record<Sta
     current: statuses.flatMap((x) => (x.run && (x.state === "yes" || x.state === "no" || x.state === "failed") ? [x.run] : [])),
     complete: completion.filter((g) => g.complete).map((g) => g.id),
     incomplete: completion.filter((g) => !g.complete).map((g) => g.id),
+    replaced: replacedIds(statuses, replaces),
   };
 }
 

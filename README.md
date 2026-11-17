@@ -44,18 +44,19 @@ Witness is not a sandbox. It does not stop an agent from acting outside it. It m
 - **Mode:** directory, at `.witness/graph/` in the workspace.
 - **Why this mode:** the hub writes every record through `bun:ffi` as it happens, so the store is always on disk. Other processes can open it read-only beside the hub. Relate lets only one process write to a store. The hub is that process. Agents cannot write answers.
 - **Rules are Cypher.** A rule such as `$p < 0.01 AND $gain >= 0.1` is a Cypher expression. When a run ends, the hub evaluates the rule with Relate on an empty in-memory store that refuses writes, so a rule can read only the measurements. The run's measurements are the parameters. True is yes. False is no. Anything else is failed, for example when the run never made a measurement the rule needs.
-- **Four node types, five relationship types.** Goals state solved conditions. Questions fix tests. Runs record executions. Files hold the inputs and saved evidence. The hub writes a question and its goal binding together, before execution, and a run once it ends.
+- **Four node types, six relationship types.** Goals state solved conditions. Questions fix tests. Runs record executions. Files hold the inputs and saved evidence. The hub writes a question and its goal binding together, before execution, and a run once it ends.
 
 ```
 (:Goal {id, text, seq})-[:ACCEPTED_BY]->(:Question)  // its only acceptance question
 (:Question {text, rule, probe, inputs, asker})
 (:Question)-[:NEEDS]->(:Question)            // reads a file the other question saved
+(:Question)-[:REPLACES]->(:Question)         // fixes a question whose run crashed or timed out
 (:Run {answer, reason, started, ms, results})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File)               // the inputs, as the run read them
 (:Run)-[:SAVED {name}]->(:File)              // what the run saved for other questions
 ```
 
-A `File` is named by its SHA-256. The answer of a run is stored with that run. The answer of a question is never stored. The hub finds the run on the question's inputs as they are now. It passes the answers to queries as `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` and `$current`. Relate enforces the schema in [`schema.cypher`](schema.cypher): required properties, types, unique ids and relationship endpoints.
+A `File` is named by its SHA-256. The answer of a run is stored with that run. The answer of a question is never stored. The hub finds the run on the question's inputs as they are now. It passes the answers to queries as `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting`, `$replaced` and `$current`. Relate enforces the schema in [`schema.cypher`](schema.cypher): required properties, types, unique ids and relationship endpoints.
 
 Goals and acceptance bindings are immutable. A goal can start without an acceptance question: it is open and incomplete. Bind at most one acceptance question, before it runs. An identical retry reuses that question. A different contract requires a new goal, which may use the same text. A goal is complete only while its acceptance question currently answers `yes`; `no`, `failed`, `pending`, `running` and `waiting` all mean incomplete. Input changes can invalidate completion. Restoring inputs restores their most recent recorded answer and its derived completion. No other question votes. Queries get `$complete` and `$incomplete` as goal-id lists; completion is never stored.
 
@@ -83,7 +84,7 @@ witness replay [DIR]   # inspect a recorded session
 Agents get four tools:
 
 - `goal`: create a new immutable goal from its solved condition. Query first to reuse a goal.
-- `ask`: a question, its rule, its probe and its inputs. Add `accepts: "g-…"` to bind the goal’s acceptance question. `accepts` is part of identity and binds a separate acceptance question before execution; it cannot promote an existing run. `ask` then also returns that goal’s current completion. The same question asked again is the same question, and the first asker stays on it.
+- `ask`: a question, its rule, its probe and its inputs. Add `accepts: "g-…"` to bind the goal’s acceptance question. `accepts` is part of identity and binds a separate acceptance question before execution; it cannot promote an existing run. `ask` then also returns that goal’s current completion. Add `replaces: "q-…"` when the question fixes the probe of a question whose run crashed or timed out. The hub refuses it for a question that measured: a yes, a no or a failed rule is evidence. The crashed question keeps its answer, and queries get it in `$replaced`. The same question asked again is the same question, and the first asker stays on it.
 - `query`: read-only Cypher.
 - `look`: a saved file. Images come back as images.
 

@@ -33,6 +33,7 @@ export type Ask = {
   probe: string;
   inputs?: string[];
   accepts?: string;
+  replaces?: string;
   asker?: string;
   timeoutS?: number;
   waitS?: number;
@@ -53,6 +54,7 @@ export class Hub {
   private runsOf = new Map<string, Run[]>(); // question -> its runs, in the order they ended
   private measured = new Set<string>(); // the runs whose probe measured
   private savedBy = new Map<string, Saved[]>(); // run -> the files it saved
+  private replaces: { from: string; to: string }[] = []; // new question -> the crashed question it fixes
   private running = new Map<string, string>(); // question -> its run in progress
   private retries = new Set<string>(); // asks of a crashed question, awaiting a worker slot
   private hashes = new Map<string, { stamp: string; sha: string }>();
@@ -133,8 +135,10 @@ export class Hub {
         if (run.measured) this.measured.add(run.id);
       }
     }
-    for (const r of rels)
+    for (const r of rels) {
       if (r.type === "SAVED") add(this.savedBy, r.from, { name: r.name!, file: r.to });
+      if (r.type === "REPLACES" && !this.replaces.some((x) => x.from === r.from && x.to === r.to)) this.replaces.push({ from: r.from, to: r.to });
+    }
   }
 
   /** Keeps a file's content in .witness/files, named by its hash, and returns its File record. */
@@ -363,8 +367,10 @@ export class Hub {
   async ask(a: Ask): Promise<Status & { question: string; results: unknown[]; saved: string[]; goal: GoalStatus | null }> {
     const inputs = [...new Set(a.inputs ?? [])].sort();
     this.refuse(a, inputs);
-    const id = contentId("q", a.text, a.rule, sha256(a.probe), JSON.stringify(inputs), a.accepts ?? "");
+    // replaces is part of identity, as accepts is. It is added only when given, so existing question ids stay the same.
+    const id = contentId("q", a.text, a.rule, sha256(a.probe), JSON.stringify(inputs), a.accepts ?? "", ...(a.replaces ? [a.replaces] : []));
     const goal = a.accepts;
+    if (a.replaces !== undefined && !this.byId.has(id)) this.refuseReplace(a.replaces, a.accepts);
     if (goal !== undefined) {
       const g = (this.db.query(GOALS) as Goal[]).find((g) => g.id === goal);
       if (!g) throw new Refusal(`There is no goal ${goal}. Call goal first, or query existing goals.`);
@@ -384,6 +390,7 @@ export class Hub {
         [
           ...needs.map((n) => ({ type: "NEEDS" as const, from: id, to: n })),
           ...(a.accepts ? [{ type: "ACCEPTED_BY" as const, from: a.accepts, to: id }] : []),
+          ...(a.replaces ? [{ type: "REPLACES" as const, from: id, to: a.replaces }] : []),
         ],
       );
     }
@@ -409,6 +416,27 @@ export class Hub {
   private settled(s: Status) {
     if (s.state === "yes" || s.state === "no" || s.state === "failed") return true;
     return s.state === "waiting" && this.running.size === 0;
+  }
+
+  /**
+   * A question can replace only a question that settled nothing: its run now crashed or timed out. A measured yes or
+   * no is evidence, and so is a measured run whose rule failed: other questions may read its files. To dispute
+   * evidence, ask a new question beside it.
+   */
+  private refuseReplace(old: string, accepts: string | undefined) {
+    if (!/^q-[0-9a-f]{12}$/.test(old)) throw new Refusal(`replaces must be a question id, q-…, not ${old}.`);
+    if (!this.byId.has(old)) throw new Refusal(`There is no question ${old} to replace. Call query to list the questions.`);
+    const s = this.status(old);
+    if (s.state !== "failed" || !s.run || this.measured.has(s.run))
+      throw new Refusal(
+        `${old} cannot be replaced: it is ${s.state}${s.state === "failed" && s.run ? " and its run measured" : ""}. ` +
+          "Only a question whose run crashed or timed out can be replaced, because it settled nothing. A measured answer is evidence: ask a new question beside it.",
+      );
+    const goal = (this.db.query(GOALS) as Goal[]).find((g) => g.acceptance === old);
+    if (goal && !accepts)
+      throw new Refusal(
+        `${old} is the acceptance question of ${goal.id}, and that binding cannot change. Create a new goal and ask the fix with accepts set to the new goal and replaces set to ${old}.`,
+      );
   }
 
   private refuse(a: Ask, inputs: string[]) {
@@ -447,7 +475,7 @@ export class Hub {
   query(cypher: string, params: Record<string, Param> = {}, limit = 200): { rows: Row[]; truncated: boolean } {
     const reader = Relate.open(this.graphDir, { readOnly: true });
     try {
-      const rows = reader.query(cypher, { ...answerParams(this.statuses(), this.db.query(GOALS) as Goal[]), ...params });
+      const rows = reader.query(cypher, { ...answerParams(this.statuses(), this.db.query(GOALS) as Goal[], this.replaces), ...params });
       return { rows: rows.slice(0, limit), truncated: rows.length > limit };
     } finally {
       reader.close();

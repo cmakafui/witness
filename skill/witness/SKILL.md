@@ -60,6 +60,8 @@ ORDER BY g.seq
 
 - A run that measured is final for its inputs. The same `ask` returns it, whether the answer is yes, no or failed. To measure again, change an input or ask a new question.
 - A run that crashed or timed out settles nothing. Send the same `ask` arguments to retry it. Keep the text, rule, probe, inputs and `accepts` unchanged. Witness does not retry on its own.
+- A run that crashed because the probe was wrong: fix the probe and ask with `replaces: "q-…"`, the crashed question's id. The crashed question stays `failed` and goes into `$replaced`, so it no longer looks like an open problem. Witness refuses `replaces` for a question that measured, whether yes, no or a rule that failed: that is evidence. To dispute it, ask a new question beside it.
+- To replace a goal's crashed acceptance question, create a new goal and ask the fix with both `accepts` (the new goal) and `replaces`.
 - A call for a question already queued or running joins that execution.
 - To measure a noisy quantity, do not ask again. Loop inside the probe, print each trial, and write the rule over `$results`.
 
@@ -113,7 +115,7 @@ Start from [assets/probe.py](assets/probe.py).
 
 ## Reading the graph
 
-`query` runs read-only Cypher. The query tool description shows the graph. Witness does not store the current answers. It gives them as parameters: `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` (question ids), and `$current` (the runs that give the current answers). Each run has `started` (milliseconds since 1970) and `ms` (how long it took).
+`query` runs read-only Cypher. The query tool description shows the graph. Witness does not store the current answers. It gives them as parameters: `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting` (question ids), `$replaced` (crashed questions that a fix replaces), and `$current` (the runs that give the current answers). For open problems, use `WHERE q.id IN $failed AND NOT q.id IN $replaced`. Each run has `started` (milliseconds since 1970) and `ms` (how long it took).
 
 Relate query basics:
 
