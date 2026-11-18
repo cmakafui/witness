@@ -44,6 +44,8 @@ The hub runs the probe in a folder that holds only the declared files. Relate ev
 
 A goal states a solved condition. It has one acceptance question, fixed before it runs. The goal is complete only while that question answers yes. No other question decides completion.
 
+The record only grows. The hub never changes or deletes a record. Each probe's source is in the graph, so any agent can read it and check its saved files.
+
 Witness is not a sandbox. It does not stop an agent from acting outside it. It makes the shared work checkable.
 
 ## See it: a real session
