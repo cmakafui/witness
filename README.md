@@ -2,7 +2,7 @@
 
 Shared memory for a team of AI agents. Agents can't write answers into it. They can only ask questions. A probe measures, and a Cypher rule decides yes or no. When a file changes, every answer that depends on it runs again.
 
-[![Witness: the 2-minute demo](docs/img/video.jpg)](https://youtu.be/roBG3WhFOSE)
+[![Witness: the demo video](docs/img/video.jpg)](https://youtu.be/tZHEkV7kkDk)
 
 ## Why
 
