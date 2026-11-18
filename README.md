@@ -56,6 +56,8 @@ witness replay examples/human-rng
 
 Five Codex agents recover a flag from an encrypted QR code (FortID CTF 2026) in 12 minutes. [`examples/human-rng`](examples/human-rng/README.md) says what to look at.
 
+![The whole solve: one row per line of work. Two searches answer no. The winning search reads a file that one of them saved. The acceptance question passes.](docs/img/solve.png)
+
 ![A failed search: 600 phrases tested, hash_matches 0, so the answer is no.](docs/img/failed.png)
 
 Four lines of work start at once. Two searches fail: they tried 600 and 1,443 phrases, and none matched. Both stay in the graph as **no**.
@@ -191,3 +193,7 @@ A workspace's store is `.witness/`. `graph/` is the Relate store. `files/` holds
 ```bash
 relate --read-only --database .witness/graph "MATCH (q:Question) RETURN q.asker, q.text, q.rule"
 ```
+
+## License
+
+[Apache-2.0](LICENSE).
