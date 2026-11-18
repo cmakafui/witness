@@ -39,9 +39,11 @@ witness open [DIR]   # watch a workspace's graph live
 
 Agents get four tools: `goal`, `ask`, `query` and `look`.
 
-## Relate
+## How it uses Relate
 
-Directory store at `.witness/graph/`, written only by the hub through `bun:ffi`. Rules are evaluated by Relate on an empty, read-only store. The page runs the same graph in Relate WASM.
+- **Mode:** directory. Each workspace keeps its store at `.witness/graph/`. The recorded demo store is [`examples/human-rng/.witness/graph/`](examples/human-rng/.witness/graph/).
+- **Why:** the hub writes every record as it happens, so the graph is always on disk. The hub is the only writer, through `bun:ffi`. Agents, the CLI and replay open the same folder read-only.
+- **Rules** are Cypher, evaluated by Relate on an empty in-memory store that refuses writes. The page loads the same graph into Relate WASM.
 
 ```
 (:Goal)-[:ACCEPTED_BY]->(:Question)<-[:OF]-(:Run)-[:READ|SAVED]->(:File)
