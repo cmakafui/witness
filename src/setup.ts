@@ -1,4 +1,4 @@
-// witness setup: links the skill into Claude Code and Pi, and registers the MCP server with Claude Code, Codex and Pi.
+// witness setup: links the skill into Claude Code, Pi and Antigravity (agy), and registers the MCP server with Claude Code, Codex, Pi and agy.
 // MCP clients start servers without the user's shell profile, so the command names Bun and Witness by full path.
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -70,6 +70,14 @@ export function setup() {
     const config = join(piDir(), "mcp.json");
     if (r.exitCode === 0 && existsSync(config)) writeFileSync(config, piTimeout(readFileSync(config, "utf8")));
     done.push(r.exitCode === 0 ? `Pi: added the witness MCP server, with direct tools and timeout = ${PI_TIMEOUT_S}` : `Pi: could not add the server: ${r.stderr.toString().trim()}`);
+  }
+
+  if (Bun.which("agy")) {
+    // agy has no tool timeout setting for MCP servers, so ask keeps agy's default.
+    done.push(linkSkill(join(homedir(), ".gemini", "config", "skills", "witness"), "agy"));
+    Bun.spawnSync(["agy", "mcp", "remove", "witness"], { stdout: "ignore", stderr: "ignore" });
+    const r = Bun.spawnSync(["agy", "mcp", "add", "witness", "--", ...command], { stderr: "pipe" });
+    done.push(r.exitCode === 0 ? "agy: added the witness MCP server" : `agy: could not add the server: ${r.stderr.toString().trim()}`);
   }
 
   console.log(`${done.join("\n")}

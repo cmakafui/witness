@@ -11,7 +11,7 @@ import { VERSION } from "./version.ts";
 
 const USAGE = `witness ${VERSION}: tested answers for a team of agents, in a Relate graph.
 
-  witness setup          once: link the skill into Claude Code, add the MCP server to Claude Code and Codex
+  witness setup          once: link the skill into Claude Code, add the MCP server to Claude Code, Codex, Pi and agy
   witness open [DIR]     open the workspace's graph in the browser (starts its hub when none runs)
   witness replay [DIR]   inspect a recorded session in the browser, from its store alone
 

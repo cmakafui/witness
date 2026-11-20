@@ -33,7 +33,7 @@ witness replay examples/human-rng
 You also need [uv](https://docs.astral.sh/uv/), which runs the probes.
 
 ```bash
-witness setup        # adds the skill and MCP server to Claude Code, Codex and Pi
+witness setup        # adds the skill and MCP server to Claude Code, Codex, Pi and agy
 witness open [DIR]   # watch a workspace's graph live
 ```
 
