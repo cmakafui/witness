@@ -1,4 +1,4 @@
-// witness setup: links the skill into Claude Code, Pi and Antigravity (agy), and registers the MCP server with Claude Code, Codex, Pi and agy.
+// witness setup: links the skill into Claude Code, Codex, Pi and Antigravity (agy), and registers the MCP server with Claude Code, Codex, Pi and agy.
 // MCP clients start servers without the user's shell profile, so the command names Bun and Witness by full path.
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -58,6 +58,8 @@ export function setup() {
     const r = Bun.spawnSync(["codex", "mcp", "add", "witness", "--", ...command], { stderr: "pipe" });
     const config = join(process.env.CODEX_HOME ?? join(homedir(), ".codex"), "config.toml");
     if (r.exitCode === 0 && existsSync(config)) writeFileSync(config, codexTimeout(readFileSync(config, "utf8")));
+    // Codex reads user skills from ~/.agents/skills, the shared agent-skills folder.
+    done.push(linkSkill(join(homedir(), ".agents", "skills", "witness"), "Codex"));
     done.push(r.exitCode === 0 ? `Codex: added the witness MCP server, with tool_timeout_sec = ${CODEX_TIMEOUT_S}` : `Codex: could not add the server: ${r.stderr.toString().trim()}`);
   }
 
