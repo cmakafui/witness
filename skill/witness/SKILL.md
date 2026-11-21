@@ -19,16 +19,16 @@ Witness keeps the tested answers of all agents in this workspace in one graph. N
 
 ## Steps
 
-1. Call `query` before you ask. Use an answer that exists.
-2. Draft the probe in `scratch/` and test it yourself on a small case: `uv run --script scratch/probe.py`. This shows that the probe works. It is not evidence. Keep drafts out of `.witness/`: only the hub writes there.
-3. Call `ask` with the question, the rule, the probe and all inputs. Give `asker` your direction of work. The page gives each direction its own row.
+1. On a fresh store, start with the task. Use `query` when resuming, joining existing work, or looking for findings to build on.
+2. For a new probe, draft it in `scratch/` and test it yourself on a small case: `uv run --script scratch/probe.py`. This shows that the probe works. It is not evidence. Keep drafts out of `.witness/`: only the hub writes there.
+3. Call `ask` with the question, the rule and all inputs. Supply `probe` for a new script or `probe_ref: "q-…"` to reuse the exact script from an existing question. Give `asker` your direction of work. The page gives each direction its own row.
 4. Read the answer, the measurements and the saved files.
 
 ## Working with other agents
 
 The graph is the only record that agents share.
 
-- Call `query` before you start. Another agent may have asked your question, or ruled out your idea.
+- When joining existing work, query for questions that may have answered yours or ruled out an approach.
 - A finding exists for another agent only as a question id. Hand over question ids and saved files, not summaries.
 - Before you build on a result, read its question: the rule, the probe, the inputs and the current answer.
 - Give `asker` your direction of work. Witness does not record agents.
@@ -37,7 +37,7 @@ The graph is the only record that agents share.
 
 A goal is optional. Use one where the work needs a stopping condition: one for the whole task, one for each part, or none while you explore. Any agent can create a goal.
 
-Call `query` to find the goal before creating one. `goal({text: "…"})` creates a new goal every time, even for identical text. Its id starts with `g-`. An unbound goal is open and incomplete.
+When resuming, use `query` to find an existing goal. `goal({text: "…"})` creates a new goal every time, even for identical text. Its id starts with `g-`. An unbound goal is open and incomplete.
 
 - Use `ask` with `accepts: "g-…"` for the goal’s acceptance question. Leave it out for every other question. Those answers never determine completion, whether yes, no or failed.
 - Write the acceptance contract before executing it. Witness writes the question and binding atomically before the probe starts. You can bind only one acceptance question per goal. An identical retry is allowed; a different contract requires a new goal.

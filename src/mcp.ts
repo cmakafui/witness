@@ -12,8 +12,10 @@ import { VERSION } from "./version.ts";
 const GUIDE = `Witness keeps the tested answers of a team of agents in one graph. No agent writes an answer. A probe measures, and a rule decides.
 
 - The graph is the only record agents share. Give another agent question ids and saved files, not summaries.
+- In a fresh workspace, start with the task. Query the graph when resuming or looking for prior work to build on.
 - goal: create an immutable goal that states a solved condition. A goal is optional, and the work can have many. It starts open and incomplete. Each call creates a new goal.
 - ask: give a yes/no question, a rule, a probe, and the files that the probe reads. Witness runs the probe and returns the answer.
+- Use probe_ref in place of probe to reuse the exact script from an existing question. Supply the new question's rule and inputs.
 - The same ask on unchanged inputs returns the cached answer. A run that measured is final for its inputs. A run that crashed or timed out is not: the same ask runs it again. Concurrent asks join one execution.
 - Set accepts to a goal id to bind that goal's only acceptance question before it runs. The goal is complete only while that question currently answers yes. No other question votes on completion. Changing the acceptance contract requires a new goal.
 - The rule is a Cypher expression over the measurements, for example $p < 0.01 AND $gain >= 0.1. $name is a measurement. $results is the list of all measurements. True gives yes. False gives no. All other results give failed.
@@ -80,7 +82,7 @@ function server(hub: Hub): McpServer {
   s.registerTool(
     "goal",
     {
-      description: "Create a new immutable goal with its solved condition. Returns its id and open, incomplete state. Each call creates a new goal, even for the same text. Query first to reuse an existing goal.",
+      description: "Create a new immutable goal with its solved condition. Returns its id and open, incomplete state. Each call creates a new goal, even for the same text. When resuming, query to find an existing goal.",
       inputSchema: { text: z.string().describe("The solved condition: what a successful result must satisfy.") },
       outputSchema: GOAL.shape,
     },
@@ -91,13 +93,14 @@ function server(hub: Hub): McpServer {
     "ask",
     {
       description:
-        "Ask a yes/no question and run its probe. The rule gives the answer from the measurements. Returns the answer, the measurements and the saved files. The same question asked again is the same question, and returns its answer on the current inputs. Asking again retries a run that crashed or timed out.",
+        "Ask a yes/no question and run its probe. Supply exactly one of probe or probe_ref. Returns the answer, the measurements and the saved files. The same question asked again returns its answer on the current inputs, or retries a run that crashed or timed out.",
       inputSchema: {
         text: z.string().describe('The question, as one yes/no sentence with its conditions: "At 8 workers, is …?"'),
         rule: z
           .string()
           .describe("A Cypher expression over the measurements. True gives yes. $name is a measurement. $results is the list of all measurements. Example: $p < 0.01 AND $gain >= 0.1."),
-        probe: z.string().describe('A Python script with a PEP 723 header. It prints each measurement as WITNESS_RESULT and one JSON object, for example {"p": 0.003}.'),
+        probe: z.string().optional().describe('A Python script with a PEP 723 header. It prints each measurement as WITNESS_RESULT and one JSON object, for example {"p": 0.003}.'),
+        probe_ref: z.string().optional().describe("An existing question id (q-…) in this workspace. Reuses its exact probe script. Supply this question's own rule and inputs."),
         inputs: z.array(z.string()).default([]).describe("The files that the probe reads: workspace paths, or q-…/name for a file that another question saved."),
         accepts: z.string().optional().describe("An existing goal id whose only acceptance question this will be. Binds before execution. Only its current yes completes the goal. An identical retry is allowed; a different acceptance question requires a new goal."),
         replaces: z
@@ -110,7 +113,7 @@ function server(hub: Hub): McpServer {
       },
       outputSchema: ASKED,
     },
-    (a) => tool(() => hub.ask({ ...a, timeoutS: a.timeout_s, waitS: a.wait_s })),
+    (a) => tool(() => hub.ask({ ...a, probeRef: a.probe_ref, timeoutS: a.timeout_s, waitS: a.wait_s })),
   );
 
   s.registerTool(

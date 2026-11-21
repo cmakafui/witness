@@ -30,7 +30,8 @@ const OUTPUT_REF = /^(q-[0-9a-f]{12})\/(.+)$/;
 export type Ask = {
   text: string;
   rule: string;
-  probe: string;
+  probe?: string;
+  probeRef?: string;
   inputs?: string[];
   accepts?: string;
   replaces?: string;
@@ -365,10 +366,15 @@ export class Hub {
 
   /** Reuses the question and its answer on the current inputs. Asking again retries a run that did not measure. */
   async ask(a: Ask): Promise<Status & { question: string; results: unknown[]; saved: string[]; goal: GoalStatus | null }> {
+    if ((a.probe === undefined) === (a.probeRef === undefined))
+      throw new Refusal("Give exactly one of probe (script text) or probe_ref (a question id).");
+    const probe = a.probeRef === undefined ? a.probe : this.byId.get(a.probeRef)?.probe;
+    if (probe === undefined)
+      throw new Refusal(`probe_ref must name an existing question in this workspace (q-…): ${a.probeRef}.`);
     const inputs = [...new Set(a.inputs ?? [])].sort();
-    this.refuse(a, inputs);
+    this.refuse(a, probe, inputs);
     // replaces is part of identity, as accepts is. It is added only when given, so existing question ids stay the same.
-    const id = contentId("q", a.text, a.rule, sha256(a.probe), JSON.stringify(inputs), a.accepts ?? "", ...(a.replaces ? [a.replaces] : []));
+    const id = contentId("q", a.text, a.rule, sha256(probe), JSON.stringify(inputs), a.accepts ?? "", ...(a.replaces ? [a.replaces] : []));
     const goal = a.accepts;
     if (a.replaces !== undefined && !this.byId.has(id)) this.refuseReplace(a.replaces, a.accepts);
     if (goal !== undefined) {
@@ -384,7 +390,7 @@ export class Hub {
           {
             label: "Question",
             id,
-            props: { text: a.text, rule: a.rule, probe: a.probe, inputs, timeout: a.timeoutS ?? 600, asker: a.asker ?? null, seq: ++this.seq },
+            props: { text: a.text, rule: a.rule, probe, inputs, timeout: a.timeoutS ?? 600, asker: a.asker ?? null, seq: ++this.seq },
           },
         ],
         [
@@ -439,7 +445,7 @@ export class Hub {
       );
   }
 
-  private refuse(a: Ask, inputs: string[]) {
+  private refuse(a: Ask, probe: string, inputs: string[]) {
     if (!a.text.trim()) throw new Refusal("The question has no text. Write it as one yes/no sentence.");
     const problem = ruleProblem(a.rule);
     if (problem) throw new Refusal(problem);
@@ -449,11 +455,11 @@ export class Hub {
       if (e instanceof RelateError) throw new Refusal(`The rule is not a Cypher expression: ${e.message}`);
       throw e;
     }
-    if (!a.probe.includes("# /// script"))
+    if (!probe.includes("# /// script"))
       throw new Refusal('The probe has no uv script header. Start it with a PEP 723 block: "# /// script", its dependencies, "# ///".');
-    const deps = dependencyProblem(a.probe);
+    const deps = dependencyProblem(probe);
     if (deps) throw new Refusal(deps);
-    if (!a.probe.includes(RESULT))
+    if (!probe.includes(RESULT))
       throw new Refusal(`The probe never prints ${RESULT}. Print each measurement as a JSON object: print("${RESULT}", json.dumps({"total": total})).`);
     for (const name of inputs) {
       const ref = OUTPUT_REF.exec(name);

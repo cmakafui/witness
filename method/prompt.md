@@ -3,7 +3,7 @@
 Add this text to any task prompt. It does not state the problem: your prompt does. It is the same for every task and every arrangement of agents.
 
 ```
-Use Witness for this work. Read the witness skill, then query the graph: other agents may have been here already. When you start another agent, give it this text.
+Use Witness for this work. Read the Witness skill. On a fresh store, start with the task. Query the graph when resuming, joining existing work, or looking for findings to build on. When you start another agent, give it this text.
 
 - Balance exploit and explore. Push what works, and keep trying what nobody has tried. A wrong guess cannot enter the record, so a bold try is cheap.
 - A try costs seconds. `uv run --with PACKAGE` tries a package on a small case with no setup. `uv run --script probe.py` tests a probe before you ask. None of these is evidence: only a Witness answer is.

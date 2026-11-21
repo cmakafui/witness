@@ -56,8 +56,8 @@ witness replay [DIR]   # inspect a recorded session
 
 Agents get four tools:
 
-- `goal`: create a new immutable goal from its solved condition. Query first to reuse a goal.
-- `ask`: a question, its rule, its probe and its inputs. Add `accepts: "g-…"` to bind the goal’s acceptance question. `accepts` is part of identity and binds a separate acceptance question before execution; it cannot promote an existing run. `ask` then also returns that goal’s current completion. Add `replaces: "q-…"` when the question fixes the probe of a question whose run crashed or timed out. The hub refuses it for a question that measured: a yes, a no or a failed rule is evidence. The crashed question keeps its answer, and queries get it in `$replaced`. The same question asked again is the same question, and the first asker stays on it.
+- `goal`: create a new immutable goal from its solved condition. When resuming, query to find an existing goal.
+- `ask`: a question, its rule, its probe and its inputs. Give the script as `probe` or reuse an existing question’s script with `probe_ref: "q-…"`. The hub stores the resolved script so identical inline and referenced asks share one question and cached answer. Supply this question’s own inputs and rule. Add `accepts: "g-…"` to bind the goal’s acceptance question. `accepts` is part of identity and binds a separate acceptance question before execution; it cannot promote an existing run. `ask` then also returns that goal’s current completion. Add `replaces: "q-…"` when the question fixes the probe of a question whose run crashed or timed out. The hub refuses it for a question that measured: a yes, a no or a failed rule is evidence. The crashed question keeps its answer, and queries get it in `$replaced`. The same question asked again is the same question, and the first asker stays on it.
 - `query`: read-only Cypher.
 - `look`: a saved file. Images come back as images.
 

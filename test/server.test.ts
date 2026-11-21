@@ -59,6 +59,35 @@ test("an agent asks over MCP, queries the graph, and gets a refusal it can fix",
   await client.close();
 }, 60_000);
 
+test("ask reuses the exact stored probe for a control without copying its rule or inputs", async () => {
+  const client = await agent();
+  try {
+    const ask = (args: Record<string, unknown>) => client.callTool({ name: "ask", arguments: args });
+    const inputs = ["data.txt"];
+    const source = json(await ask({ text: "Does the total exceed 14?", rule: "$total > 14", probe: PROBE, inputs }));
+    const control = { text: "Does the total exceed 16?", rule: "$total > 16", inputs };
+    const byRef = json(await ask({ ...control, probe_ref: source.id }));
+    expect(source.state).toBe("yes");
+    expect(byRef).toMatchObject({ state: "no", results: [{ total: 15 }] });
+    expect(byRef.id).not.toBe(source.id);
+    expect(json(await ask({ ...control, probe: PROBE }))).toMatchObject({ id: byRef.id, run: byRef.run });
+    expect(hub.query("MATCH (q:Question {id: $id}) OPTIONAL MATCH (q)-[:NEEDS]->(source) RETURN q.probe AS probe, count(source) AS needs", { id: byRef.id }).rows)
+      .toEqual([{ probe: PROBE, needs: 0 }]);
+
+    const noInputs = json(await ask({ text: "Can this probe read data.txt without an input?", rule: "$total > 14", probe_ref: source.id }));
+    expect(noInputs).toMatchObject({ state: "failed", reason: expect.stringContaining("FileNotFoundError") });
+
+    for (const args of [{}, { probe: PROBE, probe_ref: source.id }]) {
+      const refused = await ask({ ...control, ...args });
+      expect(refused).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("exactly one") }] });
+    }
+    const missing = await ask({ ...control, probe_ref: "q-000000000000" });
+    expect(missing).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("existing question") }] });
+  } finally {
+    await client.close();
+  }
+}, 60_000);
+
 // Code mode chains calls in one program only when it knows what each tool returns.
 test("every tool declares its output schema, and results carry structured content that matches it", async () => {
   const client = await agent();
