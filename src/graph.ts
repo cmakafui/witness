@@ -46,8 +46,8 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
       cypher: `UNWIND $rows AS x MERGE (n:${label} {id: x.id}) ON CREATE SET n += x.props`,
       params: { rows: nodes.filter((n) => n.label === label).map((n) => ({ id: n.id, props: { ...n.props, id: n.id } })) },
     });
-  // A relationship with a name merges on its name: READ and SAVED always, NEEDS from 0.12.0. A store from before
-  // holds NEEDS without a name, and a MERGE on a null name fails, so those keep a statement of their own.
+  // READ, SAVED and NEEDS merge on their name. The recorded session in examples/ was made before NEEDS had one,
+  // and a MERGE on a null name fails, so an edge without a name keeps a statement of its own: replay needs it.
   for (const type of new Set(rels.map((r) => r.type))) {
     const [a, b] = ENDS[type];
     for (const named of [true, false]) {
@@ -67,7 +67,7 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
 export const SCHEMA = `The graph:
 (:Goal {id, text, seq})-[:ACCEPTED_BY]->(:Question)  the goal's only acceptance question, bound before it runs
 (:Question {id, text, rule, probe, inputs, asker, seq})
-(:Question)-[:NEEDS {name}]->(:Question)  reads the file the other question saved; name is the input, q-…/file. One NEEDS per file, so count DISTINCT questions. A store from before 0.12.0 has NEEDS without name: read the file names from inputs there
+(:Question)-[:NEEDS {name}]->(:Question)  reads the file the other question saved; name is the input, q-…/file. One NEEDS per file, so count DISTINCT questions
 (:Question)-[:REPLACES]->(:Question)   fixes a question whose run crashed or timed out; the old answer stays
 (:Run {id, key, seq, started, ms, answer, reason, measured, results})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File {id})    the inputs the run read; a File's id is its SHA-256

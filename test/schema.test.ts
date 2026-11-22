@@ -28,12 +28,12 @@ test("a property of the wrong type is rejected", () => {
   expect(() => db.query("CREATE (:Question {id: 'q-1', text: 't', rule: '$x = 1', probe: 'p', inputs: [], timeout: 600, seq: 'one'})")).toThrow(/property type/);
 });
 
-test("NEEDS takes a name of type string, and a NEEDS from before 0.12.0 without one", () => {
+test("NEEDS requires a name of type string", () => {
   db.query(question, { id: "q-1" });
   db.query(question, { id: "q-2" });
   const needs = "MATCH (a:Question {id: 'q-2'}), (b:Question {id: 'q-1'}) CREATE (a)-[:NEEDS";
   db.query(`${needs} {name: 'q-1/out.json'}]->(b)`);
-  db.query(`${needs}]->(b)`);
+  expect(() => db.query(`${needs}]->(b)`)).toThrow(/requires properties/);
   expect(() => db.query(`${needs} {name: 7}]->(b)`)).toThrow(/property type/);
 });
 
