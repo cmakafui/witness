@@ -24,6 +24,13 @@ You read text and see images, so work in a closed loop:
 2. `look` at the render (`q-…/name.png`). It comes back as an image, and it stays in the graph beside its question, where every agent and the person watching the page can see it.
 3. Let what you see choose the next question. A picture prompts a question; it is not an answer. The next probe measures what the picture suggested, and declares the files it builds on (`q-…/name`) as inputs.
 
+## Asking well
+
+- Every rule must be able to come out false. Measure the quantity and let the rule judge it. Before you trust a yes, ask a control that should answer no.
+- Test the whole solved condition, not the cases you can pass.
+- An assumption or an exclusion needs its own question. A no rules out what was tested. A yes holds under the conditions it measured.
+- A wrong guess cannot enter the record, so a bold try is cheap.
+
 ## Goals and acceptance
 
 Goals are optional (`goal({text})`, `g-…`). Bind at most one acceptance question with `accepts: "g-…"` before it runs; only its current `yes` completes the goal. To replace a crashed acceptance question, create a new goal and ask with both `accepts` and `replaces`.
