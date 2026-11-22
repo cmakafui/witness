@@ -147,7 +147,7 @@ test("a question builds on another's output, and its answer follows when an inpu
   const a = await hub.ask({ text: "Does data.txt hold numbers?", rule: "$count >= 1", probe: sum, inputs: ["data.txt"] });
   const b = await hub.ask({ text: "Is the total more than 10?", rule: "$total > 10", probe: big(a.id), inputs: [`${a.id}/total.json`] });
   expect(b.state).toBe("yes");
-  expect(hub.query("MATCH (b:Question {id: $b})-[:NEEDS]->(a:Question) RETURN a.id AS a", { b: b.id }).rows).toEqual([{ a: a.id }]);
+  expect(hub.query("MATCH (b:Question {id: $b})-[n:NEEDS]->(a:Question) RETURN a.id AS a, n.name AS name", { b: b.id }).rows).toEqual([{ a: a.id, name: `${a.id}/total.json` }]);
 
   writeFileSync(join(root, "data.txt"), "1 2");
   await settle();

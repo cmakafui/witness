@@ -5,6 +5,7 @@
 // Goals, questions and runs are immutable records. Goal completion is derived from its acceptance question.
 // The hub binds at most one acceptance question per goal, before that question runs. A File's id is its SHA-256.
 // A question can replace a question whose run crashed or timed out. The hub writes REPLACES with the new question.
+// NEEDS carries the input it names, q-…/file, one per file. A store made before 0.12.0 holds NEEDS without a name.
 
 CREATE GRAPH TYPE witness AS {
   (g:Goal => {id :: STRING NOT NULL, text :: STRING NOT NULL, seq :: INTEGER NOT NULL}),
@@ -16,7 +17,7 @@ CREATE GRAPH TYPE witness AS {
   (f:File => {id :: STRING NOT NULL}),
 
   (g)-[:ACCEPTED_BY]->(q),
-  (q)-[:NEEDS]->(q),
+  (q)-[:NEEDS => {name :: STRING}]->(q),
   (q)-[:REPLACES]->(q),
   (r)-[:OF]->(q),
   (r)-[:READ => {name :: STRING NOT NULL}]->(f),

@@ -46,13 +46,19 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
       cypher: `UNWIND $rows AS x MERGE (n:${label} {id: x.id}) ON CREATE SET n += x.props`,
       params: { rows: nodes.filter((n) => n.label === label).map((n) => ({ id: n.id, props: { ...n.props, id: n.id } })) },
     });
+  // A relationship with a name merges on its name: READ and SAVED always, NEEDS from 0.12.0. A store from before
+  // holds NEEDS without a name, and a MERGE on a null name fails, so those keep a statement of their own.
   for (const type of new Set(rels.map((r) => r.type))) {
     const [a, b] = ENDS[type];
-    const named = type === "READ" || type === "SAVED";
-    out.push({
-      cypher: `UNWIND $rows AS x MATCH (a:${a} {id: x.from}), (b:${b} {id: x.to}) MERGE (a)-[:${type}${named ? " {name: x.name}" : ""}]->(b)`,
-      params: { rows: rels.filter((r) => r.type === type).map(({ from, to, name }) => ({ from, to, name: name ?? null })) },
-    });
+    for (const named of [true, false]) {
+      // A record read back from a store or over JSON says null where it has no name.
+      const rows = rels.filter((r) => r.type === type && (r.name != null) === named);
+      if (!rows.length) continue;
+      out.push({
+        cypher: `UNWIND $rows AS x MATCH (a:${a} {id: x.from}), (b:${b} {id: x.to}) MERGE (a)-[:${type}${named ? " {name: x.name}" : ""}]->(b)`,
+        params: { rows: rows.map(({ from, to, name }) => ({ from, to, name: name ?? null })) },
+      });
+    }
   }
   return out;
 }
@@ -61,7 +67,7 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
 export const SCHEMA = `The graph:
 (:Goal {id, text, seq})-[:ACCEPTED_BY]->(:Question)  the goal's only acceptance question, bound before it runs
 (:Question {id, text, rule, probe, inputs, asker, seq})
-(:Question)-[:NEEDS]->(:Question)      reads a file the other question saved
+(:Question)-[:NEEDS {name}]->(:Question)  reads the file the other question saved; name is the input, q-…/file. One NEEDS per file, so count DISTINCT questions. A store from before 0.12.0 has NEEDS without name: read the file names from inputs there
 (:Question)-[:REPLACES]->(:Question)   fixes a question whose run crashed or timed out; the old answer stays
 (:Run {id, key, seq, started, ms, answer, reason, measured, results})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File {id})    the inputs the run read; a File's id is its SHA-256

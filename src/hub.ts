@@ -384,7 +384,11 @@ export class Hub {
         throw new Refusal(`${goal} already has acceptance question ${g.acceptance}. Its contract cannot change. Create a new goal.`);
     }
     if (!this.byId.has(id)) {
-      const needs = [...new Set(inputs.flatMap((i) => OUTPUT_REF.exec(i)?.[1] ?? []))];
+      // One NEEDS per file read from another question, named by the input: q-…/file.
+      const needs = inputs.flatMap((name) => {
+        const ref = OUTPUT_REF.exec(name);
+        return ref ? [{ to: ref[1]!, name }] : [];
+      });
       this.write(
         [
           {
@@ -394,7 +398,7 @@ export class Hub {
           },
         ],
         [
-          ...needs.map((n) => ({ type: "NEEDS" as const, from: id, to: n })),
+          ...needs.map((n) => ({ type: "NEEDS" as const, from: id, to: n.to, name: n.name })),
           ...(a.accepts ? [{ type: "ACCEPTED_BY" as const, from: a.accepts, to: id }] : []),
           ...(a.replaces ? [{ type: "REPLACES" as const, from: id, to: a.replaces }] : []),
         ],

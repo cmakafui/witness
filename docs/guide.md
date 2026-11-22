@@ -22,7 +22,7 @@ Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the brow
 ```
 (:Goal {id, text, seq})-[:ACCEPTED_BY]->(:Question)  // its only acceptance question
 (:Question {text, rule, probe, inputs, asker})
-(:Question)-[:NEEDS]->(:Question)            // reads a file the other question saved
+(:Question)-[:NEEDS {name}]->(:Question)     // reads a file the other question saved: name is q-…/file
 (:Question)-[:REPLACES]->(:Question)         // fixes a question whose run crashed or timed out
 (:Run {answer, reason, started, ms, results})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File)               // the inputs, as the run read them
