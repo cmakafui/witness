@@ -98,7 +98,7 @@ To develop, run `bun test` (real uv probes, MCP over HTTP and stdio, the page in
 
 ## Where the data lives
 
-A workspace's store is `.witness/`. `graph/` is the Relate store. `files/` holds the inputs and saved outputs, named by SHA-256. A failed run records a short diagnostic tail in its reason. Read a store with Relate's CLI:
+A workspace's store is `.witness/`. `graph/` is the Relate store. `files/` holds the inputs and saved outputs, named by SHA-256. A failed run records a short diagnostic tail in its reason, and names any file the probe tried to read through Python that it did not have: most often a file it needs but did not declare. Read a store with Relate's CLI:
 
 ```bash
 relate --read-only --database .witness/graph "MATCH (q:Question) RETURN q.asker, q.text, q.rule"

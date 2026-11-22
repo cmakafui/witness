@@ -4,7 +4,7 @@
 //   WITNESS_RESULT {json object}   any number of times: a measurement, by name
 // It saves files for other questions in $WITNESS_OUT. A probe that crashes, times out, or prints a result that is
 // not a JSON object has failed. A failed run is never a "no".
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -28,12 +28,34 @@ export type ProbeOutcome = {
 const uv = Bun.which("uv");
 const REAP = join(import.meta.dir, "reap.ts");
 
-/** The environment of a probe: what uv and Python need, and nothing else. No credential reaches a probe. */
-function environment(out: string): Record<string, string> {
+const READS = join(import.meta.dir, "reads");
+
+/**
+ * The environment of a probe: what uv and Python need, and nothing else. No credential reaches a probe.
+ * PYTHONPATH loads src/reads/sitecustomize.py, which writes to `reads` each path the probe tried to read but did not have.
+ */
+function environment(out: string, reads: string): Record<string, string> {
   const keep = ["PATH", "HOME", "TMPDIR", "LANG", "UV_CACHE_DIR", "UV_PYTHON_INSTALL_DIR"];
-  const env: Record<string, string> = { WITNESS_OUT: out, PYTHONUNBUFFERED: "1" };
+  const env: Record<string, string> = { WITNESS_OUT: out, PYTHONUNBUFFERED: "1", PYTHONPATH: READS, WITNESS_READS: reads };
   for (const k of keep) if (process.env[k]) env[k] = process.env[k]!;
   return env;
+}
+
+/** A sentence that names the paths a failed probe tried to read but did not have, or "" when there are none. */
+function undeclared(reads: string): string {
+  let lines: string[];
+  try {
+    lines = readFileSync(reads, "utf8").split("\n");
+  } catch {
+    return "";
+  }
+  const paths = [...new Set(lines.filter((l) => l && !l.startsWith("<")))];
+  // A folder that a listed path is inside says nothing more: keep data/*.zip, drop data.
+  const kept = paths.filter((p) => !paths.some((q) => q !== p && q.startsWith(`${p}/`)));
+  const shown = kept.slice(0, 5);
+  if (!shown.length) return "";
+  const list = shown.join(", ") + (kept.length > shown.length ? " and more" : "");
+  return `\nThe probe tried to read ${list}, which ${shown.length === 1 ? "is not a declared input" : "are not declared inputs"}. Declare each file the probe reads in inputs.`;
 }
 
 function files(dir: string, base = dir): string[] {
@@ -69,7 +91,8 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
     mkdirSync(dirname(join(work, input.name)), { recursive: true });
     cpSync(input.path, join(work, input.name));
   }
-  const env = environment(out);
+  const reads = join(dir, "reads"); // outside work and out: the probe neither reads nor saves it
+  const env = environment(out, reads);
 
   // Through src/reap.ts, so no process of the probe outlives the hub. The timeout below still kills the whole group.
   const proc = Bun.spawn([process.execPath, "--no-orphans", REAP, uv, "run", "--script", "probe.py"], {
@@ -134,7 +157,7 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
 
   const outputs = files(out).map((name) => ({ name, path: join(out, name) }));
   const base = { results, outputs };
-  const failed = (reason: string) => done({ ...base, failed: reason });
+  const failed = (reason: string) => done({ ...base, failed: reason + undeclared(reads) });
   if (timedOut) return failed(`timed out after ${run.timeoutS} s`);
   if (proc.signalCode) return failed(`stopped by ${proc.signalCode}`);
   if (code !== 0) return failed(`exit code ${code}:\n${tail(diagnostic)}`);
