@@ -10,9 +10,19 @@ No agent writes an answer. A probe measures; a Cypher rule decides.
 ## Steps
 
 1. On a fresh store, start with the task. Use `query` when resuming, joining existing work, or looking for findings to build on.
-2. For a new probe, draft it in `scratch/` and test on a small case (`uv run --script scratch/probe.py`). That is not evidence; keep drafts out of `.witness/`.
+2. For a new probe, draft it in `scratch/` and test on a small case (`uv run --script scratch/probe.py`). Try a package first with `uv run --with PACKAGE python -c '…'`. Neither is evidence; keep drafts out of `.witness/`.
 3. Call `ask` with `text`, `rule`, `inputs`, and `asker` (your direction of work). Supply `probe` for a new script or `probe_ref: "q-…"` to reuse the exact script from an existing question. Save candidate outputs in `$WITNESS_OUT` (`q-…/name`) rather than overwriting a shared workspace file that probes read.
 4. Read the answer, measurements, and saved files (`look`). Hand other agents question ids and `q-…/name` paths, not summaries.
+
+## Change the form, render, look
+
+A problem can take many forms: text, numbers, a matrix, a graph, an image, a sound, a spectrum. Each form shows what the others hide. PyPI has the packages of every field that works with a form, so a probe can move the evidence into any of them.
+
+You read text and see images, so work in a closed loop:
+
+1. A probe puts the data into a new form and renders it as a PNG in `$WITNESS_OUT`, beside what it measures.
+2. `look` at the render (`q-…/name.png`). It comes back as an image, and it stays in the graph beside its question, where every agent and the person watching the page can see it.
+3. Let what you see choose the next question. A picture prompts a question; it is not an answer. The next probe measures what the picture suggested, and declares the files it builds on (`q-…/name`) as inputs.
 
 ## Goals and acceptance
 
