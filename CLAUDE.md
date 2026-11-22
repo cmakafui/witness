@@ -28,7 +28,7 @@ Use Bun for dependency installation, scripts, tests and builds. Bundle the page 
 ## Code
 
 - `src/hub.ts`: the only writer. It evaluates each rule with Relate on an empty, read-only in-memory store, writes a run once when it ends, works out each answer from the runs and the inputs now, and runs what changed, or what crashed and was asked again. It keeps the questions, runs and saved files in memory and adds each record as it writes it, so working out answers reads no store.
-- `src/probe.ts`: runs one probe with uv in a folder that holds only its declared inputs.
+- `src/probe.ts`: runs one probe with uv in a folder that holds only its declared inputs. It runs uv through `src/reap.ts` with `bun --no-orphans`, so no process of a probe outlives the hub, even a hub killed by SIGKILL.
 - Probes use one asynchronous `uv run --script`. Keep structured measurements and a bounded diagnostic tail for failures. Archive only declared inputs and saved outputs.
 - `src/graph.ts`: the four node types (Goal, Question, Run, File) and the Cypher that writes them, and what a rule may be. The hub (ffi) and the page (WASM) both use it.
 - `src/mcp.ts`, `src/server.ts`, `src/main.ts`: the four tools (goal, ask, query, look), one `Bun.serve`, the CLI. Each tool declares an `outputSchema` and returns `structuredContent`, with the same value as JSON text. Code-mode clients need the schemas to chain calls in one program. Change a schema with the value it describes.

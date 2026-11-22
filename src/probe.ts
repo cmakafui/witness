@@ -26,6 +26,7 @@ export type ProbeOutcome = {
 };
 
 const uv = Bun.which("uv");
+const REAP = join(import.meta.dir, "reap.ts");
 
 /** The environment of a probe: what uv and Python need, and nothing else. No credential reaches a probe. */
 function environment(out: string): Record<string, string> {
@@ -70,7 +71,8 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
   }
   const env = environment(out);
 
-  const proc = Bun.spawn([uv, "run", "--script", "probe.py"], {
+  // Through src/reap.ts, so no process of the probe outlives the hub. The timeout below still kills the whole group.
+  const proc = Bun.spawn([process.execPath, "--no-orphans", REAP, uv, "run", "--script", "probe.py"], {
     cwd: work,
     env,
     stdout: "pipe",
