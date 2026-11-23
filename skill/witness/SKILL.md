@@ -22,13 +22,13 @@ A picture gives you a question. It is not an answer. The next probe measures wha
 ## Steps
 
 1. In a new workspace, start with the task. To continue earlier work, or to join work in progress, query the graph first. Before you start a new direction, search the graph for its words. Another agent may have measured it, ruled it out, or written a probe that you can use again.
-2. Write a new probe as a draft in `scratch/<lane>/`, and test it with `uv run --script scratch/<lane>/probe.py`. Each lane has its own folder, so drafts do not overwrite each other. To try a package, use `uv run --with PACKAGE python -c '…'`. A draft is not evidence. Keep drafts out of `.witness/`.
+2. Write a new probe as a draft in `scratch/<lane>/`. Each lane has its own folder, so drafts do not overwrite each other. Test a draft only to see that it runs, on a small input. To try a package, use `uv run --with PACKAGE python -c '…'`. Do not run the full probe outside Witness: its result is one that nobody else can see. Keep drafts out of `.witness/`.
 3. Call `ask` with `text`, `rule`, `inputs` and `lane`. Give `probe` for a new script, or `probe_ref: "q-…"` to use the probe of a question that exists.
    - Save outputs and renders in `$WITNESS_OUT`. Other questions read them as `q-…/name`. Do not overwrite a shared workspace file, and do not give a `scratch/` path as an input. An acceptance question refuses `scratch/` inputs.
    - To use the answer and the measurements of another question, give its bare `q-…` as an input. The probe reads them as `q-….json`. Use this for controls and exclusions.
 4. Read the answer, the measurements and the saved files. Call `look` on the renders. Give other agents question ids and `q-…/name` paths, not summaries.
 
-Work that stays in `scratch/` is a draft. Other agents cannot use it, and you lose it when you restart. Ask a question about the best result of a search, so that the result goes into the graph.
+Work that stays in `scratch/` is a draft. Other agents cannot use it, and you lose it when you restart. Run a search as a question: its probe searches, saves its best candidate, and measures the score. Then the search and its result are both in the graph.
 
 ## Lanes
 
@@ -44,10 +44,11 @@ Work counts only when it is in the graph. A claim with a question id can be quer
 ## Asking well
 
 - Every rule must be able to give no. Measure the quantity, and let the rule judge it. Before you trust a yes, ask a control that must give no.
+- Write the rule from what you expect, before you see the measurement. A limit set just under a value that you already saw is not a test.
 - A score gives a search a direction. A yes or a no tells where you are. A number tells which way is better. A probe that saves its candidate and measures its score lets the next question start from the best candidate.
 - Test the full solved condition, not only the cases that you can pass.
 - An assumption or an exclusion needs its own question. A no rules out only what it tested. A yes is true only under the conditions that it measured.
-- A wrong guess cannot go into the record, so a bold try costs little.
+- A no costs nothing, and it stays in the record for every agent. Ask early. Do not rehearse a question in private.
 
 ## Goals and acceptance
 
