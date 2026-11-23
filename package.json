@@ -33,7 +33,6 @@
     "@relate/relate-wasm": "1.2.0",
     "diff": "^9.0.0",
     "medium-zoom": "^1.1.2",
-    "motion": "^14.14.0",
     "prismjs": "^1.30.0",
     "zod": "4.6.7"
   },

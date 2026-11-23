@@ -12,7 +12,6 @@ import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
 import { diffLines } from "diff";
 import mediumZoom from "medium-zoom";
-import { spring } from "motion";
 import Prism from "prismjs";
 import "prismjs/components/prism-json";
 import "prismjs/components/prism-python";
@@ -186,11 +185,9 @@ scroller.append(svg);
 
 let hasRenderedOnce = false;
 const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-// Motion's spring() generates "<ms>ms linear(...)" for zero-mutation native WAAPI springs.
-const springSpec = String(spring(0.42, 0.45));
-const springSpace = springSpec.indexOf(" ");
-const SPRING_MS = Number.parseFloat(springSpec.slice(0, springSpace)) || 550;
-const SPRING_EASE = springSpec.slice(springSpace + 1);
+// A spring with a little overshoot, as a CSS linear() easing (computed once with Motion's spring(0.42, 0.45)).
+const SPRING_MS = 900;
+const SPRING_EASE = "linear(0, 0.0645, 0.2193, 0.4144, 0.6124, 0.7884, 0.9289, 1.0293, 1.0913, 1.1209, 1.1256, 1.1136, 1.0921, 1.0669, 1.0424, 1.0213, 1.005, 0.9937, 0.9871, 0.9843, 0.9844, 0.9863, 0.9892, 0.9924, 0.9954, 0.9979, 0.9998, 1.0011, 1.0018, 1)";
 
 /** Crisp WAAPI spring pop (zero DOM attribute mutations) for live node arrivals and verdict transitions. */
 function springPop(target: SVGElement, fromScale: number, fadeIn = false) {
