@@ -12,7 +12,7 @@ export const RESULT = "WITNESS_RESULT";
 
 export type ProbeRun = {
   probe: string; // the Python source
-  inputs: { name: string; path: string }[]; // name: where the probe finds it (relative); path: where it is now
+  inputs: { name: string; path?: string; content?: Uint8Array }[]; // name: relative path in work/; path or content: bytes
   timeoutS: number;
 };
 
@@ -65,7 +65,12 @@ function files(dir: string, base = dir): string[] {
   });
 }
 
-const tail = (s: string, n = 6) => s.trim().split("\n").slice(-n).join("\n");
+const UV_NOISE = /^(?:Reading inline script metadata from |Installed \d+ package|Resolved \d+ package|Prepared \d+ package|Downloaded \d+ package|Updated https?:\/\/)/;
+const tail = (s: string, n = 15) => {
+  const lines = s.trim().split("\n");
+  const filtered = lines.filter((l) => !UV_NOISE.test(l.trim()));
+  return (filtered.length ? filtered : lines).slice(-n).join("\n");
+};
 const DIAGNOSTIC_CHARS = 4096;
 
 export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
@@ -88,8 +93,10 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
   if (!uv) return done({ failed: "uv is not installed on this machine" });
   await Bun.write(join(work, "probe.py"), run.probe);
   for (const input of run.inputs) {
-    mkdirSync(dirname(join(work, input.name)), { recursive: true });
-    cpSync(input.path, join(work, input.name));
+    const target = join(work, input.name);
+    mkdirSync(dirname(target), { recursive: true });
+    if (input.content !== undefined) await Bun.write(target, input.content);
+    else cpSync(input.path!, target);
   }
   const reads = join(dir, "reads"); // outside work and out: the probe neither reads nor saves it
   const env = environment(out, reads);

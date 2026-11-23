@@ -65,14 +65,14 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
 
 /** The graph, as agents read it: in the MCP query tool and in the page's WebMCP query tool. */
 export const SCHEMA = `The graph:
-(:Goal {id, text, seq})-[:ACCEPTED_BY]->(:Question)  the goal's only acceptance question, bound before it runs
-(:Question {id, text, rule, probe, inputs, asker, seq})
-(:Question)-[:NEEDS {name}]->(:Question)  reads the file the other question saved; name is the input, q-…/file. One NEEDS per file, so count DISTINCT questions
+(:Goal {id, text, seq, created})-[:ACCEPTED_BY]->(:Question)  the goal's only acceptance question, bound before it runs
+(:Question {id, text, rule, probe, inputs, asker, seq, created})
+(:Question)-[:NEEDS {name}]->(:Question)  reads a file the other question saved (q-…/file) or its recorded result (q-…, mounted as q-….json). One NEEDS per input, so count DISTINCT questions
 (:Question)-[:REPLACES]->(:Question)   fixes a question whose run crashed or timed out; the old answer stays
 (:Run {id, key, seq, started, ms, answer, reason, measured, results})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File {id})    the inputs the run read; a File's id is its SHA-256
 (:Run)-[:SAVED {name}]->(:File)               the files the run saved for other questions
-rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is the measurements as JSON. measured is true when the probe measured, even if the rule could not decide: then other questions can read the files it saved. started is when the run began, in milliseconds since 1970. ms is how long it took.
+rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is the measurements as JSON. measured is true when the probe measured, even if the rule could not decide: then other questions can read its result or saved files. created and started are UTC milliseconds since 1970 (older stores may omit created). ms is how long the run took.
 Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now. key names the inputs a run read. A run that measured is final for its key. Runs that did not measure can share a key with the retry that followed them: the latest run on the current inputs gives the answer.
 $replaced lists the questions that a newer question replaces and that still have no measured yes or no. Leave them out of open problems: WHERE NOT q.id IN $replaced.
 $complete and $incomplete are goal ids. A goal is complete only when its acceptance question currently answers yes. No acceptance question means open and incomplete. All other acceptance states mean incomplete. No other question determines completion. Goals and acceptance bindings cannot be edited; changing the acceptance contract requires a new goal.`;
@@ -99,12 +99,12 @@ export function recordedStatuses(questions: Iterable<{ id: string; inputs: strin
     states.set(id, status);
     if (run) continue;
     for (const name of inputs) {
-      const ref = /^(q-[0-9a-f]{12})\/(.+)$/.exec(name);
+      const ref = /^(q-[0-9a-f]{12})(?:\/(.+))?$/.exec(name);
       if (!ref) continue;
       const producer = latest.get(ref[1]!);
       if (!producer) status.reason = `${ref[1]} has no recorded run yet`;
       else if (!producer.measured) status.reason = `${ref[1]} did not measure, so its files cannot be read`;
-      else if (!producer.saved.includes(ref[2]!)) status.reason = `${ref[1]} saved no file named ${ref[2]}`;
+      else if (ref[2] && !producer.saved.includes(ref[2])) status.reason = `${ref[1]} saved no file named ${ref[2]}`;
       else continue;
       status.state = "waiting";
       break;

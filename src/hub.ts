@@ -24,8 +24,8 @@ export class Refusal extends Error {}
 
 const sha256 = (data: string | Uint8Array) => new Bun.CryptoHasher("sha256").update(data).digest("hex");
 const contentId = (prefix: string, ...parts: string[]) => `${prefix}-${sha256(parts.join("\0")).slice(0, 12)}`;
-/** An input that is a file saved by another question's current run: q-…/name. */
-const OUTPUT_REF = /^(q-[0-9a-f]{12})\/(.+)$/;
+/** An input from another question's current run: q-…/name (saved file) or q-… (its recorded answer and measurements). */
+const OUTPUT_REF = /^(q-[0-9a-f]{12})(?:\/(.+))?$/;
 
 export type Ask = {
   text: string;
@@ -47,12 +47,13 @@ export type Event =
 type Question = { id: string; rule: string; probe: string; inputs: string[]; timeout: number };
 type Run = { id: string; key: string; answer: "yes" | "no" | "failed"; reason: string | null; measured: boolean | null };
 type Saved = { name: string; file: string };
-type Input = { name: string; file: string; path: string };
+type Input = { name: string; mount?: string; file: string; path?: string; content?: Uint8Array };
 type Resolved = { status: Status; question: Question; key: string | null; inputs: Input[] };
 
 export class Hub {
   private byId = new Map<string, Question>(); // every question, in the order asked
   private runsOf = new Map<string, Run[]>(); // question -> its runs, in the order they ended
+  private runResults = new Map<string, string>(); // run -> its recorded results JSON
   private measured = new Set<string>(); // the runs whose probe measured
   private savedBy = new Map<string, Saved[]>(); // run -> the files it saved
   private replaces: { from: string; to: string }[] = []; // new question -> the crashed question it fixes
@@ -133,6 +134,7 @@ export class Hub {
       if (n.label === "Run") {
         const run: Run = { id: n.id, key: String(p.key), answer: p.answer as Run["answer"], reason: (p.reason as string | null) ?? null, measured: (p.measured as boolean | null) ?? null };
         add(this.runsOf, of.get(n.id)!, run);
+        this.runResults.set(run.id, String(p.results ?? "[]"));
         if (run.measured) this.measured.add(run.id);
       }
     }
@@ -195,9 +197,20 @@ export class Hub {
             return done({ question: q, key: null, inputs, status: status("waiting", { reason: `${ref[1]} did not measure, so its files cannot be read. Ask ${ref[1]} again to retry it. ${above.reason}` }) });
           if (!upr || !above || (above.state !== "yes" && above.state !== "no" && above.state !== "failed"))
             return done({ question: q, key: null, inputs, status: status("waiting", { reason: `${ref[1]} has no answer yet` }) });
-          const file = this.saved(upr.status.run!).find((s) => s.name === ref[2]);
-          if (!file) return done({ question: q, key: null, inputs, status: status("waiting", { reason: `${ref[1]} saved no file named ${ref[2]}` }) });
-          inputs.push({ name, file: file.file, path: join(this.filesDir, file.file) });
+          if (ref[2]) {
+            const file = this.saved(upr.status.run!).find((s) => s.name === ref[2]);
+            if (!file) return done({ question: q, key: null, inputs, status: status("waiting", { reason: `${ref[1]} saved no file named ${ref[2]}` }) });
+            inputs.push({ name, file: file.file, path: join(this.filesDir, file.file) });
+          } else {
+            const payload = JSON.stringify({
+              question: up!.id,
+              answer: above.state,
+              reason: above.reason,
+              results: JSON.parse(this.runResults.get(above.run!) ?? "[]"),
+            });
+            const content = new TextEncoder().encode(payload);
+            inputs.push({ name, mount: `${up!.id}.json`, file: sha256(content), content });
+          }
         } else {
           const path = join(this.root, name);
           const sha = this.hash(path);
@@ -250,12 +263,12 @@ export class Hub {
     // Each execution is a new record, even when the question and input key are unchanged.
     const run = contentId("r", q.id, key!, crypto.randomUUID());
     // Keep the inputs as the run reads them: a file may change while the probe runs.
-    const read = inputs.map((i) => ({ name: i.name, node: this.keep(readFileSync(i.path)) }));
+    const read = inputs.map((i) => ({ name: i.name, node: this.keep(i.content ?? readFileSync(i.path!)) }));
     this.retries.delete(q.id);
     this.running.set(q.id, run);
     runProbe({
       probe: q.probe,
-      inputs: inputs.map((i) => ({ name: i.name, path: i.path })),
+      inputs: inputs.map((i) => ({ name: i.mount ?? i.name, path: i.path, content: i.content })),
       timeoutS: q.timeout,
     })
       .catch((e): ProbeOutcome => ({
@@ -356,7 +369,7 @@ export class Hub {
   goal(text: string): GoalStatus {
     if (!text.trim()) throw new Refusal("The goal has no solved condition. State what a successful result must satisfy.");
     const id = contentId("g", crypto.randomUUID());
-    this.write([{ label: "Goal", id, props: { text: text.trim(), seq: ++this.seq } }], []);
+    this.write([{ label: "Goal", id, props: { text: text.trim(), seq: ++this.seq, created: Date.now() } }], []);
     return { id, text: text.trim(), acceptance: null, state: "open", complete: false, reason: null };
   }
 
@@ -394,7 +407,7 @@ export class Hub {
           {
             label: "Question",
             id,
-            props: { text: a.text, rule: a.rule, probe, inputs, timeout: a.timeoutS ?? 600, asker: a.asker ?? null, seq: ++this.seq },
+            props: { text: a.text, rule: a.rule, probe, inputs, timeout: a.timeoutS ?? 600, asker: a.asker ?? null, seq: ++this.seq, created: Date.now() },
           },
         ],
         [
@@ -474,6 +487,8 @@ export class Hub {
       const clean = normalize(name);
       if (isAbsolute(name) || clean.startsWith(`..${sep}`) || clean === ".." || clean.split(sep)[0] === ".witness")
         throw new Refusal(`Input ${name} is outside the workspace. Give a path relative to the workspace root.`);
+      if (a.accepts && (clean === "scratch" || clean.startsWith(`scratch${sep}`)))
+        throw new Refusal(`Acceptance input ${name} is in scratch/. Save it in $WITNESS_OUT from a question and declare q-…/name instead.`);
       if (!isFile(join(this.root, clean))) throw new Refusal(`Input ${name} is not a file in the workspace. Declare files, not folders.`);
     }
   }

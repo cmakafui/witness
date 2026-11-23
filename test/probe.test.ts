@@ -66,6 +66,26 @@ test("a failed run names the files the probe tried to read but did not declare",
   }
 });
 
+test("failure tails strip uv install noise and preserve deeper Python tracebacks", async () => {
+  const outcome = await runProbe({
+    probe: script(`import sys
+sys.stderr.write("Reading inline script metadata from probe.py\\nInstalled 1 package in 1ms\\n")
+def a(): b()
+def b(): c()
+def c(): raise ValueError("deep root cause")
+a()`),
+    inputs: [],
+    timeoutS: 10,
+  });
+  try {
+    expect(outcome.failed).toContain("ValueError: deep root cause");
+    expect(outcome.failed).toContain("def a(): b()");
+    expect(outcome.failed).not.toContain("Installed 1 package");
+  } finally {
+    outcome.cleanup();
+  }
+});
+
 test("reads that the probe caught are named too, and a passing run is unchanged", async () => {
   const quiet = `import glob, json\nfound = glob.glob("data/*.zip")\ntry:\n    open("scratch/arrays.npy", "rb")\nexcept FileNotFoundError:\n    pass\nwith open("made-here.txt", "w") as f:\n    f.write("not a read")\n`;
   const failing = await runProbe({ probe: script(quiet), inputs: [], timeoutS: 30 });

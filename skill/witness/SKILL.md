@@ -7,26 +7,39 @@ description: Use Witness to record findings as tested answers, not notes. Ask a 
 
 No agent writes an answer. A probe measures; a Cypher rule decides.
 
+## The loop
+
+Work goes best as a loop: measure, change form, render, look, ask the next question.
+
+A problem can take many forms: text, numbers, a matrix, a graph, an image, a sound, a spectrum. Each form shows what the others hide. PyPI has the packages of every field that works with a form, so a probe can move the evidence into any of them.
+
+You read text and see images. A probe can draw the object it measures (the matrix, the graph, the signal, the layout) as a PNG in `$WITNESS_OUT`. `look` at `q-…/name.png` and the picture comes back to you. Structure that a column of numbers buries often shows at once: a block, a symmetry, a stripe, an outlier.
+
+A render stays in the graph beside its question. Every agent and the person watching the page can see what you saw, and why you asked what you asked next.
+
+A picture prompts a question; it is not an answer. The next probe measures what the picture suggested, and declares the files it builds on (`q-…/name`) as inputs. The graph then shows the chain from what you saw to what you asked.
+
 ## Steps
 
 1. On a fresh store, start with the task. Use `query` when resuming, joining existing work, or looking for findings to build on.
 2. For a new probe, draft it in `scratch/` and test on a small case (`uv run --script scratch/probe.py`). Try a package first with `uv run --with PACKAGE python -c '…'`. Neither is evidence; keep drafts out of `.witness/`.
-3. Call `ask` with `text`, `rule`, `inputs`, and `asker` (your direction of work). Supply `probe` for a new script or `probe_ref: "q-…"` to reuse the exact script from an existing question. Save candidate outputs in `$WITNESS_OUT` (`q-…/name`) rather than overwriting a shared workspace file that probes read.
-4. Read the answer, measurements, and saved files (`look`). Hand other agents question ids and `q-…/name` paths, not summaries.
+3. Call `ask` with `text`, `rule`, `inputs`, and `asker` (a short, stable 1–2 word lane name reused across questions in one direction of work, not a per-question title). Supply `probe` for a new script or `probe_ref: "q-…"` to reuse the exact script from an existing question. Save candidate outputs and renders in `$WITNESS_OUT` (`q-…/name`) rather than overwriting a shared workspace file or citing `scratch/` (acceptance questions refuse `scratch/` inputs). Declare bare `q-…` in `inputs` to depend on a prior question's recorded answer and measurements (mounted as `q-….json`), e.g. to wire negative controls or exclusions into the DAG without dummy files.
+4. Read the answer, measurements, and saved files. `look` at the renders. Hand other agents question ids and `q-…/name` paths, not summaries.
 
-## Change the form, render, look
+Work that stays in `scratch/` is a draft. A long search there leaves nothing for anyone else, and nothing for you after a restart. A question about its best result puts that result in the graph, where others can build on it.
 
-A problem can take many forms: text, numbers, a matrix, a graph, an image, a sound, a spectrum. Each form shows what the others hide. PyPI has the packages of every field that works with a form, so a probe can move the evidence into any of them.
+## Working with others
 
-You read text and see images, so work in a closed loop:
+Other agents add directions, and a view that does not share your habits. Their work counts when it is in the graph: a claim with a question id can be queried, rerun and built on, and a claim without one is only a story.
 
-1. A probe puts the data into a new form and renders it as a PNG in `$WITNESS_OUT`, beside what it measures.
-2. `look` at the render (`q-…/name.png`). It comes back as an image, and it stays in the graph beside its question, where every agent and the person watching the page can see it.
-3. Let what you see choose the next question. A picture prompts a question; it is not an answer. The next probe measures what the picture suggested, and declares the files it builds on (`q-…/name`) as inputs.
+- **Subagents.** Each takes a direction and its own `asker` name, and uses `ask`, `look` and `query` like you. They share the graph, so a question id and a `q-…/name` path pass everything another agent needs. Start them with the host's native subagent tool: the agent then lives in the same session, and the caller picks its model there. A separate process started from a shell is outside the session. The hub runs four probes at a time, so more agents than that wait in line.
+- **An advisor.** An agent that reads the graph and asks what each answer rests on sees what the workers' habits hide: a rule that cannot come out false, an assumption nobody measured, a form nobody tried. Its questions go in the graph under its own `asker`. A stronger model buys a sharper audit.
+- **A second view.** Another model family brings different habits. Its opinion is not an answer. A question that tests what it said is.
 
 ## Asking well
 
 - Every rule must be able to come out false. Measure the quantity and let the rule judge it. Before you trust a yes, ask a control that should answer no.
+- A score gives a search a direction. A yes or no says where you are; a number says which way is better. A probe that saves its candidate and measures its exact score lets the next question start from the best one so far.
 - Test the whole solved condition, not the cases you can pass.
 - An assumption or an exclusion needs its own question. A no rules out what was tested. A yes holds under the conditions it measured.
 - A wrong guess cannot enter the record, so a bold try is cheap.

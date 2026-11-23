@@ -122,6 +122,18 @@ test("completion follows pending, running, no, failed and restored inputs withou
   expect(hub.query("MATCH (g:Goal) RETURN g.complete AS complete, g.state AS state").rows).toEqual([{ complete: null, state: null }]);
 }, 30_000);
 
+test("acceptance questions refuse scratch/ inputs", async () => {
+  const g = hub.goal("No scratch leakage.");
+  const scratchDir = join(root, "scratch");
+  const { mkdirSync } = await import("node:fs");
+  mkdirSync(scratchDir, { recursive: true });
+  writeFileSync(join(scratchDir, "cand.json"), "{}");
+  await expect(hub.ask({ ...testQuestion, accepts: g.id, inputs: ["scratch/cand.json"] })).rejects.toThrow(/scratch\//);
+  // Ordinary exploratory questions can still read scratch/ files.
+  const exp = await hub.ask({ ...testQuestion, inputs: ["scratch/cand.json"] });
+  expect(exp.state).toBe("yes");
+}, 30_000);
+
 test("acceptance waits for changed upstream artifacts, even when the upstream question is exploratory", async () => {
   writeFileSync(join(root, "candidate.txt"), "1");
   const g = hub.goal("A positive candidate is saved");

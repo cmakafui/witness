@@ -1,5 +1,7 @@
 // A recorded store loads immediately; goals and evidence links open its committed answers.
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -69,6 +71,24 @@ test("a viewer receives the whole recorded graph and answers immediately, withou
     expect(await output.json()).toEqual([4, 5, 6, 0]);
   } finally {
     ws.close();
+    server.stop(true);
+  }
+});
+
+test("replay exposes read-only /mcp with query and look only", async () => {
+  const server = replay(root, { port: 0 });
+  const client = new Client({ name: "replay-reader", version: "1" });
+  try {
+    await client.connect(new StreamableHTTPClientTransport(new URL("/mcp", server.url)));
+    expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(["look", "query"]);
+    const q = await client.callTool({ name: "query", arguments: { cypher: "RETURN $complete AS complete, $yes AS yes, $no AS no" } });
+    expect(q.structuredContent).toEqual({ rows: [{ complete: [ids.complete], yes: [ids.a], no: [ids.b, ids.d] }], truncated: false });
+    const l = await client.callTool({ name: "look", arguments: { file: `${ids.a}/n.json` } });
+    expect(JSON.parse((l.structuredContent as { text: string }).text)).toEqual([4, 5, 6, 0]);
+    const forbidden = await fetch(new URL("/mcp", server.url), { method: "POST", headers: { Origin: "https://evil.example", "Content-Type": "application/json" }, body: "{}" });
+    expect(forbidden.status).toBe(403);
+  } finally {
+    await client.close();
     server.stop(true);
   }
 });

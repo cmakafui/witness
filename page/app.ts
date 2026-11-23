@@ -356,7 +356,9 @@ function render() {
     const id = linkId(l);
     let path = linkEls.get(id);
     if (!path) {
-      const files = nodes.get(l.source)!.inputs.filter((i) => i.startsWith(`${l.target}/`)).map((i) => i.slice(l.target.length + 1));
+      const files = nodes.get(l.source)!.inputs
+        .filter((i) => i === l.target || i.startsWith(`${l.target}/`))
+        .map((i) => (i === l.target ? `${l.target}.json` : i.slice(l.target.length + 1)));
       path = s("path", {}, files.length ? s("title", {}, document.createTextNode(files.join(", "))) : null);
       linkEls.set(id, path);
       linkLayer.append(path);

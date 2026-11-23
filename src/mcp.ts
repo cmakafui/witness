@@ -20,7 +20,8 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 - Set accepts to a goal id to bind that goal's only acceptance question before it runs. The goal is complete only while that question currently answers yes. No other question votes on completion. Changing the acceptance contract requires a new goal.
 - The rule is a Cypher expression over the measurements, for example $p < 0.01 AND $gain >= 0.1. $name is a measurement. $results is the list of all measurements. True gives yes. False gives no. All other results give failed.
 - The probe is a Python script with a PEP 723 header. A probe with dependencies sets exclude-newer under [tool.uv] to a fixed date, keeping the package upload cutoff in the probe text. uv runs it in an empty folder that holds the declared inputs only. It prints each measurement as WITNESS_RESULT and one JSON object. It saves files for other questions in $WITNESS_OUT.
-- An input is a workspace path, or q-…/name for a file that another question saved.
+- An input is a workspace path, q-…/name for a file another question saved, or bare q-… for that question's recorded answer and measurements (mounted as q-….json). Acceptance questions refuse scratch/ inputs; prefer q-…/name over scratch/ for ordinary questions too.
+- Use a short, stable asker name (1–2 words, e.g. "fourier17", "advisor") and reuse it across all questions in one direction of work.
 - When an input changes, the question runs again. When the inputs change back, their latest recorded answer comes back. So a probe must not act: do not send or deploy in a probe.
 - Set replaces to the id of a question whose run crashed or timed out when you fix its probe. Witness refuses it for a measured answer. The old question stays failed and goes into $replaced.
 - query: read the graph with Cypher. look: show a file that a run saved.`;
@@ -101,13 +102,13 @@ function server(hub: Hub): McpServer {
           .describe("A Cypher expression over the measurements. True gives yes. $name is a measurement. $results is the list of all measurements. Example: $p < 0.01 AND $gain >= 0.1."),
         probe: z.string().optional().describe('A Python script with a PEP 723 header. It prints each measurement as WITNESS_RESULT and one JSON object, for example {"p": 0.003}.'),
         probe_ref: z.string().optional().describe("An existing question id (q-…) in this workspace. Reuses its exact probe script. Supply this question's own rule and inputs."),
-        inputs: z.array(z.string()).default([]).describe("The files that the probe reads: workspace paths, or q-…/name for a file that another question saved."),
+        inputs: z.array(z.string()).default([]).describe("The files that the probe reads: workspace paths, q-…/name for a file another question saved, or bare q-… for its recorded answer and measurements (mounted as q-….json). Acceptance questions refuse scratch/ inputs."),
         accepts: z.string().optional().describe("An existing goal id whose only acceptance question this will be. Binds before execution. Only its current yes completes the goal. An identical retry is allowed; a different acceptance question requires a new goal."),
         replaces: z
           .string()
           .optional()
           .describe("The id of a question whose run crashed or timed out, when this question is its fix. Witness refuses it for a question that measured. The old answer stays; queries get it in $replaced."),
-        asker: z.string().optional().describe("Your direction of work, for example the approach you test. The page gives each direction its own row. It does not change the answer."),
+        asker: z.string().optional().describe("Short, stable lane name for your direction of work (1–2 words, e.g. 'switches', 'advisor'). Reuse the same lane name across questions in one line of attack; do not put a question title here. It does not change the answer."),
         timeout_s: z.number().int().positive().max(3600).optional().describe("The time limit of one run, in seconds. Default 600."),
         wait_s: z.number().int().min(0).max(240).optional().describe("The time to wait for the answer, in seconds, at most 240. Default 120. After that, the run continues."),
       },
@@ -116,6 +117,13 @@ function server(hub: Hub): McpServer {
     (a) => tool(() => hub.ask({ ...a, probeRef: a.probe_ref, timeoutS: a.timeout_s, waitS: a.wait_s })),
   );
 
+  registerReadTools(s, hub);
+  return s;
+}
+
+export type ReadOnlyStore = Pick<Hub, "query" | "look">;
+
+function registerReadTools(s: McpServer, store: ReadOnlyStore) {
   s.registerTool(
     "query",
     {
@@ -127,7 +135,7 @@ function server(hub: Hub): McpServer {
       outputSchema: ROWS,
       annotations: { readOnlyHint: true },
     },
-    (a) => tool(() => hub.query(a.cypher, a.params as Record<string, Param>)),
+    (a) => tool(() => store.query(a.cypher, a.params as Record<string, Param>)),
   );
 
   s.registerTool(
@@ -140,7 +148,7 @@ function server(hub: Hub): McpServer {
     },
     async ({ file }) => {
       try {
-        const f = hub.look(file);
+        const f = store.look(file);
         const meta = { name: f.name, file: basename(f.path), type: f.type, bytes: f.bytes };
         const body = readFileSync(f.path);
         if (f.type.startsWith("image/"))
@@ -162,6 +170,13 @@ function server(hub: Hub): McpServer {
       }
     },
   );
+}
+
+function readOnlyServer(store: ReadOnlyStore): McpServer {
+  const s = new McpServer({ name: "witness-replay", version: VERSION }, {
+    instructions: "Read-only view of a recorded Witness graph. Use query (Cypher) and look (saved files). This endpoint cannot create goals or run probes.",
+  });
+  registerReadTools(s, store);
   return s;
 }
 
@@ -170,6 +185,15 @@ export function mcp(hub: Hub) {
   return async (req: Request): Promise<Response> => {
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server(hub).connect(transport);
+    return transport.handleRequest(req);
+  };
+}
+
+/** Handles one read-only MCP request (query and look only), for witness replay. */
+export function readOnlyMcp(store: ReadOnlyStore) {
+  return async (req: Request): Promise<Response> => {
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    await readOnlyServer(store).connect(transport);
     return transport.handleRequest(req);
   };
 }

@@ -53,6 +53,31 @@ test("each file read from another question gets its own NEEDS, named by the inpu
   expect(replayed()).toEqual(edges.map((e) => ({ from: consumer.id, to: String(e.p), name: String(e.name) })));
 }, 60_000);
 
+test("bare q-… input mounts the producer's answer and measurements as q-….json and creates a NEEDS edge", async () => {
+  const control = await hub.ask({
+    text: "Is 1 greater than 10?",
+    rule: "$x > 10",
+    probe: `${head}print("WITNESS_RESULT", json.dumps({"x": 1}))`,
+  });
+  expect(control.state).toBe("no");
+  const consumer = await hub.ask({
+    text: "Did the negative control answer no with x = 1?",
+    rule: "$ans = 'no' AND $x = 1",
+    inputs: [control.id],
+    probe: `${head}d = json.load(open("${control.id}.json"))\nprint("WITNESS_RESULT", json.dumps({"ans": d["answer"], "x": d["results"][-1]["x"]}))`,
+  });
+  expect(consumer.state).toBe("yes");
+  expect(hub.query("MATCH (c:Question {id: $c})-[n:NEEDS]->(p:Question) RETURN p.id AS p, n.name AS name", { c: consumer.id }).rows)
+    .toEqual([{ p: control.id, name: control.id }]);
+  // Created timestamps are recorded in UTC ms on goals and questions.
+  const g = hub.goal("Timed goal");
+  const times = hub.query("MATCH (g:Goal {id: $g}), (q:Question {id: $q}) RETURN g.created AS gc, q.created AS qc", { g: g.id, q: consumer.id }).rows[0]!;
+  expect(typeof times.gc).toBe("number");
+  expect(typeof times.qc).toBe("number");
+  expect(Number(times.gc)).toBeGreaterThan(1_700_000_000_000);
+  expect(Number(times.qc)).toBeGreaterThan(1_700_000_000_000);
+}, 60_000);
+
 test("the recorded session, made before NEEDS had a name, still replays", async () => {
   const recorded = join(import.meta.dir, "..", "examples", "human-rng", ".witness");
   await hub.idle();

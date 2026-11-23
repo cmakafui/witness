@@ -55,7 +55,7 @@ export function serve(hub: Hub, { port = 4747, hostname = "127.0.0.1" } = {}) {
  * Refuses MCP requests that a web page on another site sent through the browser (DNS rebinding): the Host must be the
  * hub's own, and an Origin, when there is one, too.
  */
-function sameOrigin(req: Request, url: URL): boolean {
+export function sameOrigin(req: Request, url: URL): boolean {
   const host = req.headers.get("host");
   if (host && host !== url.host && host !== `localhost:${url.port}`) return false;
   const origin = req.headers.get("origin");

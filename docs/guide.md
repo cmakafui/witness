@@ -4,7 +4,7 @@ The details behind the [README](../README.md).
 
 ## Reading the page
 
-`witness replay DIR` opens a recorded session from its store alone. It needs no AI agent, no API key and no uv. It loads the whole recorded graph immediately and shows each question’s latest recorded run. Replay derives goal completion from those recorded answers. It does not check today’s workspace inputs.
+`witness replay DIR` opens a recorded session from its store alone. It needs no AI agent, no API key and no uv. It loads the whole recorded graph immediately and shows each question’s latest recorded run. Replay derives goal completion from those recorded answers. It does not check today’s workspace inputs. It also exposes a read-only `/mcp` endpoint (`query` and `look` only, never `goal` or `ask`) so scripts and external clients can inspect recorded stores with the same contract as a live hub.
 
 Choose a goal to open its acceptance question, marked `◎`. Each row of the graph is one direction of work, and a curve joins a question to the questions that read its files. Select a question to see its evidence: the answer, each part of the rule with the values it used, saved images, files and run history. Drag the `seq` slider in the goal bar to step through recorded history. [`page/DESIGN.md`](../page/DESIGN.md) describes the page in full.
 
@@ -20,9 +20,9 @@ Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the brow
 - **Four node types, six relationship types.** Goals state solved conditions. Questions fix tests. Runs record executions. Files hold the inputs and saved evidence. The hub writes a question and its goal binding together, before execution, and a run once it ends.
 
 ```
-(:Goal {id, text, seq})-[:ACCEPTED_BY]->(:Question)  // its only acceptance question
-(:Question {text, rule, probe, inputs, asker})
-(:Question)-[:NEEDS {name}]->(:Question)     // reads a file the other question saved: name is q-…/file
+(:Goal {id, text, seq, created})-[:ACCEPTED_BY]->(:Question)  // its only acceptance question
+(:Question {text, rule, probe, inputs, asker, seq, created})
+(:Question)-[:NEEDS {name}]->(:Question)     // reads a saved file (q-…/file) or recorded result (q-…, mounted as q-….json)
 (:Question)-[:REPLACES]->(:Question)         // fixes a question whose run crashed or timed out
 (:Run {answer, reason, started, ms, results})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File)               // the inputs, as the run read them

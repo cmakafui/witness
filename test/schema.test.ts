@@ -47,6 +47,13 @@ test("an edge between the wrong kinds of node is rejected", () => {
   expect(() => db.query("MATCH (q:Question {id: 'q-1'}) CREATE (q)-[:OF]->(q)")).toThrow(/endpoint/);
 });
 
+test("goals and questions accept optional integer created timestamps and reject wrong types", () => {
+  db.query("CREATE (:Goal {id: 'g-t', text: 'Timed', seq: 1, created: 1700000000000})");
+  db.query("CREATE (:Question {id: 'q-t', text: 't', rule: '$x = 1', probe: 'p', inputs: [], timeout: 600, seq: 2, created: 1700000000001})");
+  expect(() => db.query("CREATE (:Goal {id: 'g-bad', text: 'Bad', seq: 3, created: 'now'})")).toThrow(/property type/);
+  expect(() => db.query("CREATE (:Question {id: 'q-bad', text: 't', rule: '$x = 1', probe: 'p', inputs: [], timeout: 600, seq: 4, created: 'now'})")).toThrow(/property type/);
+});
+
 test("goals require immutable record fields, unique ids and the correct relationship endpoints", () => {
   expect(() => db.query("CREATE (:Goal {id: 'g-1', seq: 1})")).toThrow(/requires properties/);
   db.query("CREATE (:Goal {id: 'g-1', text: 'Solved condition', seq: 1})");

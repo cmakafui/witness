@@ -8,10 +8,10 @@
 // NEEDS carries the input it names, q-…/file: one NEEDS per file a question reads from another.
 
 CREATE GRAPH TYPE witness AS {
-  (g:Goal => {id :: STRING NOT NULL, text :: STRING NOT NULL, seq :: INTEGER NOT NULL}),
+  (g:Goal => {id :: STRING NOT NULL, text :: STRING NOT NULL, seq :: INTEGER NOT NULL, created :: INTEGER}),
   (q:Question => {id :: STRING NOT NULL, text :: STRING NOT NULL, rule :: STRING NOT NULL, probe :: STRING NOT NULL,
                   inputs :: LIST<STRING NOT NULL> NOT NULL, timeout :: INTEGER NOT NULL,
-                  asker :: STRING, seq :: INTEGER NOT NULL}),
+                  asker :: STRING, seq :: INTEGER NOT NULL, created :: INTEGER}),
   (r:Run => {id :: STRING NOT NULL, key :: STRING NOT NULL, seq :: INTEGER NOT NULL, started :: INTEGER NOT NULL, ms :: INTEGER NOT NULL,
              answer :: STRING NOT NULL, reason :: STRING, measured :: BOOLEAN, results :: STRING NOT NULL}),
   (f:File => {id :: STRING NOT NULL}),
