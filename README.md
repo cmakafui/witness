@@ -16,6 +16,10 @@ Today, agents share what they learn in markdown notes. One writes "the parser is
 
 ## See it
 
+
+https://github.com/user-attachments/assets/8fadc3d7-fee3-4697-8d09-07a99034f33f
+
+
 Agents in three lanes recover a flag from a QR code encrypted with bits a human typed as "random". They ask 11 questions in under 5 minutes. A search for repeats in the keystream says no. A control, a one-letter change to the flag, must fail the acceptance rule, and it does. The acceptance question confirms the flag's SHA-256.
 
 ```bash
