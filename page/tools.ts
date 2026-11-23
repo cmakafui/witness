@@ -44,7 +44,7 @@ export function webTools(page: Page): Tool[] {
   return [
     {
       name: "query",
-      description: `Run a Cypher query on a throwaway copy of the Witness graph in this page, and show it to the person in the Query drawer. A query cannot change the graph. In history, the copy contains only records at the selected seq. $selected is the question the person has selected. At most ${LIMIT} rows.\n\n${SCHEMA}`,
+      description: `Run a Cypher query on a throwaway copy of the Witness graph in this page, and show the query to the person in the Query drawer. A query cannot change the graph. In history, the copy holds only the records up to the selected seq. $selected is the question that the person selected. Returns ${LIMIT} rows at most.\n\n${SCHEMA}`,
       inputSchema: { type: "object", properties: { cypher: { type: "string", description: "A Cypher query." } }, required: ["cypher"] },
       annotations: hints,
       execute: reply(({ cypher }) => {
@@ -57,7 +57,7 @@ export function webTools(page: Page): Tool[] {
     {
       name: "show_question",
       description:
-        "Select a question in the Witness graph, highlight its upstream artifact dependencies, and show its evidence. In history, only questions created by the selected seq can be opened, and evidence uses runs recorded by then. Returns its text, rule, answer, the goals it accepts, dependencies and consumers, measurements of its current run, archived inputs, saved files, and runs. File URLs refer to the bytes that run read or saved. Only an acceptance question determines goal completion.",
+        "Select a question in the Witness graph and show its evidence. The page highlights the questions that it depends on. In history, you can open only the questions that exist at the selected seq, and the evidence uses only the runs up to that seq. Returns the text, the rule, the answer, the goals that it accepts, the questions that it depends on and that use it, the measurements of its current run, the files that the run read and saved, and its runs. Each file URL gives the exact bytes that the run read or saved. Only an acceptance question decides if a goal is complete.",
       inputSchema: { type: "object", properties: { id: { type: "string", description: "The question's id: q- and 12 hex digits." } }, required: ["id"] },
       annotations: hints,
       execute: reply(({ id }) => {

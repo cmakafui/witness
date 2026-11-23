@@ -1,9 +1,8 @@
 // witness replay: loads a recorded store read-only for manual inspection and read-only MCP. No agent, hub or uv.
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import page from "../page/index.html";
-import { answerParams, GOALS, type Goal, INDEXES, recordedStatuses, type RecordedRun, type Status, statements } from "./graph.ts";
+import { answerParams, GOALS, type Goal, recordedStatuses, type RecordedRun, type Status } from "./graph.ts";
 import { findFile, Refusal, snapshot } from "./hub.ts";
 import { readOnlyMcp, type ReadOnlyStore } from "./mcp.ts";
 import { type Param, Relate } from "./relate.ts";
@@ -33,25 +32,12 @@ export function replay(root: string, { port = 4748, hostname = "127.0.0.1" } = {
   } finally {
     db.close();
   }
-  // A recorded store is never written, and it may predate the search indexes. So queries read a copy that has them,
-  // made once and opened read-only, as the live hub opens its store for a query.
-  const copy = mkdtempSync(join(tmpdir(), "witness-replay-"));
-  process.once("exit", () => rmSync(copy, { recursive: true, force: true }));
-  const writer = Relate.open(join(copy, "graph"));
-  try {
-    for (const index of INDEXES) writer.query(index);
-    writer.transaction(() => {
-      for (const s of statements(graph.nodes, graph.rels)) writer.query(s.cypher, s.params as Record<string, Param>);
-    });
-  } finally {
-    writer.close();
-  }
   const files = join(root, ".witness", "files");
   const byId = new Map(states.map((s) => [s.id, s]));
   const params = answerParams(states, goals, replaces);
   const store: ReadOnlyStore = {
     query(cypher: string, extra: Record<string, Param> = {}, limit = 200) {
-      const reader = Relate.open(join(copy, "graph"), { readOnly: true });
+      const reader = Relate.open(graphDir, { readOnly: true });
       try {
         const rows = reader.query(cypher, { ...params, ...extra });
         return { rows: rows.slice(0, limit), truncated: rows.length > limit };

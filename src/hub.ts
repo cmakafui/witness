@@ -10,12 +10,12 @@
 // A probe only measures. When a run ends, Relate evaluates the question's rule, a Cypher expression, on the run's
 // measurements: true is yes, false is no, and anything else is failed. Then the hub writes the run, once.
 //
-// The hub is the only writer, and a record never changes. So it keeps the questions, the runs and the files they
-// saved in memory, and adds each new record as it writes it. Working out the answers reads no store.
+// The hub is the only writer, and a record never changes. So it keeps the goals, the questions, the runs and the files
+// they saved in memory, and adds each new record as it writes it. Working out the answers reads no store.
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { isAbsolute, join, normalize, sep } from "node:path";
-import { ALL_NODES, ALL_RELS, answerParams, clauses, type GNode, type GRel, type Goal, type GoalStatus, GOALS, goalStatuses, measurements, ruleProblem, ruleStatement, type State, type Status, statements } from "./graph.ts";
+import { ALL_NODES, ALL_RELS, answerParams, clauses, type GNode, type GRel, type Goal, type GoalStatus, goalStatuses, measurements, ruleProblem, ruleStatement, type State, type Status, statements } from "./graph.ts";
 import { dependencyProblem, isFile, runProbe, type ProbeOutcome, RESULT } from "./probe.ts";
 import { type Param, Relate, RelateError, type Row } from "./relate.ts";
 import { applySchema } from "./schema.ts";
@@ -36,7 +36,7 @@ export type Ask = {
   inputs?: string[];
   accepts?: string;
   replaces?: string;
-  asker?: string;
+  lane?: string;
   timeoutS?: number;
   waitS?: number;
 };
@@ -46,12 +46,13 @@ export type Event =
   | { type: "states"; states: Status[] };
 
 type Question = { id: string; rule: string; probe: string; inputs: string[]; timeout: number };
-type Run = { id: string; key: string; answer: "yes" | "no" | "failed"; reason: string | null; measured: boolean | null };
+type Run = { id: string; key: string; answer: "yes" | "no" | "failed"; reason: string | null; measured: boolean };
 type Saved = { name: string; file: string };
 type Input = { name: string; mount?: string; file: string; path?: string; content?: Uint8Array };
 type Resolved = { status: Status; question: Question; key: string | null; inputs: Input[] };
 
 export class Hub {
+  private goalsById = new Map<string, Goal>(); // every goal, with its acceptance question once one is bound
   private byId = new Map<string, Question>(); // every question, in the order asked
   private runsOf = new Map<string, Run[]>(); // question -> its runs, in the order they ended
   private runResults = new Map<string, string>(); // run -> its recorded results JSON
@@ -59,7 +60,7 @@ export class Hub {
   private savedBy = new Map<string, Saved[]>(); // run -> the files it saved
   private replaces: { from: string; to: string }[] = []; // new question -> the crashed question it fixes
   private running = new Map<string, string>(); // question -> its run in progress
-  private aborts = new Map<string, AbortController>(); // question -> cancel handle for its running probe
+  private aborts = new Map<string, AbortController>(); // question -> the handle that stops its running probe
   private retries = new Set<string>(); // asks of a crashed question, awaiting a worker slot
   private hashes = new Map<string, { stamp: string; sha: string }>();
   private listeners = new Set<(e: Event) => void>();
@@ -137,16 +138,18 @@ export class Hub {
     const of = new Map(rels.filter((r) => r.type === "OF").map((r) => [r.from, r.to]));
     for (const n of nodes) {
       const p = n.props;
+      if (n.label === "Goal") this.goalsById.set(n.id, { id: n.id, text: String(p.text), acceptance: null });
       if (n.label === "Question" && !this.byId.has(n.id))
         this.byId.set(n.id, { id: n.id, rule: String(p.rule), probe: String(p.probe), inputs: p.inputs as string[], timeout: Number(p.timeout) });
       if (n.label === "Run") {
-        const run: Run = { id: n.id, key: String(p.key), answer: p.answer as Run["answer"], reason: (p.reason as string | null) ?? null, measured: (p.measured as boolean | null) ?? null };
+        const run: Run = { id: n.id, key: String(p.key), answer: p.answer as Run["answer"], reason: (p.reason as string | null) ?? null, measured: p.measured === true };
         add(this.runsOf, of.get(n.id)!, run);
-        this.runResults.set(run.id, String(p.results ?? "[]"));
+        this.runResults.set(run.id, String(p.results));
         if (run.measured) this.measured.add(run.id);
       }
     }
     for (const r of rels) {
+      if (r.type === "ACCEPTED_BY") this.goalsById.get(r.from)!.acceptance = r.to;
       if (r.type === "SAVED") add(this.savedBy, r.from, { name: r.name!, file: r.to });
       if (r.type === "REPLACES" && !this.replaces.some((x) => x.from === r.from && x.to === r.to)) this.replaces.push({ from: r.from, to: r.to });
     }
@@ -380,14 +383,14 @@ export class Hub {
 
   /** Creates a new immutable goal, even when another goal has the same text. */
   goal(text: string): GoalStatus {
-    if (!text.trim()) throw new Refusal("The goal has no solved condition. State what a successful result must satisfy.");
+    if (!text.trim()) throw new Refusal("The goal has no solved condition. State what a good result must satisfy.");
     const id = contentId("g", crypto.randomUUID());
     this.write([{ label: "Goal", id, props: { text: text.trim(), seq: ++this.seq, created: Date.now() } }], []);
     return { id, text: text.trim(), acceptance: null, state: "open", complete: false, reason: null };
   }
 
   goals(): GoalStatus[] {
-    return goalStatuses(this.db.query(GOALS) as Goal[], this.statuses());
+    return goalStatuses([...this.goalsById.values()], this.statuses());
   }
 
   /** Reuses the question and its answer on the current inputs. Asking again retries a run that did not measure. */
@@ -404,10 +407,10 @@ export class Hub {
     const goal = a.accepts;
     if (a.replaces !== undefined && !this.byId.has(id)) this.refuseReplace(a.replaces, a.accepts);
     if (goal !== undefined) {
-      const g = (this.db.query(GOALS) as Goal[]).find((g) => g.id === goal);
-      if (!g) throw new Refusal(`There is no goal ${goal}. Call goal first, or query existing goals.`);
+      const g = this.goalsById.get(goal);
+      if (!g) throw new Refusal(`There is no goal ${goal}. Call goal first, or query the goals.`);
       if (g.acceptance && g.acceptance !== id)
-        throw new Refusal(`${goal} already has acceptance question ${g.acceptance}. Its contract cannot change. Create a new goal.`);
+        throw new Refusal(`${goal} already has the acceptance question ${g.acceptance}, and a goal does not change. Make a new goal.`);
     }
     if (!this.byId.has(id)) {
       // One NEEDS per file read from another question, named by the input: q-…/file.
@@ -420,7 +423,7 @@ export class Hub {
           {
             label: "Question",
             id,
-            props: { text: a.text, rule: a.rule, probe, inputs, timeout: a.timeoutS ?? 600, asker: a.asker ?? null, seq: ++this.seq, created: Date.now() },
+            props: { text: a.text, rule: a.rule, probe, inputs, timeout: a.timeoutS ?? 600, lane: a.lane ?? null, seq: ++this.seq, created: Date.now() },
           },
         ],
         [
@@ -444,7 +447,7 @@ export class Hub {
       s = this.status(id);
     }
     const done = s.state === "yes" || s.state === "no" || s.state === "failed";
-    const results = done ? JSON.parse(String(this.db.query("MATCH (r:Run {id: $run}) RETURN r.results AS r", { run: s.run! })[0]?.r ?? "[]")) : [];
+    const results = done ? JSON.parse(this.runResults.get(s.run!)!) : [];
     return { ...s, question: a.text, results, saved: done ? this.saved(s.run!).map((x) => `${id}/${x.name}`) : [], goal: goal ? this.goals().find((g) => g.id === goal)! : null };
   }
 
@@ -466,12 +469,12 @@ export class Hub {
     if (s.state !== "failed" || !s.run || this.measured.has(s.run))
       throw new Refusal(
         `${old} cannot be replaced: it is ${s.state}${s.state === "failed" && s.run ? " and its run measured" : ""}. ` +
-          "Only a question whose run crashed or timed out can be replaced, because it settled nothing. A measured answer is evidence: ask a new question beside it.",
+          "Only a question whose run did not measure (crashed or timed out) can be replaced. A measured answer is evidence. To dispute it, ask a new question.",
       );
-    const goal = (this.db.query(GOALS) as Goal[]).find((g) => g.acceptance === old);
+    const goal = [...this.goalsById.values()].find((g) => g.acceptance === old);
     if (goal && !accepts)
       throw new Refusal(
-        `${old} is the acceptance question of ${goal.id}, and that binding cannot change. Create a new goal and ask the fix with accepts set to the new goal and replaces set to ${old}.`,
+        `${old} is the acceptance question of ${goal.id}, and a goal does not change. Make a new goal. Then ask the fix with accepts set to the new goal and replaces set to ${old}.`,
       );
   }
 
@@ -501,7 +504,7 @@ export class Hub {
       if (isAbsolute(name) || clean.startsWith(`..${sep}`) || clean === ".." || clean.split(sep)[0] === ".witness")
         throw new Refusal(`Input ${name} is outside the workspace. Give a path relative to the workspace root.`);
       if (a.accepts && (clean === "scratch" || clean.startsWith(`scratch${sep}`)))
-        throw new Refusal(`Acceptance input ${name} is in scratch/. Save it in $WITNESS_OUT from a question and declare q-…/name instead.`);
+        throw new Refusal(`Acceptance input ${name} is in scratch/. Save the file in $WITNESS_OUT from a question, and give q-…/name as the input.`);
       if (!isFile(join(this.root, clean))) throw new Refusal(`Input ${name} is not a file in the workspace. Declare files, not folders.`);
     }
   }
@@ -513,7 +516,7 @@ export class Hub {
   query(cypher: string, params: Record<string, Param> = {}, limit = 200): { rows: Row[]; truncated: boolean } {
     const reader = Relate.open(this.graphDir, { readOnly: true });
     try {
-      const rows = reader.query(cypher, { ...answerParams(this.statuses(), this.db.query(GOALS) as Goal[], this.replaces), ...params });
+      const rows = reader.query(cypher, { ...answerParams(this.statuses(), [...this.goalsById.values()], this.replaces), ...params });
       return { rows: rows.slice(0, limit), truncated: rows.length > limit };
     } finally {
       reader.close();
@@ -530,19 +533,11 @@ export class Hub {
     return snapshot(this.db);
   }
 
-  /** Cancels a running probe (SIGTERM then SIGKILL) or unqueues a pending retry. Returns true when something was cancelled. */
+  /** Stops the running probe of a question, for the Cancel button on the page. Its run did not measure. */
   cancel(id: string): boolean {
-    if (!this.byId.has(id)) throw new Refusal(`There is no question ${id}. Call query to list the questions.`);
     const ac = this.aborts.get(id);
-    if (ac) {
-      ac.abort();
-      return true;
-    }
-    if (this.retries.delete(id)) {
-      this.check();
-      return true;
-    }
-    return false;
+    ac?.abort();
+    return ac !== undefined;
   }
 
   /** Whether a probe runs now. */

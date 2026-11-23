@@ -1,4 +1,4 @@
-// One Bun.serve for everything: the web page, MCP for agents, the files runs saved, and the live feed.
+// One Bun.serve for everything: the web page, MCP for agents, the files runs saved, the live feed, and Cancel.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import page from "../page/index.html";
@@ -23,15 +23,13 @@ export function serve(hub: Hub, { port = 4747, hostname = "127.0.0.1" } = {}) {
         return sameOrigin(req, srv.url) ? handle(req) : new Response("Forbidden: this request did not come from this machine's hub address.", { status: 403 });
       },
       "/files/:id": (req) => (used(), fileResponse(req, hub.filesDir)),
-      "/cancel/:id": (req, srv) => {
-        used();
-        if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
-        if (!sameOrigin(req, srv.url)) return new Response("Forbidden: this request did not come from this machine's hub address.", { status: 403 });
-        try {
+      // The Cancel button on the page. No tool and no command can cancel.
+      "/cancel/:id": {
+        POST: (req, srv) => {
+          used();
+          if (!sameOrigin(req, srv.url)) return new Response("Forbidden: this request did not come from this machine's hub address.", { status: 403 });
           return Response.json({ id: req.params.id, cancelled: hub.cancel(req.params.id) });
-        } catch (e) {
-          return Response.json({ error: (e as Error).message }, { status: 404 });
-        }
+        },
       },
       "/health": () => (used(), Response.json({ root: hub.root, pid: process.pid })),
       "/events": (req, srv) => (srv.upgrade(req) ? undefined : new Response("Expected a WebSocket", { status: 400 })),

@@ -14,34 +14,28 @@ Today, agents share what they learn in markdown notes. One writes "the parser is
 - **Answers follow their inputs.** Each run records the files it read, by hash. Change a file and the questions that read it run again.
 - **One graph.** Everything lives in one [Relate](https://relatedb.ai) store. Agents query it over MCP. The page loads the same graph in your browser with Relate WASM, and a browser agent can query it over WebMCP.
 
-## See it
+## Install
 
-Five agents recover a flag from an encrypted QR code in 12 minutes. Two searches fail. The winner builds on a word list that one of them saved.
-
-![The solve graph](docs/img/solve.png)
-
-You need only [Bun](https://bun.com) 1.4+:
+You need [Bun](https://bun.com) 1.4+ and [uv](https://docs.astral.sh/uv/), which runs the probes.
 
 ```bash
 git clone https://github.com/cmakafui/witness && cd witness
 bun install && bun link
-witness replay examples/human-rng
 ```
 
 ## Use it with your agents
 
-You also need [uv](https://docs.astral.sh/uv/), which runs the probes.
-
 ```bash
-witness setup        # adds the skill and MCP server to Claude Code, Codex, Pi and agy
-witness open [DIR]   # watch a workspace's graph live
+witness setup         # adds the skill and MCP server to Claude Code, Codex, Pi and agy
+witness open [DIR]    # watch a workspace's graph live
+witness replay [DIR]  # read a recorded session
 ```
 
 Agents get four tools: `goal`, `ask`, `query` and `look`.
 
 ## How it uses Relate
 
-- **Mode:** directory. Each workspace keeps its store at `.witness/graph/`. The recorded demo store is [`examples/human-rng/.witness/graph/`](examples/human-rng/.witness/graph/).
+- **Mode:** directory. Each workspace keeps its store at `.witness/graph/`.
 - **Why:** the hub writes every record as it happens, so the graph is always on disk. The hub is the only writer, through `bun:ffi`. Agents, the CLI and replay open the same folder read-only.
 - **Rules** are Cypher, evaluated by Relate on an empty in-memory store that refuses writes. The page loads the same graph into Relate WASM.
 - **Search:** full-text indexes on each question's text, rule and probe, and on why runs failed. Before an agent asks, it searches for the words. A hit comes with its answer now, so a ruled-out direction stays ruled out.

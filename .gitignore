@@ -3,8 +3,9 @@ node_modules
 .DS_Store
 __pycache__/
 
-# Witness stores (the demo store is committed from its own folder)
+# Witness stores. A recorded example in examples/ is committed without its hub files.
 .witness/
 !examples/*/.witness/
 examples/*/.witness/hub.json
 examples/*/.witness/hub.log
+scratch/

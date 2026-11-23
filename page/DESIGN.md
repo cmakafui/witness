@@ -110,6 +110,7 @@ Colour carries the answer and nothing else:
 - `failed` is grey, and it never relies on colour alone. A failed question is a hollow ring with a slash, so it cannot be mistaken for `no` or for waiting.
 - `accent` blue is only for things a person can act on: links, keyboard focus, query matches.
 - Selection is drawn in ink, not in a colour.
+- Code is the one exception. The probe and the measurement JSON use quiet syntax colours from the same tokens. A probe diff marks added lines in `yes` and removed lines in `no`.
 
 The dark set keeps the same roles with lighter answer colours, so each still passes contrast on the dark surface.
 
@@ -141,10 +142,10 @@ One family in two cuts. Atkinson Hyperlegible Next sets all prose and labels. It
 - **Goal dropdown.** A borderless native dropdown in the header names the chosen goal. It reads as the page's title. Selecting a goal opens its acceptance question; a goal without one shows No acceptance question in the panel. All questions clears the selection. First load opens the first goal when there is no selection. Live arrivals preserve the reader’s choice. There are no completion banners.
 - **Step slider (`seq`).** A thin range control on the right of the header steps across recorded `seq` order. Glyphs, goal options, Evidence, links, hover previews, Back and browser tools share that step. Rewinding clears selections and Back entries for questions not yet asked. An existing goal with no acceptance question at that step shows No acceptance question. An unrun consumer stays waiting until the producer measured and saved the named input. The slider shows committed runs, not past running intervals, and its last step restores the latest view.
 - **Hover strip.** A steady single-line bar above the lanes shows the hovered or focused question’s state, full text and lane without covering nearby dots or shifting the layout.
-- **Lanes.** One row per direction of work, taken from the asker: `orchestrator/evolution` and `evolution-tools` both go in the lane `evolution`. Glyphs carry no inline text labels; parallel work shares columns while preserving creation order within each lane and left-to-right causal order across dependencies. Arrow keys move across dots.
+- **Lanes.** One row per lane, taken from the lane name of each question: `orchestrator/evolution` and `evolution-tools` both go in the row `evolution`. Glyphs carry no inline text labels; parallel work shares columns while preserving creation order within each lane and left-to-right causal order across dependencies. Arrow keys move across dots.
 - **Links.** A curve runs from a question to each question that reads its output. Selecting any question highlights its upstream chain; choosing a goal selects its acceptance question. Other exploration stays readable. Links carry the consumed artifact names as hover titles.
 - **Query drawer.** Docked below the lanes on the left so running Cypher and clicking result ids keeps Evidence open on the right.
-- **Evidence panel.** A fixed column on the right. It opens on the answer, question, asker and rule check, followed by saved images, any measurements not already shown in the rule clauses, input and saved file links, dependencies, and disclosures for the probe and run history. No goal summary repeats the goal bar.
+- **Evidence panel.** A fixed column on the right. It opens on the answer, question, lane and rule check, followed by saved images, any measurements not already shown in the rule clauses, input and saved file links, dependencies, and disclosures for the probe and run history. No goal summary repeats the goal bar.
 - **Back.** A quiet control in the Evidence header, visible after following another question. It restores the previous question, reading position and expanded disclosures. Its dependency highlight is derived again from that question.
 - **Evidence navigation.** Choose a goal from the dropdown to open its acceptance question, then follow dependency and consumer chips. Graph selection, query results and WebMCP show_question also open evidence directly and use the same selection-derived highlight.
 - Content is left aligned. Below 860px the panel moves under the lanes.
@@ -162,9 +163,10 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 
 ## Components
 
-- **Verdict.** The question's glyph, the same shape as in the lanes, then the answer as a word in its colour: `yes`, `no`, `failed`. No pill and no fill behind the word.
+- **Verdict.** The question's glyph, the same shape as in the lanes, then the answer as a word in its colour: `yes`, `no`, `failed`. No pill and no fill behind the word. A running question has a quiet Cancel button at the end of this line. It is the only place that can cancel a run.
 - **Rule check.** One bordered block on `paper`. The rule is split at its top-level `AND`s, one clause per row, with hairlines between rows. Each row shows the clause in mono, its measured values below in 16px semibold tabular mono in ink, and whether it is true, false or not measured, as a coloured word after a dot. Measurement names stay smaller and muted. No coloured side bars. The page evaluates each clause on its own empty, read-only Relate store, on the run's measurements. The answer itself still comes from the run.
 - **Measurements.** Measurements already displayed beside a rule clause are not repeated below. Additional recorded names and exact JSON values appear in a Measurements table without a header row. Values use the same 16px semibold tabular mono in ink as the rule measurements; names stay smaller and muted. With multiple result records, a header labels the values Last value and expose every record under All measurements. Never infer units, rename measurements or round them. Pending and running tests show no stale values as current.
+- **Images.** Saved images show in the panel. Click one to zoom it. Its name links to the file.
 - **Files.** A table of input and saved files. Input links refer to the content hash read by the displayed run, not the mutable workspace path. Declared inputs without a committed run remain plain names.
 - **Question chip.** A link to another question: its glyph, then the start of its text. Never a bare id.
 - **Ids.** Question, run and goal ids are labels, set in tabular sans at 12px. Mono is for rules, probes, Cypher and measured values.
@@ -180,4 +182,4 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 - Don't show an id where the question's text fits.
 - Show the test and its measurements; do not add Complete or Incomplete banners.
 - Do write all page text in plain English, close to ASD-STE100: one word for one meaning, simple verbs, no figures of speech such as "rests on" or "survived".
-- Don't animate the lanes into place: they hold still so a person can read them.
+- Motion is small and has a reason. A new question and a changed answer pop once with a short spring, a new link fades in, and a running glyph breathes. Nothing else moves. With reduced motion, nothing moves.

@@ -2,81 +2,37 @@
 
 The details behind the [README](../README.md).
 
-## Reading the page
+## Setup
 
-`witness replay DIR` opens a recorded session from its store alone. It needs no AI agent, no API key and no uv. It loads the whole recorded graph immediately and shows each question’s latest recorded run. Replay derives goal completion from those recorded answers. It does not check today’s workspace inputs. It also exposes a read-only `/mcp` endpoint (`query` and `look` only, never `goal` or `ask`) so scripts and external clients can inspect recorded stores with the same contract as a live hub.
-
-Choose a goal to open its acceptance question, marked `◎`. Each row of the graph is one direction of work, and a curve joins a question to the questions that read its files. Select a question to see its evidence: the answer, each part of the rule with the values it used, saved images, files and run history. Drag the `seq` slider in the goal bar to step through recorded history. [`page/DESIGN.md`](../page/DESIGN.md) describes the page in full.
-
-At an earlier step, the goal dropdown, question links, Evidence and WebMCP all use that step. Rewinding before a selected question was asked clears its selection, hover preview and Back entries. An unrun consumer stays `waiting` until its producer has measured and saved the named input file. A measured run can supply files even when its rule answers `no` or `failed`. History shows committed runs. It does not reconstruct when probes were running. Moving the slider to the end returns to the latest view without running probes.
-
-Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the browser's agent two tools: `query` and `show_question`. Turn it on at `chrome://flags/#enable-webmcp-testing`. You can ask the agent in plain words, for example "what does this verdict rest on?". It answers with Cypher and shows you the query and the questions it found. Every query, yours or the agent's, runs on a throwaway copy of the graph, so no query can change what the page shows. The tools mark what they return as untrusted. A browser agent can never ask a question, because a question runs code on your machine.
-
-## How it uses Relate
-
-- **Mode:** directory, at `.witness/graph/` in the workspace.
-- **Why this mode:** the hub writes every record through `bun:ffi` as it happens, so the store is always on disk. Other processes can open it read-only beside the hub. Relate lets only one process write to a store. The hub is that process. Agents cannot write answers.
-- **Rules are Cypher.** A rule such as `$p < 0.01 AND $gain >= 0.1` is a Cypher expression. When a run ends, the hub evaluates the rule with Relate on an empty in-memory store that refuses writes, so a rule can read only the measurements. The run's measurements are the parameters. True is yes. False is no. Anything else is failed, for example when the run never made a measurement the rule needs.
-- **Four node types, six relationship types.** Goals state solved conditions. Questions fix tests. Runs record executions. Files hold the inputs and saved evidence. The hub writes a question and its goal binding together, before execution, and a run once it ends.
-
-```
-(:Goal {id, text, seq, created})-[:ACCEPTED_BY]->(:Question)  // its only acceptance question
-(:Question {text, rule, probe, inputs, asker, seq, created})
-(:Question)-[:NEEDS {name}]->(:Question)     // reads a saved file (q-…/file) or recorded result (q-…, mounted as q-….json)
-(:Question)-[:REPLACES]->(:Question)         // fixes a question whose run crashed or timed out
-(:Run {answer, reason, started, ms, results})-[:OF]->(:Question)
-(:Run)-[:READ {name}]->(:File)               // the inputs, as the run read them
-(:Run)-[:SAVED {name}]->(:File)              // what the run saved for other questions
-```
-
-Two full-text indexes let agents find prior work by its words. `question_text` covers each question's text, rule and probe. `run_reason` covers why each run failed. A query searches them with the `SEARCH` clause, beside the answer parameters, so a hit comes with its answer now. The page's copy and replay's copy have the same indexes. Replay builds its copy once, so it searches a recorded store that has no index and never writes to it.
-
-A `File` is named by its SHA-256. The answer of a run is stored with that run. The answer of a question is never stored. The hub finds the run on the question's inputs as they are now. It passes the answers to queries as `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting`, `$replaced` and `$current`. Relate enforces the schema in [`schema.cypher`](../schema.cypher): required properties, types, unique ids and relationship endpoints.
-
-Goals and acceptance bindings are immutable. A goal can start without an acceptance question: it is open and incomplete. Bind at most one acceptance question, before it runs. An identical retry reuses that question. A different contract requires a new goal, which may use the same text. A goal is complete only while its acceptance question currently answers `yes`; `no`, `failed`, `pending`, `running` and `waiting` all mean incomplete. Input changes can invalidate completion. Restoring inputs restores their most recent recorded answer and its derived completion. No other question votes. Queries get `$complete`, the list of complete goal ids; completion is never stored.
-
-The page holds its own copy of the graph in Relate's WASM build. It applies each new record with the same Cypher as the hub ([`src/graph.ts`](../src/graph.ts)). Its panels and query box run Cypher in the browser. A query runs on a throwaway copy of that graph, so it cannot change what the page shows.
-
-## Setup and run
-
-To run agents, you need [Bun](https://bun.com) 1.4 or later and [uv](https://docs.astral.sh/uv/). uv runs the probes.
+You need [Bun](https://bun.com) 1.4 or later and [uv](https://docs.astral.sh/uv/). uv runs the probes.
 
 ```bash
-curl -fsSL https://bun.com/install | bash      # Bun
+curl -fsSL https://bun.com/install | bash        # Bun
 curl -LsSf https://astral.sh/uv/install.sh | sh  # uv
 git clone https://github.com/cmakafui/witness && cd witness
-bun install && bun link        # puts `witness` on your PATH
-witness setup                  # adds the skill and the MCP server to Claude Code, Codex, Pi and agy
+bun install && bun link   # puts `witness` on your PATH
+witness setup             # adds the skill and the MCP server to Claude Code, Codex, Pi and agy
 ```
 
-Start an agent in any folder. Its first Witness call starts the hub for that folder. Every agent in the folder shares that hub. The hub stops after 10 minutes without use. It runs one probe per CPU core at a time, and more asks wait in line. To change that, set `WITNESS_JOBS` in the environment that starts your agent: the hub it starts reads it. A probe can still start more threads than one, so a task prompt says how many each probe may use.
+Start an agent in any folder. Its first Witness call starts the hub for that folder, and every agent in the folder shares it. The hub stops after 10 minutes without use. It runs one probe per CPU core at the same time, and more asks wait in line. To change the number, set `WITNESS_JOBS` where you start the agent. A probe can start more threads than one, so say in the task how many each probe may use.
 
 ```bash
-witness open [DIR]     # watch a workspace's graph live
-witness replay [DIR]   # inspect a recorded session
+witness open [DIR]     # watch the graph of a workspace live
+witness replay [DIR]   # read a recorded session
 ```
 
-Agents get four tools:
+To set agents on a problem, start one in the folder of the problem and give it the task: the problem, what counts as solved, and the rules. The skill teaches the working method.
 
-- `goal`: create a new immutable goal from its solved condition. When resuming, query to find an existing goal.
-- `ask`: a question, its rule, its probe and its inputs. Give the script as `probe` or reuse an existing question’s script with `probe_ref: "q-…"`. The hub stores the resolved script so identical inline and referenced asks share one question and cached answer. Supply this question’s own inputs and rule. Add `accepts: "g-…"` to bind the goal’s acceptance question. `accepts` is part of identity and binds a separate acceptance question before execution; it cannot promote an existing run. `ask` then also returns that goal’s current completion. Add `replaces: "q-…"` when the question fixes the probe of a question whose run crashed or timed out. The hub refuses it for a question that measured: a yes, a no or a failed rule is evidence. The crashed question keeps its answer, and queries get it in `$replaced`. The same question asked again is the same question, and the first asker stays on it.
+## The tools
+
+- `goal`: make a goal that states a solved condition. A goal does not change.
+- `ask`: a question, its rule, its probe and its inputs. `probe_ref: "q-…"` uses the probe of another question. `accepts: "g-…"` makes the question the acceptance question of a goal, before it runs. `replaces: "q-…"` fixes the probe of a question whose run did not measure (crashed or timed out). `lane` names the direction of work.
 - `query`: read-only Cypher.
 - `look`: a saved file. Images come back as images.
 
-Each tool declares an output schema and returns structured content, so a client knows each result's shape before it calls. A code-mode client can then chain `query` and `look` in one program.
+Each tool declares an output schema and returns structured content, so a code-mode client can chain calls in one program.
 
-For example, create a goal with `goal({text: "The candidate is correct on the independent suite and at least twice as fast as baseline."})`. Search for candidates and measure them with ordinary `ask` calls. Then bind `ask({accepts: "g-…", ...})` with a rule such as `$correct AND $speedup >= 2`, declaring the candidate and suite as inputs. A failed candidate search does not prevent completion; the acceptance question decides it. Choose that contract before executing its test.
-
-```cypher
-MATCH (g:Goal)
-OPTIONAL MATCH (g)-[:ACCEPTED_BY]->(q:Question)
-RETURN g.id, g.text, g.id IN $complete AS complete, q.id AS acceptance
-ORDER BY g.seq
-```
-
-A run that measured is final for its inputs: the same `ask` returns it. To measure again, change an input or ask a new question. A run that crashed or timed out settles nothing. The hub does not retry it on its own, but the same `ask` runs it again and appends a new Run. Asks for a question that is already queued or running join that execution. To measure a noisy quantity, loop inside the probe and let the rule judge the distribution.
-
-The cache key covers the probe and declared input hashes, not the full environment. A probe that installs packages must set a fixed package upload cutoff with [`exclude-newer`](https://docs.astral.sh/uv/guides/scripts/#improving-reproducibility), keeping that cutoff in the hashed probe text. It does not lock Python or the full environment.
+## Questions and answers
 
 A probe is a uv script. It prints what it measured. It does not answer:
 
@@ -92,16 +48,65 @@ assert x.size, "no data: the measurement did not happen"
 print("WITNESS_RESULT", json.dumps({"mean": float(x.mean())}))
 ```
 
-Asked with the rule `$mean > 10`, this probe answers yes when the mean is above 10. It runs in an empty folder that holds only its declared inputs. It saves files for other questions in `$WITNESS_OUT`. A crash, a timeout, or a missing measurement that the rule needs gives "failed". It never gives "no". The skill in [`skill/witness`](../skill/witness/SKILL.md) teaches agents the rest.
+With the rule `$mean > 10`, this question answers yes when the mean is above 10. The probe runs in an empty folder that holds only its declared inputs. It saves files for other questions in `$WITNESS_OUT`. A crash, a timeout, or a missing measurement that the rule needs gives `failed`, never `no`.
 
-To set agents on a problem, start one in the problem's folder and give it your task: the problem, what counts as solved, and the rules. The skill carries the working method.
+The hub evaluates the rule with Relate, on an empty in-memory store that refuses writes. The measurements are the parameters. True is yes, false is no, and anything else is failed.
 
-To develop, run `bun test` (real uv probes, MCP over HTTP and stdio, the page in a real browser engine) and `bun check`.
+A question is the same question when its text, rule, probe, inputs, goal and the question it replaces are the same. Ask it again and you get its answer on the inputs as they are now:
 
-## Where the data lives
+- A run that measured is final for its inputs. To measure again, change an input or ask a new question.
+- A run that did not measure settles nothing. The same ask runs it again. Concurrent asks join one run.
+- When an input changes, the question runs again. When the inputs change back, their recorded answer comes back. So a probe must never act: it must not send or deploy.
+- To measure a noisy quantity, loop inside the probe and let the rule judge `$results`.
 
-A workspace's store is `.witness/`. `graph/` is the Relate store. `files/` holds the inputs and saved outputs, named by SHA-256. A failed run records a short diagnostic tail in its reason, and names any file the probe tried to read through Python that it did not have: most often a file it needs but did not declare. Read a store with Relate's CLI:
+The run key covers the probe text and the hashes of the declared inputs, not the whole environment. A probe that installs packages must fix a package upload cutoff with [`exclude-newer`](https://docs.astral.sh/uv/guides/scripts/#improving-reproducibility). The cutoff is in the probe text, so it is in the key.
+
+A goal is complete only while its acceptance question answers yes now. A goal with no acceptance question is open. Completion is never stored: queries get it as `$complete`. To change the test of a goal, make a new goal.
+
+For example, make the goal "The candidate is correct on the independent suite and at least twice as fast as the baseline." Search with ordinary questions. Then ask with `accepts: "g-…"`, the rule `$correct AND $speedup >= 2`, and the candidate and the suite as inputs. A failed search does not block completion. Only the acceptance question decides it.
+
+## The graph
+
+The store is one [Relate](https://relatedb.ai) directory at `.witness/graph/`. The hub writes every record through `bun:ffi` as it happens. It is the only writer, and it only creates. Other processes open the store read-only. `.witness/files/` keeps the inputs and saved outputs, each named by its SHA-256.
+
+```
+(:Goal {id, text, seq, created})-[:ACCEPTED_BY]->(:Question)
+(:Question {id, text, rule, probe, inputs, lane, timeout, seq, created})
+(:Question)-[:NEEDS {name}]->(:Question)     // reads a saved file (q-…/file) or a recorded result (q-…)
+(:Question)-[:REPLACES]->(:Question)         // fixes a question whose run did not measure
+(:Run {id, key, seq, started, ms, answer, reason, measured, results, last})-[:OF]->(:Question)
+(:Run)-[:READ {name}]->(:File {id})          // the inputs, as the run read them
+(:Run)-[:SAVED {name}]->(:File)              // what the run saved for other questions
+```
+
+The answer of a run is stored with the run. The answer of a question is never stored: the hub finds the run on the inputs of the question as they are now. Queries get the answers as `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting`, `$replaced`, `$current` and `$complete`. Relate enforces the schema in [`schema.cypher`](../schema.cypher).
+
+Two full-text indexes find earlier work by its words. `question_text` covers the text, rule and probe of each question. `run_reason` covers why each run failed. A search runs next to the answer parameters, so each match comes with its answer now.
+
+A failed run records a short tail of its output. It also names the files that the probe tried to read through Python but did not declare.
+
+Read a store with the Relate CLI:
 
 ```bash
-relate --read-only --database .witness/graph "MATCH (q:Question) RETURN q.asker, q.text, q.rule"
+relate --read-only --database .witness/graph "MATCH (q:Question) RETURN q.lane, q.text, q.rule"
 ```
+
+## The page
+
+`witness open` shows the live graph. `witness replay DIR` shows a recorded session from its store alone. Replay needs no agent, no API key and no uv. It shows the latest recorded run of each question and does not check the workspace files. It also serves a read-only `/mcp` with `query` and `look`.
+
+- Choose a goal to open its acceptance question, marked `◎`.
+- Each row is one lane. A curve joins a question to each question that reads its files.
+- Select a question to see its evidence: the answer, each part of the rule with its values, saved images, files and runs.
+- Drag the `seq` slider to step through the recorded order. Everything on the page uses that step. A question that waits for a file stays `waiting` until its producer measured and saved that file. The end of the slider returns to the live view.
+- A running question has a Cancel button. Its run then did not measure, and the next ask runs it again. Only the page can cancel.
+
+The page holds its own copy of the graph in Relate WASM and applies each new record with the same Cypher as the hub ([`src/graph.ts`](../src/graph.ts)). Every query runs on a throwaway copy, so no query can change what the page shows.
+
+In Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) (`chrome://flags/#enable-webmcp-testing`), the browser's agent gets two tools: `query` and `show_question`. Ask it in plain words, for example "what does this answer depend on?". It answers with Cypher and shows the questions it found. The tools mark what they return as untrusted. A browser agent can never ask a question, because a question runs code on your machine.
+
+[`page/DESIGN.md`](../page/DESIGN.md) describes the page in full.
+
+## Develop
+
+Run `bun test` (real uv probes, MCP over HTTP and stdio, the page in a real browser engine) and `bun check`.

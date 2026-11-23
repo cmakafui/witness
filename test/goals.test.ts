@@ -64,9 +64,9 @@ test("competing contracts cannot replace a binding, retries reuse it, and a new 
     hub.ask({ ...testQuestion, rule: "$x >= 1", accepts: g.id }),
   ]);
   expect(attempts.map((a) => a.status)).toEqual(["fulfilled", "rejected"]);
-  expect((attempts[1] as PromiseRejectedResult).reason.message).toContain("Create a new goal");
+  expect((attempts[1] as PromiseRejectedResult).reason.message).toContain("Make a new goal");
   const accepted = (attempts[0] as PromiseFulfilledResult<Awaited<ReturnType<Hub["ask"]>>>).value;
-  const retry = await hub.ask({ ...testQuestion, accepts: g.id, asker: "retry" });
+  const retry = await hub.ask({ ...testQuestion, accepts: g.id, lane: "retry" });
   expect([retry.id, retry.run]).toEqual([accepted.id, accepted.run]);
   expect(hub.query("MATCH (:Goal {id: $id})-[:ACCEPTED_BY]->(:Question) RETURN count(*) AS n", { id: g.id }).rows).toEqual([{ n: 1 }]);
   expect(hub.query("MATCH (q:Question) RETURN count(*) AS n").rows).toEqual([{ n: 1 }]);
@@ -79,15 +79,15 @@ test("competing contracts cannot replace a binding, retries reuse it, and a new 
   hub.close();
   hub = await Hub.open(root, { pollMs: 0 });
   expect(goal(g.id)).toMatchObject({ acceptance: accepted.id, complete: true });
-  await expect(hub.ask({ ...testQuestion, rule: "$x > 2", accepts: g.id })).rejects.toThrow(/contract cannot change/);
+  await expect(hub.ask({ ...testQuestion, rule: "$x > 2", accepts: g.id })).rejects.toThrow(/a goal does not change/);
 }, 30_000);
 
 test("an acceptance question is bound and run separately; it cannot promote an earlier run", async () => {
   const a = hub.goal("Goal A"), b = hub.goal("Goal B");
-  const original = await hub.ask({ ...testQuestion, asker: "first" });
-  const again = await hub.ask({ ...testQuestion, asker: "other" });
+  const original = await hub.ask({ ...testQuestion, lane: "first" });
+  const again = await hub.ask({ ...testQuestion, lane: "other" });
   expect([again.id, again.run, again.goal]).toEqual([original.id, original.run, null]);
-  expect(hub.query("MATCH (q:Question) RETURN q.asker AS asker").rows).toEqual([{ asker: "first" }]);
+  expect(hub.query("MATCH (q:Question) RETURN q.lane AS lane").rows).toEqual([{ lane: "first" }]);
   const acceptance = await hub.ask({ ...testQuestion, accepts: a.id });
   expect(acceptance.id).not.toBe(original.id);
   expect(acceptance.run).not.toBe(original.run);

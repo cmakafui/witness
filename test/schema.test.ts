@@ -10,8 +10,8 @@ beforeEach(async () => {
   await applySchema(db);
 });
 
-const question = "CREATE (:Question {id: $id, text: 't', rule: '$x = 1', probe: 'p', inputs: ['data.csv'], timeout: 600, seq: 1})";
-const run = "CREATE (:Run {id: 'r-1', key: 'k', seq: 2, started: 1, ms: 2, answer: 'yes', results: '[]'})";
+const question = "CREATE (:Question {id: $id, text: 't', rule: '$x = 1', probe: 'p', inputs: ['data.csv'], timeout: 600, seq: 1, created: 1})";
+const run = "CREATE (:Run {id: 'r-1', key: 'k', seq: 2, started: 1, ms: 2, answer: 'yes', measured: true, results: '[]'})";
 
 test("a well-formed question and run are accepted", () => {
   db.query(question, { id: "q-1" });
@@ -25,7 +25,7 @@ test("a question without its probe is rejected, and a run without its answer", (
 });
 
 test("a property of the wrong type is rejected", () => {
-  expect(() => db.query("CREATE (:Question {id: 'q-1', text: 't', rule: '$x = 1', probe: 'p', inputs: [], timeout: 600, seq: 'one'})")).toThrow(/property type/);
+  expect(() => db.query("CREATE (:Question {id: 'q-1', text: 't', rule: '$x = 1', probe: 'p', inputs: [], timeout: 600, seq: 'one', created: 1})")).toThrow(/property type/);
 });
 
 test("NEEDS requires a name of type string", () => {
@@ -47,17 +47,16 @@ test("an edge between the wrong kinds of node is rejected", () => {
   expect(() => db.query("MATCH (q:Question {id: 'q-1'}) CREATE (q)-[:OF]->(q)")).toThrow(/endpoint/);
 });
 
-test("goals and questions accept optional integer created timestamps and reject wrong types", () => {
-  db.query("CREATE (:Goal {id: 'g-t', text: 'Timed', seq: 1, created: 1700000000000})");
-  db.query("CREATE (:Question {id: 'q-t', text: 't', rule: '$x = 1', probe: 'p', inputs: [], timeout: 600, seq: 2, created: 1700000000001})");
+test("goals and questions need an integer created time", () => {
+  expect(() => db.query("CREATE (:Goal {id: 'g-t', text: 'Timed', seq: 1})")).toThrow(/requires properties/);
   expect(() => db.query("CREATE (:Goal {id: 'g-bad', text: 'Bad', seq: 3, created: 'now'})")).toThrow(/property type/);
   expect(() => db.query("CREATE (:Question {id: 'q-bad', text: 't', rule: '$x = 1', probe: 'p', inputs: [], timeout: 600, seq: 4, created: 'now'})")).toThrow(/property type/);
 });
 
 test("goals require immutable record fields, unique ids and the correct relationship endpoints", () => {
   expect(() => db.query("CREATE (:Goal {id: 'g-1', seq: 1})")).toThrow(/requires properties/);
-  db.query("CREATE (:Goal {id: 'g-1', text: 'Solved condition', seq: 1})");
-  expect(() => db.query("CREATE (:Goal {id: 'g-1', text: 'Other', seq: 2})")).toThrow(/uniqueness/);
+  db.query("CREATE (:Goal {id: 'g-1', text: 'Solved condition', seq: 1, created: 1})");
+  expect(() => db.query("CREATE (:Goal {id: 'g-1', text: 'Other', seq: 2, created: 1})")).toThrow(/uniqueness/);
   db.query(question, { id: "q-1" });
   db.query("MATCH (g:Goal), (q:Question) CREATE (g)-[:ACCEPTED_BY]->(q)");
   expect(() => db.query("MATCH (g:Goal), (q:Question) CREATE (q)-[:ACCEPTED_BY]->(g)")).toThrow(/endpoint/);

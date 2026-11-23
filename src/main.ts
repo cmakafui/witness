@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// The witness command. People use setup, open and replay. MCP clients use mcp; mcp starts serve in the background.
+// The witness command. People use setup, open and replay. MCP clients use mcp, and mcp starts serve in the background.
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { announce, bridge, hub as findHub, running } from "./connect.ts";
@@ -11,7 +11,7 @@ import { VERSION } from "./version.ts";
 
 const USAGE = `witness ${VERSION}: tested answers for a team of agents, in a Relate graph.
 
-  witness setup              once: link the skill into Claude Code, add the MCP server to Claude Code, Codex, Pi and agy
+  witness setup              once: add the skill and the MCP server to Claude Code, Codex, Pi and agy
   witness open [DIR]         open the workspace's graph in the browser (starts its hub when none runs)
   witness replay [DIR]       inspect a recorded session in the browser, from its store alone
 

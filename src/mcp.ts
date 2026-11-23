@@ -11,33 +11,29 @@ import { VERSION } from "./version.ts";
 
 const GUIDE = `Witness keeps the tested answers of a team of agents in one graph. No agent writes an answer. A probe measures, and a rule decides.
 
-- The graph is the only record agents share. Give another agent question ids and saved files, not summaries.
-- In a fresh workspace, start with the task. Query the graph when resuming or looking for prior work to build on.
-- goal: create an immutable goal that states a solved condition. A goal is optional, and the work can have many. It starts open and incomplete. Each call creates a new goal.
-- ask: give a yes/no question, a rule, a probe, and the files that the probe reads. Witness runs the probe and returns the answer.
-- Use probe_ref in place of probe to reuse the exact script from an existing question. Supply the new question's rule and inputs.
-- The same ask on unchanged inputs returns the cached answer. A run that measured is final for its inputs. A run that crashed or timed out is not: the same ask runs it again. Concurrent asks join one execution.
-- Set accepts to a goal id to bind that goal's only acceptance question before it runs. The goal is complete only while that question currently answers yes. No other question votes on completion. Changing the acceptance contract requires a new goal.
-- The rule is a Cypher expression over the measurements, for example $p < 0.01 AND $gain >= 0.1. $name is a measurement. $results is the list of all measurements. True gives yes. False gives no. All other results give failed.
-- The probe is a Python script with a PEP 723 header. A probe with dependencies sets exclude-newer under [tool.uv] to a fixed date, keeping the package upload cutoff in the probe text. uv runs it in an empty folder that holds the declared inputs only. It prints each measurement as WITNESS_RESULT and one JSON object. It saves files for other questions in $WITNESS_OUT.
-- An input is a workspace path, q-…/name for a file another question saved, or bare q-… for that question's recorded answer and measurements (mounted as q-….json). Acceptance questions refuse scratch/ inputs; prefer q-…/name over scratch/ for ordinary questions too.
-- Use a short, stable asker name (1–2 words, e.g. "fourier17", "qr") and reuse it across all questions in one direction of work.
-- When an input changes, the question runs again. When the inputs change back, their latest recorded answer comes back. So a probe must not act: do not send or deploy in a probe.
-- Set replaces to the id of a question whose run crashed or timed out when you fix its probe. Witness refuses it for a measured answer. The old question stays failed and goes into $replaced.
-- query: read the graph with Cypher. Search it by words (the question_text and run_reason indexes) before you ask: someone may have measured it, ruled it out, or written a probe you can reuse. look: show a file that a run saved.`;
+- The graph is the only record that agents share. Give other agents question ids and q-…/name paths, not summaries.
+- In a new workspace, start with the task. To continue earlier work, query the graph first.
+- goal: make a goal that states a solved condition. Goals are optional, and a goal does not change.
+- ask: give a yes/no question, a rule, a probe and the files that the probe reads. Witness runs the probe and returns the answer.
+- query: read the graph with Cypher. Search it by words before you ask. Another agent may have measured the same thing.
+- look: see a file that a run saved.
+- The same ask on the same inputs returns the recorded answer. When an input changes, the question runs again. When the inputs change back, their recorded answer comes back. Thus a probe must only measure. It must not send or deploy.
+- A run that did not measure (crashed or timed out) settles nothing. The same ask runs it again.
+- Use one short lane name for each direction of work, for example "fourier" or "qr".
+- The witness skill tells how to ask well.`;
 
 const text = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
 
 // What each tool returns, so a client knows the shape before it calls: code mode can chain calls in one program.
-// The SDK checks every result against its schema. The same value also goes out as JSON text for older clients.
+// The SDK checks every result against its schema. The same value also goes out as JSON text, as MCP asks.
 const STATE = z.enum(["yes", "no", "failed", "running", "pending", "waiting"]);
 const GOAL = z.object({
   id: z.string().describe("The goal id, g-…"),
   text: z.string().describe("The solved condition"),
   acceptance: z.string().nullable().describe("The acceptance question id, or null when none is bound"),
-  state: z.union([STATE, z.literal("open")]).describe("The acceptance question's answer now; open when none is bound"),
+  state: z.union([STATE, z.literal("open")]).describe("The answer of the acceptance question now, or open when the goal has none"),
   complete: z.boolean().describe("True only while the acceptance question answers yes"),
-  reason: z.string().nullable(),
+  reason: z.string().nullable().describe("Why the acceptance question failed, or what it waits for"),
 });
 const ASKED = {
   id: z.string().describe("The question id, q-…"),
@@ -59,7 +55,7 @@ const LOOKED = {
   file: z.string().describe("The file's SHA-256"),
   type: z.string().describe("Its media type"),
   bytes: z.number().int().describe("Its size in bytes"),
-  text: z.string().nullable().describe("Its text, up to 50,000 characters; null for an image or binary data"),
+  text: z.string().nullable().describe("Its text, up to 50,000 characters. Null for an image or binary data"),
   truncated: z.boolean().describe("True when text holds only the start of the file"),
 };
 const LIMIT = 50_000;
@@ -78,14 +74,14 @@ async function tool(fn: () => unknown) {
 }
 
 function server(hub: Hub): McpServer {
-  const instructions = `${GUIDE}\n- This hub runs ${hub.jobs} probes at a time. More asks wait in line.`;
+  const instructions = `${GUIDE}\n- This hub runs ${hub.jobs} probes at the same time. More asks wait in line.`;
   const s = new McpServer({ name: "witness", version: VERSION }, { instructions });
 
   s.registerTool(
     "goal",
     {
-      description: "Create a new immutable goal with its solved condition. Returns its id and open, incomplete state. Each call creates a new goal, even for the same text. When resuming, query to find an existing goal.",
-      inputSchema: { text: z.string().describe("The solved condition: what a successful result must satisfy.") },
+      description: "Make a goal that states a solved condition. Returns its id. The goal starts open and not complete. Each call makes a new goal, also for the same text. To continue earlier work, query the goals that exist.",
+      inputSchema: { text: z.string().describe("The solved condition: what a good result must satisfy.") },
       outputSchema: GOAL.shape,
     },
     ({ text: condition }) => tool(() => hub.goal(condition)),
@@ -95,23 +91,35 @@ function server(hub: Hub): McpServer {
     "ask",
     {
       description:
-        "Ask a yes/no question and run its probe. Supply exactly one of probe or probe_ref. Returns the answer, the measurements and the saved files. The same question asked again returns its answer on the current inputs, or retries a run that crashed or timed out.",
+        "Ask a yes/no question. Witness runs its probe and returns the answer, the measurements and the saved files. Give probe or probe_ref, not both. The same ask again returns the answer on the current inputs. If the run did not measure (crashed or timed out), the same ask runs it again.",
       inputSchema: {
-        text: z.string().describe('The question, as one yes/no sentence with its conditions: "At 8 workers, is …?"'),
+        text: z.string().describe('The question, as one yes/no sentence with its conditions. Example: "At 8 workers, is the sort faster than at 1 worker?"'),
         rule: z
           .string()
-          .describe("A Cypher expression over the measurements. True gives yes. $name is a measurement. $results is the list of all measurements. Example: $p < 0.01 AND $gain >= 0.1."),
-        probe: z.string().optional().describe('A Python script with a PEP 723 header. It prints each measurement as WITNESS_RESULT and one JSON object, for example {"p": 0.003}.'),
-        probe_ref: z.string().optional().describe("An existing question id (q-…) in this workspace. Reuses its exact probe script. Supply this question's own rule and inputs."),
-        inputs: z.array(z.string()).default([]).describe("The files that the probe reads: workspace paths, q-…/name for a file another question saved, or bare q-… for its recorded answer and measurements (mounted as q-….json). Acceptance questions refuse scratch/ inputs."),
-        accepts: z.string().optional().describe("An existing goal id whose only acceptance question this will be. Binds before execution. Only its current yes completes the goal. An identical retry is allowed; a different acceptance question requires a new goal."),
+          .describe("A Cypher expression over the measurements. $name is the last value of a measurement. $results is the list of all measurement objects. True gives yes. False gives no. Any other value gives failed. Example: $p < 0.01 AND $gain >= 0.1"),
+        probe: z
+          .string()
+          .optional()
+          .describe('A Python script with a PEP 723 header. uv runs it in an empty folder that holds only the inputs. It prints each measurement as WITNESS_RESULT and one JSON object, for example WITNESS_RESULT {"p": 0.003}. It saves files for other questions in $WITNESS_OUT. If it installs packages, it sets exclude-newer under [tool.uv] to a fixed date.'),
+        probe_ref: z.string().optional().describe("The id of a question in this workspace (q-…). Witness uses the probe of that question. Give the rule and the inputs of this question."),
+        inputs: z
+          .array(z.string())
+          .default([])
+          .describe("The files that the probe reads. Each input is a workspace path, q-…/name (a file that another question saved), or q-… (the recorded answer and measurements of another question, mounted as q-….json). An acceptance question cannot read files in scratch/."),
+        accepts: z
+          .string()
+          .optional()
+          .describe("The id of a goal. This question becomes the acceptance question of the goal before it runs. A goal has only one acceptance question. Only its yes now makes the goal complete. The same ask again is allowed. A different acceptance question needs a new goal."),
         replaces: z
           .string()
           .optional()
-          .describe("The id of a question whose run crashed or timed out, when this question is its fix. Witness refuses it for a question that measured. The old answer stays; queries get it in $replaced."),
-        asker: z.string().optional().describe("Short, stable lane name for your direction of work (1–2 words, e.g. 'switches', 'qr'). Reuse the same lane name across questions in one line of attack; do not put a question title here. It does not change the answer."),
-        timeout_s: z.number().int().positive().max(3600).optional().describe("The time limit of one run, in seconds. Default 600."),
-        wait_s: z.number().int().min(0).max(240).optional().describe("The time to wait for the answer, in seconds, at most 240. Default 120. After that, the run continues."),
+          .describe("The id of a question whose run did not measure (crashed or timed out). Use it when this question fixes that probe. Witness refuses a question whose run measured. The old answer stays, and queries get the old question in $replaced."),
+        lane: z
+          .string()
+          .optional()
+          .describe("A short name for your direction of work: 1 or 2 words, for example 'switches' or 'qr'. Use the same lane for all questions in that direction. It does not change the answer. A question keeps the lane of its first ask."),
+        timeout_s: z.number().int().positive().max(3600).optional().describe("The time limit of one run, in seconds. The default is 600."),
+        wait_s: z.number().int().min(0).max(240).optional().describe("How long to wait for the answer, in seconds. The maximum is 240, and the default is 120. After that time, the run continues."),
       },
       outputSchema: ASKED,
     },
@@ -128,10 +136,10 @@ function registerReadTools(s: McpServer, store: ReadOnlyStore) {
   s.registerTool(
     "query",
     {
-      description: `Run a read-only Cypher query on the graph. At most 200 rows.\n\n${SCHEMA}`,
+      description: `Run a read-only Cypher query on the graph. Returns 200 rows at most.\n\n${SCHEMA}`,
       inputSchema: {
         cypher: z.string().describe("A read-only Cypher query."),
-        params: z.record(z.string(), z.unknown()).default({}).describe("More parameters for the query."),
+        params: z.record(z.string(), z.unknown()).default({}).describe("More query parameters."),
       },
       outputSchema: ROWS,
       annotations: { readOnlyHint: true },
@@ -142,7 +150,7 @@ function registerReadTools(s: McpServer, store: ReadOnlyStore) {
   s.registerTool(
     "look",
     {
-      description: "See a file that a run saved: q-…/name (the file from the question's current run), r-…/name, or a file's SHA-256. Images come back as images.",
+      description: "See a file that a run saved. Give q-…/name (from the current run of the question), r-…/name, or the SHA-256 of the file. An image comes back as an image.",
       inputSchema: { file: z.string() },
       outputSchema: LOOKED,
       annotations: { readOnlyHint: true },
@@ -163,7 +171,7 @@ function registerReadTools(s: McpServer, store: ReadOnlyStore) {
         }
         const all = body.toString("utf8");
         const value = { ...meta, text: all.slice(0, LIMIT), truncated: all.length > LIMIT };
-        const shown = value.truncated ? `${value.text}\n… (${f.bytes} bytes; the rest is cut)` : all;
+        const shown = value.truncated ? `${value.text}\n… (${f.bytes} bytes. The rest is cut.)` : all;
         return { content: [{ type: "text" as const, text: shown }], structuredContent: value };
       } catch (e) {
         if (e instanceof Refusal) return { ...text(e.message), isError: true };
@@ -175,7 +183,7 @@ function registerReadTools(s: McpServer, store: ReadOnlyStore) {
 
 function readOnlyServer(store: ReadOnlyStore): McpServer {
   const s = new McpServer({ name: "witness-replay", version: VERSION }, {
-    instructions: "Read-only view of a recorded Witness graph. Use query (Cypher) and look (saved files). This endpoint cannot create goals or run probes.",
+    instructions: "A read-only view of a recorded Witness graph. Use query (Cypher) and look (saved files). This view cannot make goals or run probes.",
   });
   registerReadTools(s, store);
   return s;

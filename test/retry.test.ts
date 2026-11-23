@@ -48,7 +48,7 @@ test('a measured answer is final for its inputs, even when it is no or the rule 
 
 test('a crash is not retried on its own; the same ask retries it on the same key and keeps the old run', async () => {
   writeFileSync(join(root, 'external.txt'), '0');
-  const a = { ...question, probe: externalProbe(), asker: 'first' };
+  const a = { ...question, probe: externalProbe(), lane: 'first' };
   const crashed = await hub.ask(a);
   expect(crashed.state).toBe('failed');
   writeFileSync(join(root, 'external.txt'), '1');
@@ -56,7 +56,7 @@ test('a crash is not retried on its own; the same ask retries it on the same key
   expect(hub.status(crashed.id)).toMatchObject({ state: 'failed', run: crashed.run });
   expect(runs()).toBe(1);
   const original = hub.query('MATCH (q:Question {id: $id}) RETURN properties(q) AS q', { id: crashed.id }).rows;
-  const retried = await hub.ask({ ...a, asker: 'second' });
+  const retried = await hub.ask({ ...a, lane: 'second' });
   expect([retried.id, retried.state, retried.results]).toEqual([crashed.id, 'yes', [{ x: 1 }]]);
   expect(retried.run).not.toBe(crashed.run);
   expect(hub.query('MATCH (q:Question {id: $id}) RETURN properties(q) AS q', { id: crashed.id }).rows).toEqual(original);

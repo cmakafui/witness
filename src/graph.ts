@@ -58,37 +58,49 @@ export function statements(nodes: GNode[], rels: GRel[]): Statement[] {
       cypher: `UNWIND $rows AS x MERGE (n:${label} {id: x.id}) ON CREATE SET n += x.props`,
       params: { rows: nodes.filter((n) => n.label === label).map((n) => ({ id: n.id, props: { ...n.props, id: n.id } })) },
     });
-  // READ, SAVED and NEEDS merge on their name. The recorded session in examples/ was made before NEEDS had one,
-  // and a MERGE on a null name fails, so an edge without a name keeps a statement of its own: replay needs it.
+  // READ, SAVED and NEEDS merge on their name: a run reads two files from one File only by two names.
   for (const type of new Set(rels.map((r) => r.type))) {
     const [a, b] = ENDS[type];
-    for (const named of [true, false]) {
-      // A record read back from a store or over JSON says null where it has no name.
-      const rows = rels.filter((r) => r.type === type && (r.name != null) === named);
-      if (!rows.length) continue;
-      out.push({
-        cypher: `UNWIND $rows AS x MATCH (a:${a} {id: x.from}), (b:${b} {id: x.to}) MERGE (a)-[:${type}${named ? " {name: x.name}" : ""}]->(b)`,
-        params: { rows: rows.map(({ from, to, name }) => ({ from, to, name: name ?? null })) },
-      });
-    }
+    const named = type === "READ" || type === "SAVED" || type === "NEEDS";
+    out.push({
+      cypher: `UNWIND $rows AS x MATCH (a:${a} {id: x.from}), (b:${b} {id: x.to}) MERGE (a)-[:${type}${named ? " {name: x.name}" : ""}]->(b)`,
+      params: { rows: rels.filter((r) => r.type === type).map(({ from, to, name }) => ({ from, to, name: name ?? null })) },
+    });
   }
   return out;
 }
 
 /** The graph, as agents read it: in the MCP query tool and in the page's WebMCP query tool. */
 export const SCHEMA = `The graph:
-(:Goal {id, text, seq, created})-[:ACCEPTED_BY]->(:Question)  the goal's only acceptance question, bound before it runs
-(:Question {id, text, rule, probe, inputs, asker, seq, created})
-(:Question)-[:NEEDS {name}]->(:Question)  reads a file the other question saved (q-…/file) or its recorded result (q-…, mounted as q-….json). One NEEDS per input, so count DISTINCT questions
-(:Question)-[:REPLACES]->(:Question)   fixes a question whose run crashed or timed out; the old answer stays
+(:Goal {id, text, seq, created})-[:ACCEPTED_BY]->(:Question)  the acceptance question of the goal. A goal has one at most.
+(:Question {id, text, rule, probe, inputs, lane, timeout, seq, created})
+(:Question)-[:NEEDS {name}]->(:Question)  the question reads a file that the other question saved (q-…/file), or its recorded result (q-…, mounted as q-….json). There is one NEEDS for each input, so count DISTINCT questions.
+(:Question)-[:REPLACES]->(:Question)  the question fixes a question whose run did not measure (crashed or timed out). The old answer stays.
 (:Run {id, key, seq, started, ms, answer, reason, measured, results, last})-[:OF]->(:Question)
-(:Run)-[:READ {name}]->(:File {id})    the inputs the run read; a File's id is its SHA-256
-(:Run)-[:SAVED {name}]->(:File)               the files the run saved for other questions
-rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is all measurements as JSON; last is the final measurement object as JSON (compact for multi-record runs; older stores may omit it). measured is true when the probe measured, even if the rule could not decide: then other questions can read its result or saved files. created and started are UTC milliseconds since 1970 (older stores may omit created). ms is how long the run took.
-Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now. key names the inputs a run read. A run that measured is final for its key. Runs that did not measure can share a key with the retry that followed them: the latest run on the current inputs gives the answer.
-$replaced lists the questions that a newer question replaces and that still have no measured yes or no. Leave them out of open problems: WHERE NOT q.id IN $replaced.
-$complete lists the goal ids that are complete; NOT g.id IN $complete finds the rest. A goal is complete only when its acceptance question currently answers yes. No acceptance question means open and incomplete. All other acceptance states mean incomplete. No other question determines completion. Goals and acceptance bindings cannot be edited; changing the acceptance contract requires a new goal.
-Search by words: full-text index question_text covers q.text, q.rule and q.probe; run_reason covers r.reason. MATCH (q:Question) SEARCH q IN (FULLTEXT INDEX question_text FOR $words LIMIT 10) SCORE AS score RETURN q.id, q.text, q.id IN $yes AS yes, q.id IN $no AS no, score ORDER BY score DESC. LIMIT is required. A question matches any of the words; the score is BM25 and ranks within one search only. Case is ignored. There is no stemming: test does not match tests, so write test* (wildcard) or markov~ (up to 2 typos). A WHERE after SEARCH filters only the rows the search returned.`;
+(:Run)-[:READ {name}]->(:File {id})  an input, as the run read it. The id of a File is its SHA-256.
+(:Run)-[:SAVED {name}]->(:File)  a file that the run saved for other questions.
+
+Properties:
+- rule is a Cypher expression over the measurements of a run.
+- answer is yes, no or failed: the value of the rule on that run. It is not always the answer now.
+- results holds all measurements as JSON text. last holds the last measurement object as JSON text, or null when there is none. Read last to scan many runs.
+- measured is true when the probe measured, also when the rule gave failed. Other questions can then read its result and its saved files.
+- created and started are integers: milliseconds since 1970, UTC. ms is how long the run took. timeout is the time limit of one run, in seconds.
+- key identifies the inputs that a run read. A run that measured is final for its key. A run that did not measure can share its key with the run after it. The latest run on the current inputs gives the answer.
+- lane names one direction of work.
+
+Parameters. Every query gets the answers now:
+- $yes, $no, $failed, $running, $pending, $waiting: lists of question ids.
+- $current: the runs that give the current answers.
+- $replaced: the questions that a newer question replaces and that have no measured yes or no. To find open problems, use WHERE NOT q.id IN $replaced.
+- $complete: the ids of the complete goals. A goal is complete only while its acceptance question answers yes. A goal without an acceptance question is open and not complete. Goals and acceptance bindings do not change. A different acceptance question needs a new goal.
+
+Search by words:
+MATCH (q:Question) SEARCH q IN (FULLTEXT INDEX question_text FOR $words LIMIT 10) SCORE AS score RETURN q.id, q.text, q.id IN $yes AS yes, q.id IN $no AS no, score ORDER BY score DESC
+- question_text covers q.text, q.rule and q.probe. run_reason covers r.reason.
+- LIMIT is necessary. A question matches when it has one of the words. Case has no effect. The score is BM25, and it ranks the results of one search only.
+- There is no stemming: test does not find tests. Write test* for a prefix, or markov~ for up to 2 wrong letters.
+- A WHERE after SEARCH filters only the rows that the search returned.`;
 
 /** A question's answer as the hub works it out. It is never stored: it comes from the runs and the inputs now. */
 export type State = "yes" | "no" | "failed" | "running" | "pending" | "waiting";

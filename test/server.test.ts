@@ -46,13 +46,13 @@ test("an agent asks over MCP, queries the graph, and gets a refusal it can fix",
   expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(["ask", "goal", "look", "query"]);
   const g = json(await client.callTool({ name: "goal", arguments: { text: "The total of data.txt exceeds 10." } }));
   expect(g).toMatchObject({ state: "open", complete: false });
-  const a = json(await client.callTool({ name: "ask", arguments: { accepts: g.id, text: "Is the total of data.txt more than 10?", rule: "$total > 10", probe: PROBE, inputs: ["data.txt"], asker: "tester" } }));
+  const a = json(await client.callTool({ name: "ask", arguments: { accepts: g.id, text: "Is the total of data.txt more than 10?", rule: "$total > 10", probe: PROBE, inputs: ["data.txt"], lane: "tester" } }));
   expect(a).toMatchObject({ state: "yes", results: [{ total: 15 }], goal: { id: g.id, complete: true, acceptance: a.id } });
   const cached = json(await client.callTool({ name: "ask", arguments: { accepts: g.id, text: "Is the total of data.txt more than 10?", rule: "$total > 10", probe: PROBE, inputs: ["data.txt"] } }));
   expect([cached.id, cached.run]).toEqual([a.id, a.run]);
   expect(cached.goal).toMatchObject({ acceptance: a.id, complete: true });
-  const q = json(await client.callTool({ name: "query", arguments: { cypher: "MATCH (q:Question) WHERE q.id IN $yes RETURN q.asker AS asker" } }));
-  expect(q.rows).toEqual([{ asker: "tester" }]);
+  const q = json(await client.callTool({ name: "query", arguments: { cypher: "MATCH (q:Question) WHERE q.id IN $yes RETURN q.lane AS lane" } }));
+  expect(q.rows).toEqual([{ lane: "tester" }]);
   expect(json(await client.callTool({ name: "query", arguments: { cypher: "RETURN $complete AS ids" } })).rows).toEqual([{ ids: [g.id] }]);
   const refused = await client.callTool({ name: "ask", arguments: { text: "x?", rule: "r", probe: "print(1)" } });
   expect(refused.isError).toBe(true);
@@ -121,7 +121,7 @@ test("every tool declares its output schema, and results carry structured conten
 
 test("the MCP instructions tell agents how many probes the hub runs at a time", async () => {
   const client = await agent();
-  expect(client.getInstructions()).toContain(`This hub runs ${hub.jobs} probes at a time.`);
+  expect(client.getInstructions()).toContain(`This hub runs ${hub.jobs} probes at the same time.`);
   await client.close();
 });
 

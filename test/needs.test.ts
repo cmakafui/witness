@@ -77,17 +77,3 @@ test("bare q-… input mounts the producer's answer and measurements as q-….js
   expect(Number(times.gc)).toBeGreaterThan(1_700_000_000_000);
   expect(Number(times.qc)).toBeGreaterThan(1_700_000_000_000);
 }, 60_000);
-
-test("the recorded session, made before NEEDS had a name, still replays", async () => {
-  const recorded = join(import.meta.dir, "..", "examples", "human-rng", ".witness");
-  await hub.idle();
-  hub.close();
-  rmSync(join(root, ".witness"), { recursive: true, force: true });
-  cpSync(recorded, join(root, ".witness"), { recursive: true });
-  hub = await Hub.open(root, { pollMs: 0 });
-  const all = Number(hub.query("MATCH ()-[n:NEEDS]->() RETURN count(n) AS all").rows[0]!.all);
-  expect(all).toBeGreaterThan(0);
-  expect(replayed().length).toBe(all);
-  // The recorded store itself is never written.
-  expect(existsSync(join(recorded, "graph", ".relate"))).toBe(false);
-}, 60_000);

@@ -44,13 +44,13 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-test("the recorded example predates the search indexes, and replay still searches it", async () => {
-  const server = replay(join(import.meta.dir, "..", "examples", "human-rng"), { port: 0 });
+test("replay searches the recorded store by words", async () => {
+  const server = replay(root, { port: 0 });
   const client = new Client({ name: "replay-reader", version: "1" });
   try {
     await client.connect(new StreamableHTTPClientTransport(new URL("/mcp", server.url)));
-    const q = await client.callTool({ name: "query", arguments: { cypher: "MATCH (q:Question) SEARCH q IN (FULLTEXT INDEX question_text FOR 'treewidth' LIMIT 5) SCORE AS s RETURN q.asker AS asker" } });
-    expect(q.structuredContent).toEqual({ rows: [{ asker: "markov" }], truncated: false });
+    const q = await client.callTool({ name: "query", arguments: { cypher: "MATCH (q:Question) SEARCH q IN (FULLTEXT INDEX question_text FOR 'crash' LIMIT 5) SCORE AS s RETURN q.id AS id" } });
+    expect(q.structuredContent).toEqual({ rows: [{ id: ids.c }], truncated: false });
   } finally {
     await client.close();
     server.stop(true);

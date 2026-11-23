@@ -2,7 +2,7 @@
 // The live page. It keeps its own copy of the graph in Relate (WASM), built by the same statements the hub runs,
 // and answers every panel and query with Cypher in the page. The hub sends new records and states.
 //
-// The lanes show how the agents got here: one row per direction of work, compact glyphs packed left-to-right by
+// The lanes show how the agents got here: one row per lane (a direction of work), compact glyphs packed left-to-right by
 // causal and lane order, with a steady top preview strip on hover. The rule check on the right shows why an answer
 // stands: each part of the rule, the measurements it names, and whether it held. DESIGN.md gives the tokens.
 //
@@ -22,7 +22,7 @@ type Msg =
   | { type: "graph"; nodes: GNode[]; rels: GRel[] }
   | { type: "states"; states: Status[] };
 
-type QNode = { id: string; text: string; asker: string | null; seq: number; inputs: string[] };
+type QNode = { id: string; text: string; lane: string | null; seq: number; inputs: string[] };
 type QRun = RecordedRun & { seq: number };
 type QLink = { source: string; target: string };
 type Row = Record<string, unknown>;
@@ -216,9 +216,9 @@ const STEP = 68;
 /** Where each question sits, from the last render. */
 const place = new Map<string, { x: number; y: number; lane: number }>();
 
-/** The lane of an asker: the part after the last /, before the first -. orchestrator/evolution and evolution-tools share one. */
-const laneOf = (asker: string | null) => {
-  const last = (asker ?? "").split("/").at(-1)!.trim();
+/** The row of a lane: the part after the last /, before the first -. orchestrator/evolution and evolution-tools share one. */
+const laneOf = (lane: string | null) => {
+  const last = (lane ?? "").split("/").at(-1)!.trim();
   return (last.split("-")[0] || last || "unnamed").replaceAll("_", " ");
 };
 
@@ -235,7 +235,7 @@ function renderHover() {
     mark(st, 12, accepts),
     h("span", { class: "hover-state", style: `--c: ${colour(st)}` }, st),
     h("span", { class: "hover-text" }, q.text),
-    h("span", { class: "hover-lane" }, laneOf(q.asker)),
+    h("span", { class: "hover-lane" }, laneOf(q.lane)),
   );
 }
 
@@ -291,7 +291,7 @@ function focusNeighbor(fromId: string, key: string) {
 
 /** Places a new question: the next free column of its lane, after every question it reads. */
 function assign(q: QNode) {
-  const name = laneOf(q.asker);
+  const name = laneOf(q.lane);
   let lane = lanes.indexOf(name);
   if (lane < 0) {
     lane = lanes.push(name) - 1;
@@ -490,7 +490,7 @@ function apply(m: Msg) {
       if (seq > maxSeq) maxSeq = seq;
       if (n.label === "Goal") goalSeq.set(n.id, seq);
       if (n.label === "Question" && !nodes.has(n.id)) {
-        const q = { id: n.id, text: String(n.props.text), asker: (n.props.asker as string) ?? null, seq, inputs: n.props.inputs as string[] };
+        const q = { id: n.id, text: String(n.props.text), lane: (n.props.lane as string) ?? null, seq, inputs: n.props.inputs as string[] };
         nodes.set(n.id, q);
         unplaced.push(q);
       }
@@ -652,7 +652,7 @@ const IMAGE = /\.(png|jpe?g|gif|svg|webp)$/i;
 /** What the panel shows about a question. A browser agent gets the same (page/tools.ts). */
 function details(qid: string) {
   if (!questionVisible(qid)) return null;
-  const [q] = cypher("MATCH (q:Question {id: $selected}) RETURN q.text AS text, q.rule AS rule, q.probe AS probe, q.inputs AS inputs, q.asker AS asker", { selected: qid });
+  const [q] = cypher("MATCH (q:Question {id: $selected}) RETURN q.text AS text, q.rule AS rule, q.probe AS probe, q.inputs AS inputs, q.lane AS lane", { selected: qid });
   if (!q) return null;
   const st = statusOf(qid);
   const [l] = cypher(
@@ -681,7 +681,7 @@ function details(qid: string) {
     rule: String(q.rule),
     probe: String(q.probe),
     inputs: ids(q.inputs),
-    asker: (q.asker as string | null) ?? null,
+    lane: (q.lane as string | null) ?? null,
     accepts: goals().filter((g) => g.acceptance === qid).map(({ id, text }) => ({ id, text })),
     status: st,
     restsOn: ids(l?.needs).filter(questionVisible),
@@ -788,8 +788,7 @@ function showQuestion(qid: string) {
   const keepRunsOpen = panel.querySelector<HTMLDetailsElement>("details.runs-disclosure")?.open ?? false;
   const st = d.status;
   const pictures = d.saved.filter((f) => IMAGE.test(f.name));
-  // Why it failed, or what it waits for. A replay's states leave it out, so fall back to the current run's.
-  const reason = st?.reason ?? d.runs.find((r) => r.current)?.reason ?? null;
+  const reason = st?.reason ?? null;
   const list = (title: string, qs: string[]) => (qs.length ? [h("h3", {}, title), h("div", {}, ...qs.map(chip))] : []);
   const { element: ruleEl, shownNames } = ruleCheck(d.rule, d.results, d.ran);
   const latest = Object.assign({}, ...(d.results as Record<string, unknown>[])) as Record<string, unknown>;
@@ -860,7 +859,7 @@ function showQuestion(qid: string) {
       cancelBtn,
     ),
     h("h2", {}, d.text),
-    d.asker ? h("p", { class: "provenance" }, "Asked by ", h("span", {}, d.asker)) : null,
+    d.lane ? h("p", { class: "provenance" }, "Lane ", h("span", {}, d.lane)) : null,
     ruleEl,
     reason ? h("p", { class: "reason" }, reason) : null,
     ...(pictures.length
@@ -942,7 +941,7 @@ const PRESETS: [string, string][] = [
   ["Which questions read each file?", "MATCH (q:Question)<-[:OF]-(r:Run)-[x:READ]->(:File)\nWHERE r.id IN $current AND NOT x.name STARTS WITH 'q-'\nRETURN x.name AS input, count(DISTINCT q) AS read_by, collect(DISTINCT q.id) AS questions ORDER BY input"],
   ["Which questions read from the same question?", "MATCH (a:Question)-[:NEEDS]->(u:Question)<-[:NEEDS]-(b:Question)\nWHERE a.seq < b.seq\nRETURN DISTINCT u.id AS output_of, a.id AS a, b.id AS b"],
   ["Which runs failed, and why?", "MATCH (r:Run {answer: 'failed'})-[:OF]->(q:Question)\nRETURN q.id AS id, r.reason AS reason, r.seq AS seq ORDER BY seq DESC"],
-  ["What did each asker ask?", "MATCH (q:Question)\nRETURN q.asker AS asker, count(*) AS questions,\n  sum(CASE WHEN q.id IN $yes THEN 1 ELSE 0 END) AS yes,\n  sum(CASE WHEN q.id IN $no THEN 1 ELSE 0 END) AS no\nORDER BY questions DESC"],
+  ["What did each lane ask?", "MATCH (q:Question)\nRETURN q.lane AS lane, count(*) AS questions,\n  sum(CASE WHEN q.id IN $yes THEN 1 ELSE 0 END) AS yes,\n  sum(CASE WHEN q.id IN $no THEN 1 ELSE 0 END) AS no\nORDER BY questions DESC"],
 ];
 
 const queryToggle = document.getElementById("query-toggle") as HTMLButtonElement;
