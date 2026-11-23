@@ -42,7 +42,7 @@ Use Bun for dependency installation, scripts, tests and builds. Bundle the page 
 - History is one view boundary: goal options, Evidence, links, hover, Back and WebMCP cannot open future questions. `recordedStatuses` in `src/graph.ts` is shared by replay and the page's history: an unrun consumer waits for a measured producer run with the named saved file, even when the producer crashed or omitted that file.
 - `page/tools.ts`: the page's WebMCP tools for a browser agent, `query` and `show_question`. Selecting a question shows its evidence and derives its upstream highlight. Keep one selection model for graph clicks, links, goals, browser tools and Back. No query can change what the page shows: every query, from the drawer or a tool, runs on a throwaway copy of the graph (`scratch` in `page/app.ts`). `ask` never goes in the page.
 - `SCHEMA` in `src/graph.ts` describes the graph to agents. The MCP `query` tool and the page's `query` tool both use it.
-- Current question answers and goal completion are never stored. Queries get the answers and `$complete`/`$incomplete` goal ids as parameters (`answerParams` in `src/graph.ts`).
+- Current question answers and goal completion are never stored. Queries get the answers and `$complete` goal ids as parameters (`answerParams` in `src/graph.ts`).
 - `bun check`: type check. Run both before you commit.
 
 ## Relate

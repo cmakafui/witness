@@ -520,24 +520,8 @@ export class Hub {
   }
 
   /** Finds a kept file: by its hash, by q-…/name (the question's current run), or by r-…/name. */
-  look(ref: string): { name: string; path: string; type: string; bytes: number } {
-    let file: string | undefined;
-    let name = ref;
-    let lookedQuestion: string | null = null;
-    if (/^[0-9a-f]{64}$/.test(ref)) file = ref;
-    else {
-      const m = /^([qr]-[0-9a-f]{12})\/(.+)$/.exec(ref);
-      if (!m) throw new Refusal(`${ref} is not a file. Give q-…/name, r-…/name, or a file's SHA-256.`);
-      if (m[1]!.startsWith("q-")) lookedQuestion = m[1]!;
-      const run = lookedQuestion ? this.status(lookedQuestion).run : m[1]!;
-      if (!run) throw new Refusal(`${m[1]} has no run yet, so it saved no files.`);
-      name = m[2]!;
-      file = this.saved(run).find((s) => s.name === name)?.file;
-      if (!file) throw new Refusal(`${run} saved no file named ${name}.`);
-    }
-    const path = join(this.filesDir, file);
-    if (!existsSync(path)) throw new Refusal(`The hub keeps no file ${file}.`);
-    return { name, path, type: Bun.file(name).type, bytes: statSync(path).size };
+  look(ref: string): Looked {
+    return findFile(ref, this.filesDir, (q) => this.status(q).run, (run) => this.saved(run));
   }
 
   /** Where the hub keeps a file, by its SHA-256. Null for anything that is not a file id. */
@@ -574,6 +558,30 @@ export class Hub {
   async idle() {
     while (this.running.size) await new Promise<void>((resolve) => this.wakers.add(resolve));
   }
+}
+
+export type Looked = { name: string; path: string; type: string; bytes: number };
+
+/**
+ * Finds a kept file: by its hash, by q-…/name (the file the question's run saved) or by r-…/name. The hub and replay
+ * differ only in which run answers a question (runOf refuses an unknown question) and what a run saved.
+ */
+export function findFile(ref: string, filesDir: string, runOf: (question: string) => string | null, saved: (run: string) => Saved[]): Looked {
+  let file: string | undefined;
+  let name = ref;
+  if (/^[0-9a-f]{64}$/.test(ref)) file = ref;
+  else {
+    const m = /^([qr]-[0-9a-f]{12})\/(.+)$/.exec(ref);
+    if (!m) throw new Refusal(`${ref} is not a file. Give q-…/name, r-…/name, or a file's SHA-256.`);
+    const run = m[1]!.startsWith("q-") ? runOf(m[1]!) : m[1]!;
+    if (!run) throw new Refusal(`${m[1]} has no run yet, so it saved no files.`);
+    name = m[2]!;
+    file = saved(run).find((s) => s.name === name)?.file;
+    if (!file) throw new Refusal(`${run} saved no file named ${name}.`);
+  }
+  const path = join(filesDir, file);
+  if (!existsSync(path)) throw new Refusal(`The store keeps no file ${file}.`);
+  return { name, path, type: Bun.file(name).type, bytes: statSync(path).size };
 }
 
 /** A store's whole graph as records. The hub sends it to a page; replay reads a recorded store with it. */

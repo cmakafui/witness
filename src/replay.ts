@@ -1,10 +1,10 @@
 // witness replay: loads a recorded store read-only for manual inspection and read-only MCP. No agent, hub or uv.
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import page from "../page/index.html";
 import { answerParams, GOALS, type Goal, INDEXES, recordedStatuses, type RecordedRun, type Status, statements } from "./graph.ts";
-import { Refusal, snapshot } from "./hub.ts";
+import { findFile, Refusal, snapshot } from "./hub.ts";
 import { readOnlyMcp, type ReadOnlyStore } from "./mcp.ts";
 import { type Param, Relate } from "./relate.ts";
 import { sameOrigin } from "./server.ts";
@@ -60,24 +60,11 @@ export function replay(root: string, { port = 4748, hostname = "127.0.0.1" } = {
       }
     },
     look(ref: string) {
-      let file: string | undefined;
-      let name = ref;
-      if (/^[0-9a-f]{64}$/.test(ref)) file = ref;
-      else {
-        const m = /^([qr]-[0-9a-f]{12})\/(.+)$/.exec(ref);
-        if (!m) throw new Refusal(`${ref} is not a file. Give q-…/name, r-…/name, or a file's SHA-256.`);
-        const run = m[1]!.startsWith("q-") ? byId.get(m[1]!)?.run ?? null : m[1]!;
-        if (!run) {
-          if (m[1]!.startsWith("q-") && !byId.has(m[1]!)) throw new Refusal(`There is no question ${m[1]}. Call query to list the questions.`);
-          throw new Refusal(`${m[1]} has no run yet, so it saved no files.`);
-        }
-        name = m[2]!;
-        file = savedBy.get(run)?.find((s) => s.name === name)?.file;
-        if (!file) throw new Refusal(`${run} saved no file named ${name}.`);
-      }
-      const path = join(files, file);
-      if (!existsSync(path)) throw new Refusal(`The store keeps no file ${file}.`);
-      return { name, path, type: Bun.file(name).type, bytes: statSync(path).size };
+      const runOf = (q: string) => {
+        if (!byId.has(q)) throw new Refusal(`There is no question ${q}. Call query to list the questions.`);
+        return byId.get(q)!.run;
+      };
+      return findFile(ref, files, runOf, (run) => savedBy.get(run) ?? []);
     },
   };
   const handle = readOnlyMcp(store);

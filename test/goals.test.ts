@@ -19,7 +19,7 @@ afterEach(async () => {
 const head = "# /// script\n# dependencies = []\n# ///\nimport json, os\n";
 const testQuestion = { text: "Is x positive?", rule: "$x > 0", probe: `${head}print('WITNESS_RESULT', '{"x": 1}')` };
 const goal = (id: string) => hub.goals().find((g) => g.id === id)!;
-const completion = () => hub.query("RETURN $complete AS complete, $incomplete AS incomplete").rows[0];
+const completion = () => hub.query("MATCH (g:Goal) RETURN [x IN collect(g.id) WHERE x IN $complete] AS complete, [x IN collect(g.id) WHERE NOT x IN $complete] AS incomplete").rows[0];
 async function settle() {
   for (let i = 0; i < 20; i++) {
     hub.check();

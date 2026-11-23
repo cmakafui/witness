@@ -87,7 +87,7 @@ export const SCHEMA = `The graph:
 rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is all measurements as JSON; last is the final measurement object as JSON (compact for multi-record runs; older stores may omit it). measured is true when the probe measured, even if the rule could not decide: then other questions can read its result or saved files. created and started are UTC milliseconds since 1970 (older stores may omit created). ms is how long the run took.
 Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now. key names the inputs a run read. A run that measured is final for its key. Runs that did not measure can share a key with the retry that followed them: the latest run on the current inputs gives the answer.
 $replaced lists the questions that a newer question replaces and that still have no measured yes or no. Leave them out of open problems: WHERE NOT q.id IN $replaced.
-$complete and $incomplete are goal ids. A goal is complete only when its acceptance question currently answers yes. No acceptance question means open and incomplete. All other acceptance states mean incomplete. No other question determines completion. Goals and acceptance bindings cannot be edited; changing the acceptance contract requires a new goal.
+$complete lists the goal ids that are complete; NOT g.id IN $complete finds the rest. A goal is complete only when its acceptance question currently answers yes. No acceptance question means open and incomplete. All other acceptance states mean incomplete. No other question determines completion. Goals and acceptance bindings cannot be edited; changing the acceptance contract requires a new goal.
 Search by words: full-text index question_text covers q.text, q.rule and q.probe; run_reason covers r.reason. MATCH (q:Question) SEARCH q IN (FULLTEXT INDEX question_text FOR $words LIMIT 10) SCORE AS score RETURN q.id, q.text, q.id IN $yes AS yes, q.id IN $no AS no, score ORDER BY score DESC. LIMIT is required. A question matches any of the words; the score is BM25 and ranks within one search only. Case is ignored. There is no stemming: test does not match tests, so write test* (wildcard) or markov~ (up to 2 typos). A WHERE after SEARCH filters only the rows the search returned.`;
 
 /** A question's answer as the hub works it out. It is never stored: it comes from the runs and the inputs now. */
@@ -158,13 +158,13 @@ export function replacedIds(statuses: Status[], replaces: Iterable<{ from: strin
 /**
  * The parameters every query gets, so a query can use the answers: $yes, $no, $failed, $running, $pending and
  * $waiting are lists of question ids, and $current is the list of runs that give the current answers.
- * $complete and $incomplete are goal ids, derived only from acceptance questions. $replaced comes from REPLACES.
+ * $complete lists goal ids, derived only from acceptance questions. $replaced comes from REPLACES.
  */
 export function answerParams(
   statuses: Status[],
   goals: Goal[] = [],
   replaces: Iterable<{ from: string; to: string }> = [],
-): Record<State | "current" | "complete" | "incomplete" | "replaced", string[]> {
+): Record<State | "current" | "complete" | "replaced", string[]> {
   const ids = (s: State) => statuses.filter((x) => x.state === s).map((x) => x.id);
   const completion = goalStatuses(goals, statuses);
   return {
@@ -176,7 +176,6 @@ export function answerParams(
     waiting: ids("waiting"),
     current: statuses.flatMap((x) => (x.run && (x.state === "yes" || x.state === "no" || x.state === "failed") ? [x.run] : [])),
     complete: completion.filter((g) => g.complete).map((g) => g.id),
-    incomplete: completion.filter((g) => !g.complete).map((g) => g.id),
     replaced: replacedIds(statuses, replaces),
   };
 }
