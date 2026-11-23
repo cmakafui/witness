@@ -44,6 +44,7 @@ Agents get four tools: `goal`, `ask`, `query` and `look`.
 - **Mode:** directory. Each workspace keeps its store at `.witness/graph/`. The recorded demo store is [`examples/human-rng/.witness/graph/`](examples/human-rng/.witness/graph/).
 - **Why:** the hub writes every record as it happens, so the graph is always on disk. The hub is the only writer, through `bun:ffi`. Agents, the CLI and replay open the same folder read-only.
 - **Rules** are Cypher, evaluated by Relate on an empty in-memory store that refuses writes. The page loads the same graph into Relate WASM.
+- **Search:** full-text indexes on each question's text, rule and probe, and on why runs failed. Before an agent asks, it searches for the words. A hit comes with its answer now, so a ruled-out direction stays ruled out.
 
 ```
 (:Goal)-[:ACCEPTED_BY]->(:Question)<-[:OF]-(:Run)-[:READ|SAVED]->(:File)

@@ -6,6 +6,7 @@
 // The hub binds at most one acceptance question per goal, before that question runs. A File's id is its SHA-256.
 // A question can replace a question whose run crashed or timed out. The hub writes REPLACES with the new question.
 // NEEDS carries the input it names, q-…/file: one NEEDS per file a question reads from another.
+// src/schema.ts also adds the full-text indexes, SEARCH_INDEXES in src/graph.ts: the page's copies use the same.
 
 CREATE GRAPH TYPE witness AS {
   (g:Goal => {id :: STRING NOT NULL, text :: STRING NOT NULL, seq :: INTEGER NOT NULL, created :: INTEGER}),

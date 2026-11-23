@@ -21,7 +21,7 @@ A picture prompts a question; it is not an answer. The next probe measures what 
 
 ## Steps
 
-1. On a fresh store, start with the task. Use `query` when resuming, joining existing work, or looking for findings to build on.
+1. On a fresh store, start with the task. Use `query` when resuming, joining existing work, or looking for findings to build on. Before a new direction, search the graph for its words: someone may have measured it, ruled it out, or written a probe you can reuse.
 2. For a new probe, draft it in `scratch/<asker>/` (`uv run --script scratch/<asker>/probe.py`) so concurrent lanes and separate sessions do not overwrite each other's drafts. Try a package first with `uv run --with PACKAGE python -c '…'`. Neither is evidence; keep drafts out of `.witness/`.
 3. Call `ask` with `text`, `rule`, `inputs`, and `asker` (a short, stable 1–2 word lane name reused across questions in one direction of work, not a per-question title). Supply `probe` for a new script or `probe_ref: "q-…"` to reuse the exact script from an existing question. Save candidate outputs and renders in `$WITNESS_OUT` (`q-…/name`) rather than overwriting a shared workspace file or citing `scratch/` (acceptance questions refuse `scratch/` inputs). Declare bare `q-…` in `inputs` to depend on a prior question's recorded answer and measurements (mounted as `q-….json`), e.g. to wire negative controls or exclusions into the DAG without dummy files.
 4. Read the answer, measurements, and saved files. `look` at the renders. Hand other agents question ids and `q-…/name` paths, not summaries.
@@ -87,6 +87,17 @@ WHERE r.id IN $current
 RETURN q.id, q.asker, q.id + '/' + s.name AS file, r.answer
 ORDER BY q.seq DESC LIMIT 25
 ```
+
+Search by words before you ask. `question_text` covers each question's text, rule and probe, and `run_reason` covers why runs failed. Pass the words as a parameter:
+
+```cypher
+MATCH (q:Question)
+SEARCH q IN (FULLTEXT INDEX question_text FOR $words LIMIT 10) SCORE AS score
+RETURN q.id, q.asker, q.text, q.id IN $yes AS yes, q.id IN $no AS no, score
+ORDER BY score DESC
+```
+
+A `no` hit is a ruled-out direction: read its rule to see what exactly was ruled out. A hit on a probe's text (a package, a function) gives a script to reuse with `probe_ref`. Search `run_reason` for an error before you debug it. A question matches any one of the words, and case does not matter. There is no stemming, so `test` does not match `tests`: write `test*`, or `markov~` for up to two typos. Words find only words: a search for `bias` misses a question about `alternation`, so try the synonyms too.
 
 Relate Cypher gotchas: pass `$vars` via `params` (missing params error); `WITH` drops every variable it does not list, so list each one you use later (`WITH q, r, count(f) AS files`); bound traversals (`*0..5`) and `LIMIT 50`; no Neo4j/APOC procedures; `created` and `started` are integer milliseconds, so compare them as integers and do not wrap them in `datetime()`. Use `$current` for current runs and `WHERE q.id IN $failed AND NOT q.id IN $replaced` for open failures. Read `q.probe` from the graph, not `scratch/`.
 

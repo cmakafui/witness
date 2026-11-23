@@ -29,6 +29,8 @@ Chrome with [WebMCP](https://developer.chrome.com/docs/ai/webmcp) gives the brow
 (:Run)-[:SAVED {name}]->(:File)              // what the run saved for other questions
 ```
 
+Two full-text indexes let agents find prior work by its words. `question_text` covers each question's text, rule and probe. `run_reason` covers why each run failed. A query searches them with the `SEARCH` clause, beside the answer parameters, so a hit comes with its answer now. The page's copy and replay's copy have the same indexes. Replay builds its copy once, so it searches a recorded store that has no index and never writes to it.
+
 A `File` is named by its SHA-256. The answer of a run is stored with that run. The answer of a question is never stored. The hub finds the run on the question's inputs as they are now. It passes the answers to queries as `$yes`, `$no`, `$failed`, `$running`, `$pending`, `$waiting`, `$replaced` and `$current`. Relate enforces the schema in [`schema.cypher`](../schema.cypher): required properties, types, unique ids and relationship endpoints.
 
 Goals and acceptance bindings are immutable. A goal can start without an acceptance question: it is open and incomplete. Bind at most one acceptance question, before it runs. An identical retry reuses that question. A different contract requires a new goal, which may use the same text. A goal is complete only while its acceptance question currently answers `yes`; `no`, `failed`, `pending`, `running` and `waiting` all mean incomplete. Input changes can invalidate completion. Restoring inputs restores their most recent recorded answer and its derived completion. No other question votes. Queries get `$complete` and `$incomplete` as goal-id lists; completion is never stored.

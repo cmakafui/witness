@@ -24,7 +24,7 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 - Use a short, stable asker name (1–2 words, e.g. "fourier17", "advisor") and reuse it across all questions in one direction of work.
 - When an input changes, the question runs again. When the inputs change back, their latest recorded answer comes back. So a probe must not act: do not send or deploy in a probe.
 - Set replaces to the id of a question whose run crashed or timed out when you fix its probe. Witness refuses it for a measured answer. The old question stays failed and goes into $replaced.
-- query: read the graph with Cypher. look: show a file that a run saved.`;
+- query: read the graph with Cypher. Search it by words (the question_text and run_reason indexes) before you ask: someone may have measured it, ruled it out, or written a probe you can reuse. look: show a file that a run saved.`;
 
 const text = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
 

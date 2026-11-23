@@ -16,7 +16,7 @@ import { spring } from "motion";
 import Prism from "prismjs";
 import "prismjs/components/prism-json";
 import "prismjs/components/prism-python";
-import { ALL_NODES, ALL_RELS, answerParams, clauses, replacedIds, type Goal, GOALS, type GNode, type GRel, measurements, named, recordedStatuses, type RecordedRun, type State, type Status, statements, UNIQUE_IDS } from "../src/graph.ts";
+import { ALL_NODES, ALL_RELS, answerParams, clauses, replacedIds, type Goal, GOALS, type GNode, type GRel, measurements, named, recordedStatuses, type RecordedRun, type State, type Status, statements, INDEXES } from "../src/graph.ts";
 import { register, webTools } from "./tools.ts";
 
 type Msg =
@@ -40,7 +40,7 @@ function execute(query: string, params: Record<string, unknown> = {}, on = db) {
   return r as { columns: string[]; rows: Row[] };
 }
 const cypher = (query: string, params: Record<string, unknown> = {}) => execute(query, params).rows;
-for (const index of UNIQUE_IDS) cypher(index);
+for (const index of INDEXES) cypher(index);
 
 /**
  * A copy of the page's graph, to run one query on and throw away. A query from a person or from the browser's agent
@@ -48,7 +48,7 @@ for (const index of UNIQUE_IDS) cypher(index);
  */
 function scratch(): RelateDb {
   const copy = new RelateDb();
-  for (const index of UNIQUE_IDS) execute(index, {}, copy);
+  for (const index of INDEXES) execute(index, {}, copy);
   let allNodes = cypher(ALL_NODES) as GNode[];
   let allRels = cypher(ALL_RELS) as GRel[];
   if (atSeq !== null) {

@@ -44,6 +44,19 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
+test("the recorded example predates the search indexes, and replay still searches it", async () => {
+  const server = replay(join(import.meta.dir, "..", "examples", "human-rng"), { port: 0 });
+  const client = new Client({ name: "replay-reader", version: "1" });
+  try {
+    await client.connect(new StreamableHTTPClientTransport(new URL("/mcp", server.url)));
+    const q = await client.callTool({ name: "query", arguments: { cypher: "MATCH (q:Question) SEARCH q IN (FULLTEXT INDEX question_text FOR 'treewidth' LIMIT 5) SCORE AS s RETURN q.asker AS asker" } });
+    expect(q.structuredContent).toEqual({ rows: [{ asker: "markov" }], truncated: false });
+  } finally {
+    await client.close();
+    server.stop(true);
+  }
+});
+
 test("a viewer receives the whole recorded graph and answers immediately, without running changed inputs", async () => {
   writeFileSync(join(root, "data.txt"), "");
   const server = replay(root, { port: 0 });
@@ -85,6 +98,11 @@ test("replay exposes read-only /mcp with query and look only", async () => {
     expect(q.structuredContent).toEqual({ rows: [{ complete: [ids.complete], yes: [ids.a], no: [ids.b, ids.d] }], truncated: false });
     const l = await client.callTool({ name: "look", arguments: { file: `${ids.a}/n.json` } });
     expect(JSON.parse((l.structuredContent as { text: string }).text)).toEqual([4, 5, 6, 0]);
+    // The recorded store is searchable, and still read-only.
+    const found = await client.callTool({ name: "query", arguments: { cypher: "MATCH (q:Question) SEARCH q IN (FULLTEXT INDEX question_text FOR 'total' LIMIT 5) SCORE AS s RETURN q.id AS id ORDER BY id" } });
+    expect(found.structuredContent).toEqual({ rows: [ids.b, ids.d].sort().map((id) => ({ id })), truncated: false });
+    const write = await client.callTool({ name: "query", arguments: { cypher: "CREATE (:Goal {id: 'g-x', text: 'x', seq: 99})" } });
+    expect(write.isError).toBe(true);
     const forbidden = await fetch(new URL("/mcp", server.url), { method: "POST", headers: { Origin: "https://evil.example", "Content-Type": "application/json" }, body: "{}" });
     expect(forbidden.status).toBe(403);
   } finally {
@@ -131,6 +149,9 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     // The docked Query drawer opens on the left while Evidence remains visible on the right.
     expect(await view.evaluate("[document.getElementById('cypher').value, document.getElementById('query').hidden, document.getElementById('question').hidden]")).toEqual([yes, false, false]);
 
+    // The page's copy has the search indexes.
+    expect(await call("query", { cypher: "MATCH (q:Question) SEARCH q IN (FULLTEXT INDEX question_text FOR 'crash' LIMIT 5) SCORE AS s RETURN q.id AS id" }))
+      .toMatchObject({ rows: [{ id: ids.c }] });
     // A query runs on a throwaway copy: a query that writes changes nothing the page shows, from the tool or the drawer.
     for (const cypher of ["MATCH (q:Question) SET q.text = 'forged'", "CREATE (:Question {id: 'q-000000000000', text: 'forged'})", "MATCH (q:Question) CALL { CREATE (:Run) } RETURN count(q) AS n"])
       await call("query", { cypher });

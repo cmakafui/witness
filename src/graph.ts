@@ -32,6 +32,18 @@ export const UNIQUE_IDS = Object.keys({ Goal: 0, Question: 0, Run: 0, File: 0 } 
   (label) => `CREATE CONSTRAINT ${label.toLowerCase()}_id FOR (n:${label}) REQUIRE n.id IS UNIQUE`,
 );
 
+/**
+ * The full-text indexes, so an agent can find prior work by its words: questions by their text, rule and probe, and
+ * runs by why they failed. The hub's store gets them with its schema; the page's copies and replay's copy add them.
+ */
+export const SEARCH_INDEXES = [
+  "CREATE FULLTEXT INDEX question_text IF NOT EXISTS FOR (q:Question) ON EACH [q.text, q.rule, q.probe]",
+  "CREATE FULLTEXT INDEX run_reason IF NOT EXISTS FOR (r:Run) ON EACH [r.reason]",
+];
+
+/** Every index a copy of the graph needs: unique ids, then search. */
+export const INDEXES = [...UNIQUE_IDS, ...SEARCH_INDEXES];
+
 /** The queries that read a whole graph as records, for a page that connects or a copy of the page's graph. */
 export const ALL_NODES = "MATCH (n) RETURN labels(n)[0] AS label, n.id AS id, properties(n) AS props";
 export const ALL_RELS = "MATCH (a)-[r]->(b) RETURN type(r) AS type, a.id AS from, b.id AS to, r.name AS name";
@@ -75,7 +87,8 @@ export const SCHEMA = `The graph:
 rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is all measurements as JSON; last is the final measurement object as JSON (compact for multi-record runs; older stores may omit it). measured is true when the probe measured, even if the rule could not decide: then other questions can read its result or saved files. created and started are UTC milliseconds since 1970 (older stores may omit created). ms is how long the run took.
 Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now. key names the inputs a run read. A run that measured is final for its key. Runs that did not measure can share a key with the retry that followed them: the latest run on the current inputs gives the answer.
 $replaced lists the questions that a newer question replaces and that still have no measured yes or no. Leave them out of open problems: WHERE NOT q.id IN $replaced.
-$complete and $incomplete are goal ids. A goal is complete only when its acceptance question currently answers yes. No acceptance question means open and incomplete. All other acceptance states mean incomplete. No other question determines completion. Goals and acceptance bindings cannot be edited; changing the acceptance contract requires a new goal.`;
+$complete and $incomplete are goal ids. A goal is complete only when its acceptance question currently answers yes. No acceptance question means open and incomplete. All other acceptance states mean incomplete. No other question determines completion. Goals and acceptance bindings cannot be edited; changing the acceptance contract requires a new goal.
+Search by words: full-text index question_text covers q.text, q.rule and q.probe; run_reason covers r.reason. MATCH (q:Question) SEARCH q IN (FULLTEXT INDEX question_text FOR $words LIMIT 10) SCORE AS score RETURN q.id, q.text, q.id IN $yes AS yes, q.id IN $no AS no, score ORDER BY score DESC. LIMIT is required. A question matches any of the words; the score is BM25 and ranks within one search only. Case is ignored. There is no stemming: test does not match tests, so write test* (wildcard) or markov~ (up to 2 typos). A WHERE after SEARCH filters only the rows the search returned.`;
 
 /** A question's answer as the hub works it out. It is never stored: it comes from the runs and the inputs now. */
 export type State = "yes" | "no" | "failed" | "running" | "pending" | "waiting";

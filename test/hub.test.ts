@@ -266,3 +266,19 @@ test("the hub runs one probe per CPU core by default, and refuses a job count be
   hub = await Hub.open(root, { pollMs: 0, jobs: 3 });
   expect(hub.jobs).toBe(3);
 });
+
+test("a query finds questions by the words of their text, rule and probe, and runs by why they failed", async () => {
+  writeFileSync(join(root, "data.txt"), "4 5 6");
+  const ok = await hub.ask({ text: "Do the Markov predictions beat chance?", rule: "$total > 10", probe: sum, inputs: ["data.txt"] });
+  const crash = await hub.ask({ text: "Does the parser accept the header?", rule: "$x = 1", probe: probe(`raise SystemExit("header parser exploded")\nprint("WITNESS_RESULT", "{}")`) });
+  const search = (index: string, label: string, words: string) =>
+    hub.query(`MATCH (n:${label}) SEARCH n IN (FULLTEXT INDEX ${index} FOR $words LIMIT 5) SCORE AS score RETURN n.id AS id ORDER BY score DESC`, { words }).rows.map((r) => r.id);
+  expect(search("question_text", "Question", "markov")).toEqual([ok.id]);
+  expect(search("question_text", "Question", "predict*")).toEqual([ok.id]); // no stemming: a wildcard reaches predictions
+  expect(search("question_text", "Question", "markof~")).toEqual([ok.id]); // a typo
+  expect(search("question_text", "Question", "WITNESS_OUT")).toEqual([ok.id]); // the probe's text
+  expect(search("run_reason", "Run", "exploded")).toEqual([crash.run]);
+  // Search runs beside the answers now.
+  expect(hub.query("MATCH (q:Question) SEARCH q IN (FULLTEXT INDEX question_text FOR 'header markov' LIMIT 5) SCORE AS s RETURN q.id AS id, q.id IN $yes AS yes ORDER BY id").rows)
+    .toEqual([{ id: ok.id, yes: true }, { id: crash.id, yes: false }].sort((a, b) => a.id.localeCompare(b.id)));
+}, 60_000);

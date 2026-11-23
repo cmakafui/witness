@@ -1,5 +1,6 @@
-// Applies schema.cypher to a store: the graph type, then the constraints.
+// Applies schema.cypher to a store: the graph type, then the constraints. Then the full-text indexes (src/graph.ts).
 import { join } from "node:path";
+import { SEARCH_INDEXES } from "./graph.ts";
 import type { Relate } from "./relate.ts";
 
 const SCHEMA = join(import.meta.dir, "..", "schema.cypher");
@@ -16,7 +17,7 @@ export async function statements(): Promise<string[]> {
     .filter(Boolean);
 }
 
-/** Applies the schema to a new store. */
+/** Applies the schema to a new store, and the indexes that search it. */
 export async function applySchema(db: Relate) {
-  for (const s of await statements()) db.query(s);
+  for (const s of [...(await statements()), ...SEARCH_INDEXES]) db.query(s);
 }
