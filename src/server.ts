@@ -1,5 +1,6 @@
 // One Bun.serve for everything: the web page, MCP for agents, the files runs saved, and the live feed.
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import page from "../page/index.html";
 import type { Hub } from "./hub.ts";
 import { mcp } from "./mcp.ts";
@@ -21,14 +22,7 @@ export function serve(hub: Hub, { port = 4747, hostname = "127.0.0.1" } = {}) {
         used();
         return sameOrigin(req, srv.url) ? handle(req) : new Response("Forbidden: this request did not come from this machine's hub address.", { status: 403 });
       },
-      "/files/:id": (req) => {
-        used();
-        const id = req.params.id;
-        const path = hub.filePath(id);
-        if (!path || !existsSync(path)) return new Response("Not found", { status: 404 });
-        const name = new URL(req.url).searchParams.get("name") ?? id;
-        return new Response(Bun.file(path), { headers: { "Content-Type": Bun.file(name).type, "X-Content-Type-Options": "nosniff" } });
-      },
+      "/files/:id": (req) => (used(), fileResponse(req, hub.filesDir)),
       "/cancel/:id": (req, srv) => {
         used();
         if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
@@ -59,6 +53,15 @@ export function serve(hub: Hub, { port = 4747, hostname = "127.0.0.1" } = {}) {
   });
   hub.on((e) => server.publish("feed", JSON.stringify(e)));
   return Object.assign(server, { activity });
+}
+
+/** A kept file by its SHA-256, typed by the name the page gives it (?name=), for the hub and for replay. */
+export function fileResponse(req: Request & { params: { id: string } }, filesDir: string): Response {
+  const id = req.params.id;
+  const path = join(filesDir, id);
+  if (!/^[0-9a-f]{64}$/.test(id) || !existsSync(path)) return new Response("Not found", { status: 404 });
+  const name = new URL(req.url).searchParams.get("name") ?? id;
+  return new Response(Bun.file(path), { headers: { "Content-Type": Bun.file(name).type, "X-Content-Type-Options": "nosniff" } });
 }
 
 /**

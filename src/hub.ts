@@ -73,7 +73,8 @@ export class Hub {
     readonly root: string,
     private db: Relate,
     private graphDir: string,
-    private filesDir: string,
+    /** Where the hub keeps inputs and saved files, each named by its SHA-256. */
+    readonly filesDir: string,
     private seq: number,
     /** How many probes run at once. More asks wait in line. */
     readonly jobs: number,
@@ -522,11 +523,6 @@ export class Hub {
   /** Finds a kept file: by its hash, by q-…/name (the question's current run), or by r-…/name. */
   look(ref: string): Looked {
     return findFile(ref, this.filesDir, (q) => this.status(q).run, (run) => this.saved(run));
-  }
-
-  /** Where the hub keeps a file, by its SHA-256. Null for anything that is not a file id. */
-  filePath(id: string): string | null {
-    return /^[0-9a-f]{64}$/.test(id) ? join(this.filesDir, id) : null;
   }
 
   /** The whole graph as records, for a page that connects. */

@@ -7,7 +7,7 @@ import { answerParams, GOALS, type Goal, INDEXES, recordedStatuses, type Recorde
 import { findFile, Refusal, snapshot } from "./hub.ts";
 import { readOnlyMcp, type ReadOnlyStore } from "./mcp.ts";
 import { type Param, Relate } from "./relate.ts";
-import { sameOrigin } from "./server.ts";
+import { fileResponse, sameOrigin } from "./server.ts";
 
 export function replay(root: string, { port = 4748, hostname = "127.0.0.1" } = {}) {
   const graphDir = join(root, ".witness", "graph");
@@ -75,13 +75,7 @@ export function replay(root: string, { port = 4748, hostname = "127.0.0.1" } = {
       "/": page,
       "/mcp": (req, srv): Promise<Response> | Response =>
         sameOrigin(req, srv.url) ? handle(req) : new Response("Forbidden: this request did not come from this machine's replay address.", { status: 403 }),
-      "/files/:id": (req) => {
-        const id = req.params.id;
-        const path = join(files, id);
-        if (!/^[0-9a-f]{64}$/.test(id) || !existsSync(path)) return new Response("Not found", { status: 404 });
-        const name = new URL(req.url).searchParams.get("name") ?? id;
-        return new Response(Bun.file(path), { headers: { "Content-Type": Bun.file(name).type, "X-Content-Type-Options": "nosniff" } });
-      },
+      "/files/:id": (req) => fileResponse(req, files),
       "/events": (req, srv) => (srv.upgrade(req) ? undefined : new Response("Expected a WebSocket", { status: 400 })),
     },
     websocket: {

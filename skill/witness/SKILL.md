@@ -30,10 +30,9 @@ Work that stays in `scratch/` is a draft. A long search there leaves nothing for
 
 ## Working with others
 
-Other agents add directions, and a view that does not share your habits. Their work counts when it is in the graph: a claim with a question id can be queried, rerun and built on, and a claim without one is only a story.
+Other agents add directions. Their work counts when it is in the graph: a claim with a question id can be queried, rerun and built on, and a claim without one is only a story.
 
 - **Subagents.** Each takes a direction and its own `asker` name, and uses `ask`, `look` and `query` like you. They share the graph, so a question id and a `q-…/name` path pass everything another agent needs. Start them with the host's native subagent tool: the agent then lives in the same session, and the caller picks its model there. A separate process started from a shell is outside the session. The hub runs a fixed number of probes at a time (one per CPU core unless set; the MCP server's instructions give the number), so more probes than that wait in line.
-- **A second view.** Another model family brings different habits. Its opinion is not an answer. A question that tests what it said is.
 - **Joining live work.** Separate sessions or model families can share one folder and hub with no coordinator. Before you ask, query `$running` (the questions measuring now) and each other asker's latest questions (`ORDER BY q.seq DESC`), so you pick a direction nobody holds. When you build on another session's answer or file, declare its `q-…` id as an input: that edge is how the sessions share work.
 
 ## Asking well

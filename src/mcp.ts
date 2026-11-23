@@ -181,20 +181,15 @@ function readOnlyServer(store: ReadOnlyStore): McpServer {
   return s;
 }
 
-/** Handles one MCP request. */
-export function mcp(hub: Hub) {
-  return async (req: Request): Promise<Response> => {
-    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-    await server(hub).connect(transport);
-    return transport.handleRequest(req);
-  };
-}
+/** Handles each MCP request with a new server from make. */
+const handler = (make: () => McpServer) => async (req: Request): Promise<Response> => {
+  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+  await make().connect(transport);
+  return transport.handleRequest(req);
+};
 
-/** Handles one read-only MCP request (query and look only), for witness replay. */
-export function readOnlyMcp(store: ReadOnlyStore) {
-  return async (req: Request): Promise<Response> => {
-    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-    await readOnlyServer(store).connect(transport);
-    return transport.handleRequest(req);
-  };
-}
+/** MCP for agents: all four tools. */
+export const mcp = (hub: Hub) => handler(() => server(hub));
+
+/** MCP for witness replay: query and look only. */
+export const readOnlyMcp = (store: ReadOnlyStore) => handler(() => readOnlyServer(store));
