@@ -22,7 +22,7 @@ A picture prompts a question; it is not an answer. The next probe measures what 
 ## Steps
 
 1. On a fresh store, start with the task. Use `query` when resuming, joining existing work, or looking for findings to build on.
-2. For a new probe, draft it in `scratch/` and test on a small case (`uv run --script scratch/probe.py`). Try a package first with `uv run --with PACKAGE python -c '…'`. Neither is evidence; keep drafts out of `.witness/`.
+2. For a new probe, draft it in `scratch/<asker>/` (`uv run --script scratch/<asker>/probe.py`) so concurrent lanes and separate sessions do not overwrite each other's drafts. Try a package first with `uv run --with PACKAGE python -c '…'`. Neither is evidence; keep drafts out of `.witness/`.
 3. Call `ask` with `text`, `rule`, `inputs`, and `asker` (a short, stable 1–2 word lane name reused across questions in one direction of work, not a per-question title). Supply `probe` for a new script or `probe_ref: "q-…"` to reuse the exact script from an existing question. Save candidate outputs and renders in `$WITNESS_OUT` (`q-…/name`) rather than overwriting a shared workspace file or citing `scratch/` (acceptance questions refuse `scratch/` inputs). Declare bare `q-…` in `inputs` to depend on a prior question's recorded answer and measurements (mounted as `q-….json`), e.g. to wire negative controls or exclusions into the DAG without dummy files.
 4. Read the answer, measurements, and saved files. `look` at the renders. Hand other agents question ids and `q-…/name` paths, not summaries.
 
@@ -35,6 +35,7 @@ Other agents add directions, and a view that does not share your habits. Their w
 - **Subagents.** Each takes a direction and its own `asker` name, and uses `ask`, `look` and `query` like you. They share the graph, so a question id and a `q-…/name` path pass everything another agent needs. Start them with the host's native subagent tool: the agent then lives in the same session, and the caller picks its model there. A separate process started from a shell is outside the session. The hub runs four probes at a time, so more agents than that wait in line.
 - **An advisor.** An agent that reads the graph and asks what each answer rests on sees what the workers' habits hide: a rule that cannot come out false, an assumption nobody measured, a form nobody tried. Its questions go in the graph under its own `asker`. A stronger model buys a sharper audit.
 - **A second view.** Another model family brings different habits. Its opinion is not an answer. A question that tests what it said is.
+- **Joining live work.** Separate sessions or model families can share one folder and hub with no coordinator. Check lane counts, `$hot`, and unconsumed saved files first so you pick an unoccupied direction or build on an existing artifact instead of duplicating live work.
 
 ## Asking well
 
