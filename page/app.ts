@@ -15,7 +15,7 @@ import mediumZoom from "medium-zoom";
 import Prism from "prismjs";
 import "prismjs/components/prism-json";
 import "prismjs/components/prism-python";
-import { ALL_NODES, ALL_RELS, answerParams, clauses, replacedIds, type Goal, GOALS, type GNode, type GRel, measurements, named, recordedStatuses, type RecordedRun, type State, type Status, statements, INDEXES } from "../src/graph.ts";
+import { ALL_NODES, ALL_RELS, answerParams, clauses, replacedIds, type Goal, GOALS, type GNode, type GRel, measurements, recordedStatuses, type RecordedRun, type State, type Status, statements, INDEXES } from "../src/graph.ts";
 import { register, webTools } from "./tools.ts";
 
 type Msg =
@@ -698,7 +698,29 @@ function details(qid: string) {
 
 /** Display recorded values without rounding, inferred units or invented field names. */
 function show(v: unknown): string {
+  // JSON with a space after each comma and colon, so a long value wraps between its parts, not inside a number.
+  if (Array.isArray(v)) return `[${v.map(show).join(", ")}]`;
+  if (v && typeof v === "object") return `{${Object.entries(v).map(([k, x]) => `${JSON.stringify(k)}: ${show(x)}`).join(", ")}}`;
   return JSON.stringify(v);
+}
+
+/** A measured value, set large when it is short and small on its own line when it is long. */
+function value(v: unknown) {
+  const text = show(v);
+  return h("code", { class: text.length > 24 || (v !== null && typeof v === "object") ? "value long" : "value" }, text);
+}
+
+/** The values a clause reads: $name, or a path into it such as $best_cv.masked_key. */
+function readsOf(clause: string, m: Record<string, unknown>): [string, unknown][] {
+  const out: [string, unknown][] = [];
+  for (const path of new Set([...clause.matchAll(/\$([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/g)].map((x) => x[1]!))) {
+    const [root, ...keys] = path.split(".");
+    if (root === "results" || !(root! in m)) continue;
+    let v: unknown = m[root!];
+    for (const k of keys) v = v && typeof v === "object" ? (v as Record<string, unknown>)[k] : undefined;
+    if (v !== undefined) out.push([path, v]);
+  }
+  return out;
 }
 
 /**
@@ -720,14 +742,14 @@ function ruleCheck(rule: string, results: unknown[], ran: boolean) {
       } catch (e) {
         verdict = { word: /ParameterMissing/.test((e as Error).message) ? "not measured" : "cannot be checked", state: "failed" };
       }
-    const values = named(clause).filter((n) => n !== "results" && n in m);
-    for (const n of values) shownNames.add(n);
+    const values = readsOf(clause, m);
+    for (const [path] of values) if (!path.includes(".")) shownNames.add(path);
     return h(
       "li",
       { class: "clause", style: `--c: ${colour(verdict.state)}` },
       h("code", {}, clause),
       h("span", { class: "mark" }, verdict.word),
-      values.length ? h("div", { class: "values" }, ...values.map((n) => h("span", {}, h("small", {}, n), show(m[n])))) : null,
+      values.length ? h("div", { class: "values" }, ...values.map(([path, v]) => h("span", {}, h("small", {}, path), value(v)))) : null,
     );
   });
   return { element: h("div", { class: "rule-check" }, h("h3", {}, "Rule"), h("ul", { class: "clauses" }, ...rows)), shownNames };
@@ -738,7 +760,7 @@ function measurementTable(entries: [string, unknown][], multipleRecords: boolean
     "table",
     { class: "measurements", "aria-label": "Measurements" },
     multipleRecords ? h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", {}, "Last value"))) : null,
-    h("tbody", {}, ...entries.map(([key, value]) => h("tr", {}, h("th", { scope: "row" }, key), h("td", {}, h("code", {}, show(value)))))),
+    h("tbody", {}, ...entries.map(([key, v]) => h("tr", {}, h("th", { scope: "row" }, key), h("td", {}, value(v))))),
   );
 }
 

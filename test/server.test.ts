@@ -258,7 +258,7 @@ test("measurement tables retain exact values and every result record", async () 
   }
   await view.evaluate(`window.witness.select('${a.id}')`);
   expect(await view.evaluate("[...document.querySelectorAll('#question .measurements tbody tr')].map(r => [r.querySelector('th').textContent, r.querySelector('td').textContent])"))
-    .toEqual([["x", "1.98765432109876"], ["values", "[1,null,3]"], ["label", '"last"']]);
+    .toEqual([["x", "1.98765432109876"], ["values", "[1, null, 3]"], ["label", '"last"']]);
   expect(await view.evaluate("document.querySelector('#question .measurements thead').textContent")).toBe("Last value");
   const records = (await view.evaluate("document.querySelector('#question .raw-measurements pre').textContent") as string).split("\n").map((line) => JSON.parse(line));
   expect(records).toEqual([{ x: 1.23456789012345, values: [1, null, 3], label: "first" }, { x: 1.98765432109876, label: "last" }]);
