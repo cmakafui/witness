@@ -1,6 +1,6 @@
 ---
 name: witness
-description: Use Witness to record findings as tested answers, not notes. Ask a yes/no question with a rule and a probe. The probe is a uv Python script that measures. The rule is a Cypher expression that decides yes or no from the measurements. Witness runs the probe on its declared files only, and runs the question again when a file changes. All agents in the workspace share the answers. Use when the witness MCP tools (goal, ask, query, look) are available, before you say that something works or does not work, and before you use the result of another agent.
+description: Use Witness to record findings as tested answers, not notes. Ask a yes/no question with a rule and a probe. The probe is a uv Python script that measures. The rule is a Cypher expression that decides yes or no from the measurements. Witness runs the probe on its declared files only, and runs the question again when a file changes. All agents in the workspace share the answers. Work in a closed loop: measure, render, look, and let each answer choose the next question. Use when the witness MCP tools (goal, ask, query, look) are available, before you say that something works or does not work, and before you use the result of another agent.
 ---
 
 # Witness
