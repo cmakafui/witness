@@ -88,7 +88,7 @@ RETURN q.id, q.asker, q.id + '/' + s.name AS file, r.answer
 ORDER BY q.seq DESC LIMIT 25
 ```
 
-Relate Cypher gotchas: pass `$vars` via `params` (missing params error); `WITH` drops every variable it does not list, so list each one you use later (`WITH q, r, count(f) AS files`); bound traversals (`*0..5`) and `LIMIT 50`; no Neo4j/APOC procedures. Use `$current` for current runs and `WHERE q.id IN $failed AND NOT q.id IN $replaced` for open failures. Read `q.probe` from the graph, not `scratch/`.
+Relate Cypher gotchas: pass `$vars` via `params` (missing params error); `WITH` drops every variable it does not list, so list each one you use later (`WITH q, r, count(f) AS files`); bound traversals (`*0..5`) and `LIMIT 50`; no Neo4j/APOC procedures; `created` and `started` are integer milliseconds, so compare them as integers and do not wrap them in `datetime()`. Use `$current` for current runs and `WHERE q.id IN $failed AND NOT q.id IN $replaced` for open failures. Read `q.probe` from the graph, not `scratch/`.
 
 The schema writes `{name}` for a property a relationship has. In a query, give it a value (`-[:NEEDS {name: 'q-…/file'}]->`) or leave it out. `NEEDS` has one edge per file, so a question that reads two files from one producer has two edges to it: walk `NEEDS` with `DISTINCT`.
 
