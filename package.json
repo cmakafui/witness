@@ -31,10 +31,16 @@
     "@modelcontextprotocol/sdk": "1.32.2",
     "@relate/relate": "1.2.0",
     "@relate/relate-wasm": "1.2.0",
+    "diff": "^9.0.0",
+    "medium-zoom": "^1.1.2",
+    "motion": "^14.14.0",
+    "prismjs": "^1.30.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/diff": "^7.0.2",
+    "@types/prismjs": "^1.26.6"
   },
   "peerDependencies": {
     "typescript": "^7"

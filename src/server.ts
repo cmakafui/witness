@@ -29,6 +29,16 @@ export function serve(hub: Hub, { port = 4747, hostname = "127.0.0.1" } = {}) {
         const name = new URL(req.url).searchParams.get("name") ?? id;
         return new Response(Bun.file(path), { headers: { "Content-Type": Bun.file(name).type, "X-Content-Type-Options": "nosniff" } });
       },
+      "/cancel/:id": (req, srv) => {
+        used();
+        if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+        if (!sameOrigin(req, srv.url)) return new Response("Forbidden: this request did not come from this machine's hub address.", { status: 403 });
+        try {
+          return Response.json({ id: req.params.id, cancelled: hub.cancel(req.params.id) });
+        } catch (e) {
+          return Response.json({ error: (e as Error).message }, { status: 404 });
+        }
+      },
       "/health": () => (used(), Response.json({ root: hub.root, pid: process.pid })),
       "/events": (req, srv) => (srv.upgrade(req) ? undefined : new Response("Expected a WebSocket", { status: 400 })),
     },

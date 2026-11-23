@@ -11,9 +11,10 @@ import { VERSION } from "./version.ts";
 
 const USAGE = `witness ${VERSION}: tested answers for a team of agents, in a Relate graph.
 
-  witness setup          once: link the skill into Claude Code, add the MCP server to Claude Code, Codex, Pi and agy
-  witness open [DIR]     open the workspace's graph in the browser (starts its hub when none runs)
-  witness replay [DIR]   inspect a recorded session in the browser, from its store alone
+  witness setup              once: link the skill into Claude Code, add the MCP server to Claude Code, Codex, Pi and agy
+  witness open [DIR]         open the workspace's graph in the browser (starts its hub when none runs)
+  witness replay [DIR]       inspect a recorded session in the browser, from its store alone
+  witness cancel Q-ID [DIR]  cancel a running probe (SIGTERM, then SIGKILL after 3 s)
 
 DIR is the workspace (default: this folder). Its store is DIR/.witness.
 A hub exits by itself after ${600 / 60} minutes without use.
@@ -34,7 +35,8 @@ const { values, positionals } = parseArgs({
   },
   allowPositionals: true,
 });
-const [command, dir] = positionals;
+const [command, arg1, arg2] = positionals;
+const dir = command === "cancel" ? arg2 : arg1;
 const root = resolve(values.root ?? dir ?? ".");
 
 /** Opens a page in the default browser. */
@@ -60,6 +62,25 @@ switch (values.version ? "version" : values.help ? "help" : command) {
     const server = replay(root, { port: Number(values.port ?? 4748), hostname: values.host });
     console.log(`Witness replay of ${root}\n  page: ${server.url.href}\n  choose a goal or a graph question to inspect its rule and measurements`);
     browse(server.url);
+    break;
+  }
+  case "cancel": {
+    if (!arg1) {
+      console.error("Usage: witness cancel <q-id> [DIR]");
+      process.exit(2);
+    }
+    const up = await running(root);
+    if (!up) {
+      console.error(`No hub is running for ${root}.`);
+      process.exit(1);
+    }
+    const res = await fetch(new URL(`/cancel/${encodeURIComponent(arg1)}`, up.url), { method: "POST" });
+    const body = (await res.json()) as { cancelled?: boolean; error?: string };
+    if (!res.ok) {
+      console.error(body.error ?? `Failed (${res.status}).`);
+      process.exit(1);
+    }
+    console.log(body.cancelled ? `Cancelled ${arg1}.` : `${arg1} is not running.`);
     break;
   }
   case "mcp":

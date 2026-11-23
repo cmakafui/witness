@@ -13,7 +13,7 @@ CREATE GRAPH TYPE witness AS {
                   inputs :: LIST<STRING NOT NULL> NOT NULL, timeout :: INTEGER NOT NULL,
                   asker :: STRING, seq :: INTEGER NOT NULL, created :: INTEGER}),
   (r:Run => {id :: STRING NOT NULL, key :: STRING NOT NULL, seq :: INTEGER NOT NULL, started :: INTEGER NOT NULL, ms :: INTEGER NOT NULL,
-             answer :: STRING NOT NULL, reason :: STRING, measured :: BOOLEAN, results :: STRING NOT NULL}),
+             answer :: STRING NOT NULL, reason :: STRING, measured :: BOOLEAN, results :: STRING NOT NULL, last :: STRING}),
   (f:File => {id :: STRING NOT NULL}),
 
   (g)-[:ACCEPTED_BY]->(q),

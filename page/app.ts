@@ -10,6 +10,12 @@
 // glyph and link, and a render changes only the attributes that differ.
 import init, { RelateDb } from "@relate/relate-wasm";
 import wasmUrl from "@relate/relate-wasm/relate_bg.wasm" with { type: "file" };
+import { diffLines } from "diff";
+import mediumZoom from "medium-zoom";
+import { spring } from "motion";
+import Prism from "prismjs";
+import "prismjs/components/prism-json";
+import "prismjs/components/prism-python";
 import { ALL_NODES, ALL_RELS, answerParams, clauses, replacedIds, type Goal, GOALS, type GNode, type GRel, measurements, named, recordedStatuses, type RecordedRun, type State, type Status, statements, UNIQUE_IDS } from "../src/graph.ts";
 import { register, webTools } from "./tools.ts";
 
@@ -178,6 +184,23 @@ const svg = s("svg", { role: "group", "aria-label": "Questions by direction of w
 const railLayer = s("g"), linkLayer = s("g"), glyphLayer = s("g");
 svg.append(railLayer, linkLayer, glyphLayer);
 scroller.append(svg);
+
+let hasRenderedOnce = false;
+const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Motion's spring() generates "<ms>ms linear(...)" for zero-mutation native WAAPI springs.
+const springSpec = String(spring(0.42, 0.45));
+const springSpace = springSpec.indexOf(" ");
+const SPRING_MS = Number.parseFloat(springSpec.slice(0, springSpace)) || 550;
+const SPRING_EASE = springSpec.slice(springSpace + 1);
+
+/** Crisp WAAPI spring pop (zero DOM attribute mutations) for live node arrivals and verdict transitions. */
+function springPop(target: SVGElement, fromScale: number, fadeIn = false) {
+  if (reduceMotion() || typeof target.animate !== "function") return;
+  target.animate(
+    fadeIn ? { transform: [`scale(${fromScale})`, "scale(1)"], opacity: [0, 1] } : { transform: [`scale(${fromScale})`, "scale(1)"] },
+    { duration: SPRING_MS, easing: SPRING_EASE },
+  );
+}
 /** What is drawn now, and where each question was placed: lane index and column. Both only grow. */
 const glyphEls = new Map<string, SVGElement>();
 const linkEls = new Map<string, SVGElement>();
@@ -317,6 +340,7 @@ function render() {
     const p = { x: PAD + at.col * STEP, y: TOP + lane * (at.lane + 0.5), lane: at.lane };
     place.set(id, p);
     let g = glyphEls.get(id);
+    const isFresh = !g && hasRenderedOnce;
     if (!g) {
       g = s(
         "g",
@@ -325,7 +349,7 @@ function render() {
         s("circle", { class: "hit", r: 18 }),
         s("circle", { class: "hot-halo", r: 14.5, opacity: 0 }),
         s("circle", { class: "ring hover hover-ring", r: 16.5 }),
-        s("g"),
+        s("g", { class: "glyph-body" }),
         s("circle", { class: "ring", r: 16.5 }),
       );
       glyphEls.set(id, g);
@@ -348,8 +372,11 @@ function render() {
     // The glyph itself changes only with the answer or the acceptance binding.
     const shape = `${state}${accepts ? " accepts" : ""}`;
     if (g.dataset.shape !== shape) {
+      const hadShape = g.dataset.shape !== undefined;
       g.dataset.shape = shape;
       body!.replaceChildren(...(accepts ? [s("circle", { class: "accept-ring", r: 12.5, style: `--c: ${colour(state)}` }), glyph(state, 6.5)] : [glyph(state, 8.5)]));
+      if (isFresh) springPop(body!, 0.12, true);
+      else if (hadShape && hasRenderedOnce) springPop(body!, 0.52);
     }
   }
 
@@ -359,6 +386,7 @@ function render() {
     if (!from || !to) continue;
     const id = linkId(l);
     let path = linkEls.get(id);
+    const isFreshLink = !path && hasRenderedOnce;
     if (!path) {
       const files = nodes.get(l.source)!.inputs
         .filter((i) => i === l.target || i.startsWith(`${l.target}/`))
@@ -371,7 +399,10 @@ function render() {
     else if (path.hasAttribute("display")) path.removeAttribute("display");
     put(path, "d", curve(from, to, lane));
     put(path, "class", `link needs${highlight ? (highlight.links.has(id) ? " lit" : " dim") : ""}`);
+    if (isFreshLink && !reduceMotion() && typeof path.animate === "function")
+      path.animate({ opacity: [0, 0.26] }, { duration: 320, easing: "ease-out" });
   }
+  hasRenderedOnce = true;
 }
 
 /** An artifact dependency. Within one lane it arcs above the questions between. */
@@ -719,11 +750,49 @@ function measurementTable(entries: [string, unknown][], multipleRecords: boolean
   );
 }
 
+const imageZoom = mediumZoom({ margin: 24, background: "var(--paper)" });
+
+function highlightedPre(source: string, lang: "python" | "json"): HTMLElement {
+  const code = h("code", { class: `language-${lang}` });
+  const grammar = Prism.languages[lang];
+  if (grammar) code.innerHTML = Prism.highlight(source, grammar, lang);
+  else code.textContent = source;
+  return h("pre", { class: "code-view" }, code);
+}
+
+/** Compact unified diff of two probes when a question replaces a crashed one. */
+function probeDiffEl(oldId: string, oldProbe: string, newProbe: string): HTMLDetailsElement | null {
+  const parts = diffLines(oldProbe, newProbe);
+  if (!parts.some((p) => p.added || p.removed)) return null;
+  const rows: HTMLElement[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i]!;
+    const lines = p.value.replace(/\n$/, "").split("\n");
+    if (p.added || p.removed) {
+      const cls = p.added ? "diff-add" : "diff-del";
+      const prefix = p.added ? "+ " : "- ";
+      for (const l of lines) rows.push(h("span", { class: cls }, prefix + l + "\n"));
+    } else {
+      const prevChanged = i > 0 && (parts[i - 1]!.added || parts[i - 1]!.removed);
+      const nextChanged = i < parts.length - 1 && (parts[i + 1]!.added || parts[i + 1]!.removed);
+      if (lines.length <= 5) {
+        for (const l of lines) rows.push(h("span", { class: "diff-ctx" }, "  " + l + "\n"));
+      } else {
+        if (prevChanged) for (const l of lines.slice(0, 2)) rows.push(h("span", { class: "diff-ctx" }, "  " + l + "\n"));
+        rows.push(h("span", { class: "diff-skip" }, "  …\n"));
+        if (nextChanged) for (const l of lines.slice(-2)) rows.push(h("span", { class: "diff-ctx" }, "  " + l + "\n"));
+      }
+    }
+  }
+  return h("details", { class: "probe-diff" }, h("summary", {}, `Probe diff vs ${oldId}`), h("pre", { class: "diff-view" }, ...rows)) as HTMLDetailsElement;
+}
+
 function showQuestion(qid: string) {
   const d = details(qid);
   if (!d) return;
   const panel = document.getElementById("question")!;
   const keepProbeOpen = panel.querySelector<HTMLDetailsElement>("details.probe")?.open ?? false;
+  const keepDiffOpen = panel.querySelector<HTMLDetailsElement>("details.probe-diff")?.open ?? false;
   const keepRunsOpen = panel.querySelector<HTMLDetailsElement>("details.runs-disclosure")?.open ?? false;
   const st = d.status;
   const pictures = d.saved.filter((f) => IMAGE.test(f.name));
@@ -734,8 +803,17 @@ function showQuestion(qid: string) {
   const latest = Object.assign({}, ...(d.results as Record<string, unknown>[])) as Record<string, unknown>;
   // Measurements already printed inside Rule clauses are not repeated in a second table right below.
   const extraEntries = Object.entries(latest).filter(([k]) => !shownNames.has(k));
-  const probeDetails = h("details", { class: "probe" }, h("summary", {}, "Probe"), h("pre", {}, d.probe)) as HTMLDetailsElement;
+  const probeDetails = h("details", { class: "probe" }, h("summary", {}, "Probe"), highlightedPre(d.probe, "python")) as HTMLDetailsElement;
   probeDetails.open = keepProbeOpen;
+  let diffDetails: HTMLDetailsElement | null = null;
+  if (d.replaces.length) {
+    const oldId = d.replaces[0]!;
+    const oldProbe = execute("MATCH (q:Question {id: $id}) RETURN q.probe AS probe", { id: oldId }).rows[0]?.probe;
+    if (typeof oldProbe === "string") {
+      diffDetails = probeDiffEl(oldId, oldProbe, d.probe);
+      if (diffDetails) diffDetails.open = keepDiffOpen;
+    }
+  }
   const runsCount = d.runs.length;
   const runsDetails = runsCount
     ? (h(
@@ -761,6 +839,24 @@ function showQuestion(qid: string) {
     : null;
   if (runsDetails) runsDetails.open = keepRunsOpen;
 
+  const cancelBtn =
+    atSeq === null && st?.state === "running"
+      ? (() => {
+          const btn = h("button", { class: "button cancel", type: "button" }, "Cancel") as HTMLButtonElement;
+          btn.onclick = async () => {
+            btn.disabled = true;
+            btn.textContent = "Cancelling…";
+            try {
+              await fetch(`/cancel/${encodeURIComponent(qid)}`, { method: "POST" });
+            } catch {
+              btn.disabled = false;
+              btn.textContent = "Cancel";
+            }
+          };
+          return btn;
+        })()
+      : null;
+
   const parts: (HTMLElement | null)[] = [
     h(
       "div",
@@ -769,6 +865,7 @@ function showQuestion(qid: string) {
       st?.was ? h("span", {}, `was ${st.was}`) : null,
       d.accepts.length ? h("span", {}, "acceptance") : null,
       h("span", { class: "id" }, qid),
+      cancelBtn,
     ),
     h("h2", {}, d.text),
     d.asker ? h("p", { class: "provenance" }, "Asked by ", h("span", {}, d.asker)) : null,
@@ -781,7 +878,7 @@ function showQuestion(qid: string) {
       ? [h("h3", {}, "Measurements"), measurementTable(extraEntries, d.results.length > 1)]
       : []),
     ...(d.results.length > 1
-      ? [h("details", { class: "raw-measurements" }, h("summary", {}, "All measurements"), h("pre", {}, d.results.map((x) => JSON.stringify(x)).join("\n")))]
+      ? [h("details", { class: "raw-measurements" }, h("summary", {}, "All measurements"), highlightedPre(d.results.map((x) => JSON.stringify(x)).join("\n"), "json"))]
       : []),
     ...(d.inputs.length || d.saved.length
       ? [
@@ -805,9 +902,12 @@ function showQuestion(qid: string) {
     ...list("Used by", d.usedBy),
     ...list("Replaces", d.replaces),
     ...list("Replaced by", d.replacedBy),
-    h("div", { class: "disclosures" }, probeDetails, runsDetails),
+    h("div", { class: "disclosures" }, diffDetails, probeDetails, runsDetails),
   ];
+  imageZoom.detach();
   panel.replaceChildren(...parts.filter((x) => x !== null));
+  const imgs = panel.querySelectorAll<HTMLImageElement>("figure img");
+  if (imgs.length) imageZoom.attach(imgs);
 }
 
 function select(qid: string, previous?: QuestionVisit) {

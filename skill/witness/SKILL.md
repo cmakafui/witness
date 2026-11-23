@@ -63,11 +63,11 @@ Start from [assets/probe.py](assets/probe.py).
 - **Probe:** PEP 723 `uv` script running in an isolated temp folder with only its declared `inputs`. Print `WITNESS_RESULT` + one JSON object per measurement (cast numpy scalars with `int()`/`float()`). Save outputs for other questions in `$WITNESS_OUT`. Never act (send/deploy) in a probe.
 - **Dependencies:** If the probe installs packages, set a fixed `[tool.uv] exclude-newer = "YYYY-MM-DDTHH:MM:SSZ"` date (never a relative date).
 - **Crashes & noise:** Stop with an error if measurement did not occur—a crash gives `failed`, not `no`, and leaves files unreadable. Fix a crashed probe with `replaces: "q-…"`. For noisy quantities, loop inside one probe and judge `$results`.
-- **Rule:** One Cypher expression over `$name` (last value) and `$results` (all records): e.g. `$mean > 10` or `all(r IN $results WHERE r.error <= 0.3)`. Missing fields give `null` (`failed`), not `no`—handle with `coalesce(...)`.
+- **Rule:** One Cypher expression (`=` for equality, not `==`) over `$name` (last value) and `$results` (all records): e.g. `$mean > 10` or `all(r IN $results WHERE r.error <= 0.3)`. Missing fields give `null` (`failed`), not `no`—handle with `coalesce(...)`.
 
 ## Querying and reporting
 
-When resuming a large graph, zoom out first: query goals, lane counts (`q.asker`), `$hot` (live occupancy, not quality—where agents are working now, so you can coordinate or work elsewhere; evaporates with a 5-minute half-life), and the latest 15–20 questions (`ORDER BY q.seq DESC LIMIT 15`) with only `id`, `asker`, `state`, and `text`. Pull `r.results`, `SAVED` files, or `q.probe` only for the specific question ids you need—never in bulk.
+When resuming a large graph, zoom out first: query goals, lane counts (`q.asker`), `$hot[0..5]` (live occupancy—where agents are running, looking, or building now, ordered hottest-first; evaporates with a 5-minute half-life), unconsumed saved files, and the latest 15–20 questions (`ORDER BY q.seq DESC LIMIT 15`) with only `id`, `asker`, `state`, and `text`. Prefer `r.last` (final measurement object) over `r.results` when scanning multi-record runs; pull `r.results`, `SAVED` files, or `q.probe` only for the specific question ids you need—never in bulk.
 
 ```cypher
 MATCH (q:Question)
@@ -76,6 +76,16 @@ RETURN q.asker AS lane, count(q) AS total,
        sum(CASE WHEN q.id IN $no THEN 1 ELSE 0 END) AS no,
        sum(CASE WHEN q.id IN $running THEN 1 ELSE 0 END) AS running
 ORDER BY total DESC
+```
+
+Unconsumed saved files from current runs (stepping stones nobody has wired a `NEEDS` edge to yet):
+
+```cypher
+MATCH (q:Question)<-[:OF]-(r:Run)-[s:SAVED]->(:File)
+WHERE r.id IN $current
+  AND NOT EXISTS { MATCH (:Question)-[:NEEDS {name: q.id + '/' + s.name}]->(q) }
+RETURN q.id, q.asker, q.id + '/' + s.name AS file, r.answer
+ORDER BY q.seq DESC LIMIT 25
 ```
 
 Relate Cypher gotchas: pass `$vars` via `params` (missing params error); `WITH` drops every variable it does not list, so list each one you use later (`WITH q, r, count(f) AS files`); bound traversals (`*0..5`) and `LIMIT 50`; no Neo4j/APOC procedures. Use `$current` for current runs and `WHERE q.id IN $failed AND NOT q.id IN $replaced` for open failures. Read `q.probe` from the graph, not `scratch/`.

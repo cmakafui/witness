@@ -14,6 +14,7 @@ export type ProbeRun = {
   probe: string; // the Python source
   inputs: { name: string; path?: string; content?: Uint8Array }[]; // name: relative path in work/; path or content: bytes
   timeoutS: number;
+  signal?: AbortSignal; // optional cancellation signal: SIGTERM, then SIGKILL after 3 s
 };
 
 export type ProbeOutcome = {
@@ -109,14 +110,27 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
     stderr: "pipe",
     detached: process.platform !== "win32",
   });
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
+  const killGroup = (sig: "SIGTERM" | "SIGKILL") => {
     if (process.platform === "win32")
       Bun.spawn(["taskkill", "/PID", String(proc.pid), "/T", "/F"], { stdout: "ignore", stderr: "ignore" });
     else {
-      try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill("SIGKILL"); }
+      try { process.kill(-proc.pid, sig); } catch { proc.kill(sig); }
     }
+  };
+  let timedOut = false;
+  let cancelled = false;
+  let killTimer: Timer | undefined;
+  const onAbort = () => {
+    if (cancelled || timedOut) return;
+    cancelled = true;
+    killGroup("SIGTERM");
+    killTimer = setTimeout(() => killGroup("SIGKILL"), 3000);
+  };
+  if (run.signal?.aborted) onAbort();
+  else run.signal?.addEventListener("abort", onAbort, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    killGroup("SIGKILL");
   }, run.timeoutS * 1000);
   const results: Record<string, unknown>[] = [];
   let badResult: string | null = null;
@@ -160,11 +174,14 @@ export async function runProbe(run: ProbeRun): Promise<ProbeOutcome> {
     code = await proc.exited;
   } finally {
     clearTimeout(timer);
+    clearTimeout(killTimer);
+    run.signal?.removeEventListener("abort", onAbort);
   }
 
   const outputs = files(out).map((name) => ({ name, path: join(out, name) }));
   const base = { results, outputs };
   const failed = (reason: string) => done({ ...base, failed: reason + undeclared(reads) });
+  if (cancelled) return failed("cancelled");
   if (timedOut) return failed(`timed out after ${run.timeoutS} s`);
   if (proc.signalCode) return failed(`stopped by ${proc.signalCode}`);
   if (code !== 0) return failed(`exit code ${code}:\n${tail(diagnostic)}`);

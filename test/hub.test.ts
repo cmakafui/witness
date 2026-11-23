@@ -234,3 +234,51 @@ test("live pheromone ($hot) tracks look, NEEDS, probe_ref and ask, and evaporate
   // Heat is never stored as a property in Relate.
   expect(hub.query("MATCH (q:Question) RETURN q.heat AS heat").rows.every((r) => r.heat === null)).toBe(true);
 });
+
+test("multi-record runs store r.last as the final measurement JSON, and unconsumed saved files query works", async () => {
+  const a = await hub.ask({
+    text: "Stream two records and save a file.",
+    rule: "$done = true",
+    probe: `# /// script\n# dependencies = []\n# ///\nimport json, os\nprint("WITNESS_RESULT", json.dumps({"shard": 0, "score": 1}))\nprint("WITNESS_RESULT", json.dumps({"shard": 1, "score": 2, "done": True}))\nopen(os.path.join(os.environ["WITNESS_OUT"], "cand.json"), "w").write("{}")\n`,
+  });
+  expect(a.state).toBe("yes");
+  const row = hub.query("MATCH (r:Run {id: $run}) RETURN r.last AS last", { run: a.run! }).rows[0]!;
+  expect(JSON.parse(String(row.last))).toEqual({ shard: 1, score: 2, done: true });
+
+  const unconsumed = () =>
+    hub.query(
+      `MATCH (q:Question)<-[:OF]-(r:Run)-[s:SAVED]->(:File)
+       WHERE r.id IN $current
+         AND NOT EXISTS { MATCH (:Question)-[:NEEDS {name: q.id + '/' + s.name}]->(q) }
+       RETURN q.id + '/' + s.name AS file`,
+    ).rows.map((r) => r.file);
+  expect(unconsumed()).toContain(`${a.id}/cand.json`);
+
+  await hub.ask({
+    text: "Consume cand.json.",
+    rule: "$ok = true",
+    inputs: [`${a.id}/cand.json`],
+    probe: `# /// script\n# dependencies = []\n# ///\nimport json\nassert open("${a.id}/cand.json").read() == "{}"\nprint("WITNESS_RESULT", json.dumps({"ok": True}))\n`,
+  });
+  expect(unconsumed()).not.toContain(`${a.id}/cand.json`);
+});
+
+test("cancel() stops a running probe cleanly, keeps it at the top of $hot while running, and allows retry", async () => {
+  const slow = await hub.ask({
+    text: "Wait briefly unless cancelled.",
+    rule: "$ok = true",
+    waitS: 0,
+    probe: `# /// script\n# dependencies = []\n# ///\nimport json, time\ntime.sleep(10)\nprint("WITNESS_RESULT", json.dumps({"ok": True}))\n`,
+  });
+  expect(slow.state).toBe("running");
+  const hotWhileRunning = hub.query("RETURN $hot AS hot").rows[0]!.hot as string[];
+  expect(hotWhileRunning[0]).toBe(slow.id);
+
+  expect(hub.cancel(slow.id)).toBe(true);
+  await hub.idle();
+  const after = hub.status(slow.id);
+  expect(after.state).toBe("failed");
+  expect(after.reason).toContain("cancelled");
+  // Cancelling a non-running question returns false.
+  expect(hub.cancel(slow.id)).toBe(false);
+});

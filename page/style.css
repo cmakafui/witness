@@ -82,6 +82,9 @@ h1 { font-size: 14px; font-weight: 700; margin: 0; flex: none; }
 .button.primary { min-width: 88px; }
 .button.quiet { border-color: transparent; background: none; color: var(--muted); padding: 6px 4px; }
 .button.quiet:hover { color: var(--ink); }
+.button.cancel { margin-left: auto; padding: 3px 10px; font-size: 12px; color: var(--no); border-color: var(--line); }
+.button.cancel:hover:not(:disabled) { border-color: var(--no); }
+.button.cancel:disabled { opacity: 0.55; cursor: default; }
 
 /* The goal reads as the page's title; the slider steps through recorded order. */
 #goal-picker { flex: 1; min-width: 0; display: flex; padding-left: 20px; border-left: 1px solid var(--line); height: 24px; align-items: center; }
@@ -169,27 +172,38 @@ main.sidebar-collapsed aside { visibility: hidden; }
 .lanes svg { display: block; }
 .rail { stroke: var(--line); stroke-width: 1; opacity: 0.7; }
 
-.link { fill: none; stroke-width: 1.5; }
-.link.needs { stroke: var(--muted); opacity: 0.4; }
-.link.dim { opacity: 0.12; }
-.link.lit { opacity: 0.9; stroke: var(--ink); stroke-width: 1.75; }
+.link { fill: none; stroke-width: 1.5; transition: opacity 220ms ease, stroke 220ms ease, stroke-width 220ms ease; }
+.link.needs { stroke: var(--muted); opacity: 0.26; }
+.link.dim { opacity: 0.1; }
+.link.lit { opacity: 0.92; stroke: var(--ink); stroke-width: 1.75; }
 
-.q { cursor: pointer; outline: none; }
+.q { cursor: pointer; outline: none; transition: opacity 220ms ease; }
 .q .hit { fill: transparent; }
 .q.dim { opacity: 0.3; }
 .q:focus-visible .hit { stroke: var(--accent); stroke-width: 2; }
-.ring { fill: none; stroke-width: 1.5; pointer-events: none; }
-.hot-halo { fill: var(--running); pointer-events: none; }
+.glyph-body { transform-origin: 0 0; }
+.ring { fill: none; stroke-width: 1.5; pointer-events: none; transition: opacity 180ms ease, stroke 180ms ease; }
+.hot-halo { fill: var(--running); pointer-events: none; transition: opacity 480ms ease, r 480ms ease; }
 .ring.selected { stroke: var(--ink); }
 .ring.hover { stroke: var(--muted); stroke-width: 1.5; }
 .ring.marked { stroke: var(--accent); }
-.accept-ring { fill: var(--paper); stroke: var(--c); stroke-width: 2; }
+.accept-ring { fill: var(--paper); stroke: var(--c); stroke-width: 2; transition: stroke 220ms ease; }
 
 /* A question's glyph: filled for an answer, hollow without one, a slashed ring for failed. */
-.glyph { fill: var(--c); stroke: none; }
+.glyph { fill: var(--c); stroke: none; transition: fill 220ms ease, stroke 220ms ease; }
 .glyph.hollow { fill: var(--surface); stroke: var(--c); stroke-width: 2; }
 .glyph.pending, .glyph.waiting { stroke-dasharray: 3 2.5; }
+.glyph.running { animation: witness-breathe 1.8s ease-in-out infinite; }
 .slash { stroke: var(--c); stroke-width: 2; stroke-linecap: round; }
+
+@keyframes witness-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.42; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .glyph.running { animation: none; }
+  .link, .q, .ring, .hot-halo, .accept-ring, .glyph { transition: none; }
+}
 
 /* Docked query drawer on the left, keeping Evidence open on the right. */
 #query-dock { border-top: 1px solid var(--line); background: var(--surface); min-width: 0; }
@@ -291,7 +305,9 @@ h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 28px 0 8px;
 }
 
 figure { margin: 16px 0; }
-figure img { display: block; max-width: 100%; border: 1px solid var(--line); background: #fff; }
+figure img { display: block; max-width: 100%; border: 1px solid var(--line); background: #fff; cursor: zoom-in; }
+.medium-zoom-overlay { z-index: 90; }
+.medium-zoom-image--opened { z-index: 91; border: 1px solid var(--line); }
 figcaption { margin-top: 6px; font-size: 13px; }
 
 ul { list-style: none; margin: 0; padding: 0; }
@@ -362,6 +378,20 @@ th { color: var(--muted); font-weight: 500; font-size: 12px; }
 .measurements td { white-space: pre-wrap; }
 .files td:last-child { width: 56px; color: var(--muted); text-align: right; font-size: 12px; }
 .raw-measurements { margin-top: 8px; }
+
+/* Quiet notebook-palette syntax highlighting (Prism) & probe diffs. */
+.code-view .token.comment { color: var(--muted); font-style: italic; }
+.code-view .token.keyword, .code-view .token.boolean { color: var(--accent); font-weight: 500; }
+.code-view .token.string, .code-view .token.property { color: var(--yes); }
+.code-view .token.number { color: var(--running); }
+.code-view .token.function, .code-view .token.builtin { color: var(--ink); font-weight: 600; }
+.code-view .token.operator, .code-view .token.punctuation { color: var(--muted); }
+.diff-view { padding: 8px 0; }
+.diff-view span { display: block; padding: 0 12px; }
+.diff-add { color: var(--yes); background: color-mix(in srgb, var(--yes) 10%, transparent); }
+.diff-del { color: var(--no); background: color-mix(in srgb, var(--no) 10%, transparent); }
+.diff-ctx { color: var(--ink); }
+.diff-skip { color: var(--muted); font-style: italic; }
 
 @media (max-width: 860px) {
   body { grid-template-rows: auto auto; height: auto; }

@@ -58,6 +58,7 @@ export class Hub {
   private savedBy = new Map<string, Saved[]>(); // run -> the files it saved
   private replaces: { from: string; to: string }[] = []; // new question -> the crashed question it fixes
   private running = new Map<string, string>(); // question -> its run in progress
+  private aborts = new Map<string, AbortController>(); // question -> cancel handle for its running probe
   private retries = new Set<string>(); // asks of a crashed question, awaiting a worker slot
   private hashes = new Map<string, { stamp: string; sha: string }>();
   private heat = new Map<string, { value: number; at: number }>(); // ephemeral live attention, never persisted
@@ -251,15 +252,16 @@ export class Hub {
     this.heat.set(id, { value: base + amount, at: now });
   }
 
-  /** Decayed live heat entries above threshold, hottest first. Prunes cooled entries. */
+  /** Decayed live heat entries above threshold, hottest first. Running questions stay at the top. */
   private hotEntries(now = Date.now()): [string, number][] {
-    const out: [string, number][] = [];
+    const out = new Map<string, number>();
     for (const [id, entry] of this.heat) {
       const value = entry.value * 0.5 ** (Math.max(0, now - entry.at) / this.heatHalfLifeMs);
       if (value < 0.25) this.heat.delete(id);
-      else if (value >= 0.5) out.push([id, value]);
+      else if (value >= 0.5) out.set(id, value);
     }
-    return out.sort((a, b) => b[1] - a[1]);
+    for (const id of this.running.keys()) out.set(id, Math.max(out.get(id) ?? 0, 2.0));
+    return [...out.entries()].sort((a, b) => b[1] - a[1]);
   }
 
   /** Question ids with active live pheromone, ordered hottest-first. */
@@ -297,12 +299,15 @@ export class Hub {
     const run = contentId("r", q.id, key!, crypto.randomUUID());
     // Keep the inputs as the run reads them: a file may change while the probe runs.
     const read = inputs.map((i) => ({ name: i.name, node: this.keep(i.content ?? readFileSync(i.path!)) }));
+    const ac = new AbortController();
     this.retries.delete(q.id);
     this.running.set(q.id, run);
+    this.aborts.set(q.id, ac);
     runProbe({
       probe: q.probe,
       inputs: inputs.map((i) => ({ name: i.mount ?? i.name, path: i.path, content: i.content })),
       timeoutS: q.timeout,
+      signal: ac.signal,
     })
       .catch((e): ProbeOutcome => ({
         failed: `the hub could not run the probe: ${(e as Error).message}`,
@@ -316,6 +321,7 @@ export class Hub {
       .catch((e) => console.error(`witness: could not record run ${run} of ${q.id}:`, e))
       .finally(() => {
         this.running.delete(q.id);
+        this.aborts.delete(q.id);
         const wake = [...this.wakers];
         this.wakers.clear();
         for (const w of wake) w();
@@ -379,6 +385,7 @@ export class Hub {
               reason,
               measured: o.failed === null,
               results: JSON.stringify(o.results),
+              last: o.results.length ? JSON.stringify(o.results[o.results.length - 1]) : null,
             },
           },
           ...read.map((x) => x.node),
@@ -391,7 +398,6 @@ export class Hub {
         ],
       );
     } finally {
-      this.warm(q.id, 1.0);
       o.cleanup();
     }
   }
@@ -581,6 +587,21 @@ export class Hub {
   /** The whole graph as records, for a page that connects. */
   snapshot(): { nodes: GNode[]; rels: GRel[] } {
     return snapshot(this.db);
+  }
+
+  /** Cancels a running probe (SIGTERM then SIGKILL) or unqueues a pending retry. Returns true when something was cancelled. */
+  cancel(id: string): boolean {
+    if (!this.byId.has(id)) throw new Refusal(`There is no question ${id}. Call query to list the questions.`);
+    const ac = this.aborts.get(id);
+    if (ac) {
+      ac.abort();
+      return true;
+    }
+    if (this.retries.delete(id)) {
+      this.check();
+      return true;
+    }
+    return false;
   }
 
   /** Whether a probe runs now. */

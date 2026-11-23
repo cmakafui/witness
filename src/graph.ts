@@ -69,10 +69,10 @@ export const SCHEMA = `The graph:
 (:Question {id, text, rule, probe, inputs, asker, seq, created})
 (:Question)-[:NEEDS {name}]->(:Question)  reads a file the other question saved (q-…/file) or its recorded result (q-…, mounted as q-….json). One NEEDS per input, so count DISTINCT questions
 (:Question)-[:REPLACES]->(:Question)   fixes a question whose run crashed or timed out; the old answer stays
-(:Run {id, key, seq, started, ms, answer, reason, measured, results})-[:OF]->(:Question)
+(:Run {id, key, seq, started, ms, answer, reason, measured, results, last})-[:OF]->(:Question)
 (:Run)-[:READ {name}]->(:File {id})    the inputs the run read; a File's id is its SHA-256
 (:Run)-[:SAVED {name}]->(:File)               the files the run saved for other questions
-rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is the measurements as JSON. measured is true when the probe measured, even if the rule could not decide: then other questions can read its result or saved files. created and started are UTC milliseconds since 1970 (older stores may omit created). ms is how long the run took.
+rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is all measurements as JSON; last is the final measurement object as JSON (compact for multi-record runs; older stores may omit it). measured is true when the probe measured, even if the rule could not decide: then other questions can read its result or saved files. created and started are UTC milliseconds since 1970 (older stores may omit created). ms is how long the run took.
 Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now. key names the inputs a run read. A run that measured is final for its key. Runs that did not measure can share a key with the retry that followed them: the latest run on the current inputs gives the answer.
 $replaced lists the questions that a newer question replaces and that still have no measured yes or no. Leave them out of open problems: WHERE NOT q.id IN $replaced.
 $hot lists question ids with recent live occupancy (look, NEEDS, probe_ref, or runs), ordered hottest-first; it marks where agents are working now—not quality—to avoid duplicating work or to coordinate. It evaporates with a 5-minute half-life and is empty in replay.
