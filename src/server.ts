@@ -48,7 +48,7 @@ export function serve(hub: Hub, { port = 4747, hostname = "127.0.0.1" } = {}) {
         used();
         ws.subscribe("feed");
         ws.send(JSON.stringify({ type: "graph", ...hub.snapshot() }));
-        ws.send(JSON.stringify({ type: "states", states: hub.statuses(), hot: hub.hotMap() }));
+        ws.send(JSON.stringify({ type: "states", states: hub.statuses() }));
       },
       close() {
         activity.pages--;

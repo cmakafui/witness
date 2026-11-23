@@ -35,7 +35,7 @@ Other agents add directions, and a view that does not share your habits. Their w
 - **Subagents.** Each takes a direction and its own `asker` name, and uses `ask`, `look` and `query` like you. They share the graph, so a question id and a `q-…/name` path pass everything another agent needs. Start them with the host's native subagent tool: the agent then lives in the same session, and the caller picks its model there. A separate process started from a shell is outside the session. The hub runs four probes at a time, so more agents than that wait in line.
 - **An advisor.** An agent that reads the graph and asks what each answer rests on sees what the workers' habits hide: a rule that cannot come out false, an assumption nobody measured, a form nobody tried. Its questions go in the graph under its own `asker`. A stronger model buys a sharper audit.
 - **A second view.** Another model family brings different habits. Its opinion is not an answer. A question that tests what it said is.
-- **Joining live work.** Separate sessions or model families can share one folder and hub with no coordinator. Check lane counts, `$hot`, and unconsumed saved files first so you pick an unoccupied direction or build on an existing artifact instead of duplicating live work.
+- **Joining live work.** Separate sessions or model families can share one folder and hub with no coordinator. Before you ask, query `$running` (the questions measuring now) and each other asker's latest questions (`ORDER BY q.seq DESC`), so you pick a direction nobody holds. When you build on another session's answer or file, declare its `q-…` id as an input: that edge is how the sessions share work.
 
 ## Asking well
 
@@ -67,7 +67,7 @@ Start from [assets/probe.py](assets/probe.py).
 
 ## Querying and reporting
 
-When resuming a large graph, zoom out first: query goals, lane counts (`q.asker`), `$hot[0..5]` (live occupancy—where agents are running, looking, or building now, ordered hottest-first; evaporates with a 5-minute half-life), unconsumed saved files, and the latest 15–20 questions (`ORDER BY q.seq DESC LIMIT 15`) with only `id`, `asker`, `state`, and `text`. Prefer `r.last` (final measurement object) over `r.results` when scanning multi-record runs; pull `r.results`, `SAVED` files, or `q.probe` only for the specific question ids you need—never in bulk.
+When resuming a large graph, zoom out first: query goals, lane counts (`q.asker`), `$running` (where probes are measuring now), unconsumed saved files, and the latest 15–20 questions (`ORDER BY q.seq DESC LIMIT 15`) with only `id`, `asker`, `state`, and `text`. Prefer `r.last` (final measurement object) over `r.results` when scanning multi-record runs; pull `r.results`, `SAVED` files, or `q.probe` only for the specific question ids you need—never in bulk.
 
 ```cypher
 MATCH (q:Question)

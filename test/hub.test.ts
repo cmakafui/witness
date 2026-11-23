@@ -209,32 +209,6 @@ test("ask refuses a probe with dependencies and no fixed exclude-newer date", as
   expect((await hub.ask({ text: "y?", rule: "$x = 1", probe: measure({ x: 1 }) })).state).toBe("yes");
 });
 
-test("live pheromone ($hot) tracks look, NEEDS, probe_ref and ask, and evaporates without writing to Relate", async () => {
-  await hub.idle();
-  hub.close();
-  hub = await Hub.open(root, { pollMs: 0, heatHalfLifeMs: 150 });
-  const a = await hub.ask({
-    text: "Save a file.",
-    rule: "$ok",
-    probe: `# /// script\n# dependencies = []\n# ///\nimport json, os\nopen(os.path.join(os.environ["WITNESS_OUT"], "f.txt"), "w").write("hi")\nprint("WITNESS_RESULT", json.dumps({"ok": True}))\n`,
-  });
-  const b = await hub.ask({
-    text: "Read a's file.",
-    rule: "$ok",
-    inputs: [`${a.id}/f.txt`],
-    probe: `# /// script\n# dependencies = []\n# ///\nimport json\nassert open("${a.id}/f.txt").read() == "hi"\nprint("WITNESS_RESULT", json.dumps({"ok": True}))\n`,
-  });
-  hub.look(`${a.id}/f.txt`);
-  const hotNow = hub.query("RETURN $hot AS hot").rows[0]!.hot as string[];
-  expect(hotNow[0]).toBe(a.id);
-  expect(hotNow).toContain(b.id);
-  // Wait several half-lives: heat evaporates completely and query itself deposits no heat.
-  await Bun.sleep(700);
-  expect(hub.query("RETURN $hot AS hot").rows[0]!.hot).toEqual([]);
-  // Heat is never stored as a property in Relate.
-  expect(hub.query("MATCH (q:Question) RETURN q.heat AS heat").rows.every((r) => r.heat === null)).toBe(true);
-});
-
 test("multi-record runs store r.last as the final measurement JSON, and unconsumed saved files query works", async () => {
   const a = await hub.ask({
     text: "Stream two records and save a file.",
@@ -263,7 +237,7 @@ test("multi-record runs store r.last as the final measurement JSON, and unconsum
   expect(unconsumed()).not.toContain(`${a.id}/cand.json`);
 });
 
-test("cancel() stops a running probe cleanly, keeps it at the top of $hot while running, and allows retry", async () => {
+test("cancel() stops a running probe cleanly and allows retry", async () => {
   const slow = await hub.ask({
     text: "Wait briefly unless cancelled.",
     rule: "$ok = true",
@@ -271,8 +245,7 @@ test("cancel() stops a running probe cleanly, keeps it at the top of $hot while 
     probe: `# /// script\n# dependencies = []\n# ///\nimport json, time\ntime.sleep(10)\nprint("WITNESS_RESULT", json.dumps({"ok": True}))\n`,
   });
   expect(slow.state).toBe("running");
-  const hotWhileRunning = hub.query("RETURN $hot AS hot").rows[0]!.hot as string[];
-  expect(hotWhileRunning[0]).toBe(slow.id);
+  expect(hub.query("RETURN $running AS running").rows[0]!.running).toContain(slow.id);
 
   expect(hub.cancel(slow.id)).toBe(true);
   await hub.idle();

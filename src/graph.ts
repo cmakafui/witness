@@ -75,7 +75,6 @@ export const SCHEMA = `The graph:
 rule is a Cypher expression over the run's measurements. answer is yes, no or failed: the rule's value on that run. results is all measurements as JSON; last is the final measurement object as JSON (compact for multi-record runs; older stores may omit it). measured is true when the probe measured, even if the rule could not decide: then other questions can read its result or saved files. created and started are UTC milliseconds since 1970 (older stores may omit created). ms is how long the run took.
 Answers now come as parameters: $yes, $no, $failed, $running, $pending and $waiting are lists of question ids. $current lists the runs that give the current answers. A Run's answer is the answer of that run, not always the answer now. key names the inputs a run read. A run that measured is final for its key. Runs that did not measure can share a key with the retry that followed them: the latest run on the current inputs gives the answer.
 $replaced lists the questions that a newer question replaces and that still have no measured yes or no. Leave them out of open problems: WHERE NOT q.id IN $replaced.
-$hot lists question ids with recent live occupancy (look, NEEDS, probe_ref, or runs), ordered hottest-first; it marks where agents are working now—not quality—to avoid duplicating work or to coordinate. It evaporates with a 5-minute half-life and is empty in replay.
 $complete and $incomplete are goal ids. A goal is complete only when its acceptance question currently answers yes. No acceptance question means open and incomplete. All other acceptance states mean incomplete. No other question determines completion. Goals and acceptance bindings cannot be edited; changing the acceptance contract requires a new goal.`;
 
 /** A question's answer as the hub works it out. It is never stored: it comes from the runs and the inputs now. */
@@ -152,8 +151,7 @@ export function answerParams(
   statuses: Status[],
   goals: Goal[] = [],
   replaces: Iterable<{ from: string; to: string }> = [],
-  hot: string[] = [],
-): Record<State | "current" | "complete" | "incomplete" | "replaced" | "hot", string[]> {
+): Record<State | "current" | "complete" | "incomplete" | "replaced", string[]> {
   const ids = (s: State) => statuses.filter((x) => x.state === s).map((x) => x.id);
   const completion = goalStatuses(goals, statuses);
   return {
@@ -167,7 +165,6 @@ export function answerParams(
     complete: completion.filter((g) => g.complete).map((g) => g.id),
     incomplete: completion.filter((g) => !g.complete).map((g) => g.id),
     replaced: replacedIds(statuses, replaces),
-    hot,
   };
 }
 

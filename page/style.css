@@ -183,7 +183,6 @@ main.sidebar-collapsed aside { visibility: hidden; }
 .q:focus-visible .hit { stroke: var(--accent); stroke-width: 2; }
 .glyph-body { transform-origin: 0 0; }
 .ring { fill: none; stroke-width: 1.5; pointer-events: none; transition: opacity 180ms ease, stroke 180ms ease; }
-.hot-halo { fill: var(--running); pointer-events: none; transition: opacity 480ms ease, r 480ms ease; }
 .ring.selected { stroke: var(--ink); }
 .ring.hover { stroke: var(--muted); stroke-width: 1.5; }
 .ring.marked { stroke: var(--accent); }
@@ -202,7 +201,7 @@ main.sidebar-collapsed aside { visibility: hidden; }
 }
 @media (prefers-reduced-motion: reduce) {
   .glyph.running { animation: none; }
-  .link, .q, .ring, .hot-halo, .accept-ring, .glyph { transition: none; }
+  .link, .q, .ring, .accept-ring, .glyph { transition: none; }
 }
 
 /* Docked query drawer on the left, keeping Evidence open on the right. */

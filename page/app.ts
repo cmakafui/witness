@@ -21,7 +21,7 @@ import { register, webTools } from "./tools.ts";
 
 type Msg =
   | { type: "graph"; nodes: GNode[]; rels: GRel[] }
-  | { type: "states"; states: Status[]; hot?: Record<string, number> };
+  | { type: "states"; states: Status[] };
 
 type QNode = { id: string; text: string; asker: string | null; seq: number; inputs: string[] };
 type QRun = RecordedRun & { seq: number };
@@ -74,7 +74,6 @@ const needs = new Map<string, string[]>();
 const replaces: { from: string; to: string }[] = [];
 const unplaced: QNode[] = [];
 let statuses = new Map<string, Status>();
-let hot = new Map<string, number>();
 let maxSeq = 0;
 let atSeq: number | null = null;
 let historyStatuses: Map<string, Status> | null = null;
@@ -347,7 +346,6 @@ function render() {
         { tabindex: 0, role: "button", "data-id": id },
         s("title", {}, document.createTextNode(q.text)),
         s("circle", { class: "hit", r: 18 }),
-        s("circle", { class: "hot-halo", r: 14.5, opacity: 0 }),
         s("circle", { class: "ring hover hover-ring", r: 16.5 }),
         s("g", { class: "glyph-body" }),
         s("circle", { class: "ring", r: 16.5 }),
@@ -355,17 +353,15 @@ function render() {
       glyphEls.set(id, g);
       glyphLayer.append(g);
     }
-    const [, , hotHalo, hoverRing, body, ring] = g.children as unknown as SVGElement[];
+    const [, , hoverRing, body, ring] = g.children as unknown as SVGElement[];
     const state = stateOf(id);
     const accepts = accepted.has(id);
     const replaced = replacedNow.has(id);
-    const heat = atSeq === null ? (hot.get(id) ?? 0) : 0;
     if (atSeq !== null && q.seq > atSeq) put(g, "display", "none");
     else if (g.hasAttribute("display")) g.removeAttribute("display");
     put(g, "transform", `translate(${p.x} ${p.y})`);
     put(g, "class", `q${accepts ? " accepts" : ""}${replaced ? " replaced" : ""}${highlight && !highlight.nodes.has(id) ? " dim" : ""}`);
     put(g, "aria-label", `${state}${accepts ? " (acceptance)" : ""}${replaced ? " (replaced)" : ""}: ${q.text}`);
-    put(hotHalo!, "opacity", heat > 0 ? Number((heat * 0.28).toFixed(2)) : 0);
     put(hoverRing!, "opacity", hovered === id && selected !== id ? 1 : 0);
     put(body!, "opacity", replaced ? 0.4 : 1);
     put(ring!, "class", `ring${id === selected ? " selected" : marked.has(id) ? " marked" : ""}`);
@@ -523,7 +519,6 @@ function apply(m: Msg) {
     const next = new Map(m.states.map((x) => [x.id, x]));
     evidence = [...panelQuestions()].some((id) => JSON.stringify(statuses.get(id)) !== JSON.stringify(next.get(id)));
     statuses = next;
-    hot = new Map(Object.entries(m.hot ?? {}));
   }
   scheduleDisplay(true, evidence);
 }
@@ -980,7 +975,7 @@ const params = () => {
   const activeStatuses =
     atSeq === null ? [...statuses.values()] : [...nodes.values()].filter((q) => q.seq <= atSeq!).map((q) => statusOf(q.id)!);
   return {
-    ...answerParams(activeStatuses, goals(), visibleReplaces(), atSeq === null ? [...hot.keys()] : []),
+    ...answerParams(activeStatuses, goals(), visibleReplaces()),
     selected,
     run: (selected && statusOf(selected)?.run) ?? null,
   };

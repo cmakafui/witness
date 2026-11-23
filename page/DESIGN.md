@@ -157,7 +157,7 @@ The page is flat. Regions are separated by a 1px `line` rule and by the change f
 
 - Exploratory question glyphs are 8.5px discs: filled for an answer, hollow for no answer yet, a slashed ring for failed.
 - Acceptance questions add an outer ring in the verdict colour (`◎`) so they stand out from exploration.
-- The selected question gets an outer ink ring; hovered questions get a muted ring; query matches get an accent ring; live questions with active pheromone (`$hot`) get a quiet translucent amber halo that fades as activity cools (never shown in replay or history).
+- The selected question gets an outer ink ring; hovered questions get a muted ring; query matches get an accent ring.
 - Buttons, chips, the rule block and code blocks use a 4px radius. Panels have square corners.
 
 ## Components
