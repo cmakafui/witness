@@ -21,7 +21,7 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 - The rule is a Cypher expression over the measurements, for example $p < 0.01 AND $gain >= 0.1. $name is a measurement. $results is the list of all measurements. True gives yes. False gives no. All other results give failed.
 - The probe is a Python script with a PEP 723 header. A probe with dependencies sets exclude-newer under [tool.uv] to a fixed date, keeping the package upload cutoff in the probe text. uv runs it in an empty folder that holds the declared inputs only. It prints each measurement as WITNESS_RESULT and one JSON object. It saves files for other questions in $WITNESS_OUT.
 - An input is a workspace path, q-…/name for a file another question saved, or bare q-… for that question's recorded answer and measurements (mounted as q-….json). Acceptance questions refuse scratch/ inputs; prefer q-…/name over scratch/ for ordinary questions too.
-- Use a short, stable asker name (1–2 words, e.g. "fourier17", "advisor") and reuse it across all questions in one direction of work.
+- Use a short, stable asker name (1–2 words, e.g. "fourier17", "qr") and reuse it across all questions in one direction of work.
 - When an input changes, the question runs again. When the inputs change back, their latest recorded answer comes back. So a probe must not act: do not send or deploy in a probe.
 - Set replaces to the id of a question whose run crashed or timed out when you fix its probe. Witness refuses it for a measured answer. The old question stays failed and goes into $replaced.
 - query: read the graph with Cypher. Search it by words (the question_text and run_reason indexes) before you ask: someone may have measured it, ruled it out, or written a probe you can reuse. look: show a file that a run saved.`;
@@ -109,7 +109,7 @@ function server(hub: Hub): McpServer {
           .string()
           .optional()
           .describe("The id of a question whose run crashed or timed out, when this question is its fix. Witness refuses it for a question that measured. The old answer stays; queries get it in $replaced."),
-        asker: z.string().optional().describe("Short, stable lane name for your direction of work (1–2 words, e.g. 'switches', 'advisor'). Reuse the same lane name across questions in one line of attack; do not put a question title here. It does not change the answer."),
+        asker: z.string().optional().describe("Short, stable lane name for your direction of work (1–2 words, e.g. 'switches', 'qr'). Reuse the same lane name across questions in one line of attack; do not put a question title here. It does not change the answer."),
         timeout_s: z.number().int().positive().max(3600).optional().describe("The time limit of one run, in seconds. Default 600."),
         wait_s: z.number().int().min(0).max(240).optional().describe("The time to wait for the answer, in seconds, at most 240. Default 120. After that, the run continues."),
       },
