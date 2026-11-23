@@ -119,6 +119,12 @@ test("every tool declares its output schema, and results carry structured conten
   await client.close();
 }, 60_000);
 
+test("the MCP instructions tell agents how many probes the hub runs at a time", async () => {
+  const client = await agent();
+  expect(client.getInstructions()).toContain(`This hub runs ${hub.jobs} probes at a time.`);
+  await client.close();
+});
+
 test("ask waits over HTTP for a probe that takes longer than Bun's default idle limit", async () => {
   const client = await agent();
   const slow = PROBE.replace("import json, os", "import json, os, time\ntime.sleep(12)");

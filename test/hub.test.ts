@@ -255,3 +255,14 @@ test("cancel() stops a running probe cleanly and allows retry", async () => {
   // Cancelling a non-running question returns false.
   expect(hub.cancel(slow.id)).toBe(false);
 });
+
+test("the hub runs one probe per CPU core by default, and refuses a job count below one", async () => {
+  const { availableParallelism } = await import("node:os");
+  expect(hub.jobs).toBe(availableParallelism());
+  await hub.idle();
+  hub.close();
+  await expect(Hub.open(root, { pollMs: 0, jobs: 0 })).rejects.toThrow(/at least 1/);
+  await expect(Hub.open(root, { pollMs: 0, jobs: 1.5 })).rejects.toThrow(/whole number/);
+  hub = await Hub.open(root, { pollMs: 0, jobs: 3 });
+  expect(hub.jobs).toBe(3);
+});

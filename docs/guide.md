@@ -47,7 +47,7 @@ bun install && bun link        # puts `witness` on your PATH
 witness setup                  # adds the skill and the MCP server to Claude Code, Codex, Pi and agy
 ```
 
-Start an agent in any folder. Its first Witness call starts the hub for that folder. Every agent in the folder shares that hub. The hub stops after 10 minutes without use.
+Start an agent in any folder. Its first Witness call starts the hub for that folder. Every agent in the folder shares that hub. The hub stops after 10 minutes without use. It runs one probe per CPU core at a time, and more asks wait in line. To change that, set `WITNESS_JOBS` in the environment that starts your agent: the hub it starts reads it. A probe can still start more threads than one, so a task prompt says how many each probe may use.
 
 ```bash
 witness open [DIR]     # watch a workspace's graph live

@@ -13,6 +13,7 @@
 // The hub is the only writer, and a record never changes. So it keeps the questions, the runs and the files they
 // saved in memory, and adds each new record as it writes it. Working out the answers reads no store.
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { isAbsolute, join, normalize, sep } from "node:path";
 import { ALL_NODES, ALL_RELS, answerParams, clauses, type GNode, type GRel, type Goal, type GoalStatus, GOALS, goalStatuses, measurements, ruleProblem, ruleStatement, type State, type Status, statements } from "./graph.ts";
 import { dependencyProblem, isFile, runProbe, type ProbeOutcome, RESULT } from "./probe.ts";
@@ -74,11 +75,16 @@ export class Hub {
     private graphDir: string,
     private filesDir: string,
     private seq: number,
-    private jobs: number,
+    /** How many probes run at once. More asks wait in line. */
+    readonly jobs: number,
   ) {}
 
-  /** Opens the workspace's store, in root/.witness, and creates it the first time. */
-  static async open(root: string, { pollMs = 1000, jobs = 4 } = {}): Promise<Hub> {
+  /**
+   * Opens the workspace's store, in root/.witness, and creates it the first time. By default it runs one probe per CPU
+   * core at a time. A probe can start more threads than that: the task prompt sets how many each may use.
+   */
+  static async open(root: string, { pollMs = 1000, jobs = availableParallelism() } = {}): Promise<Hub> {
+    if (!Number.isInteger(jobs) || jobs < 1) throw new Error(`The hub needs a whole number of jobs of at least 1, not ${jobs}.`);
     const dir = join(root, ".witness");
     const graphDir = join(dir, "graph");
     const filesDir = join(dir, "files");

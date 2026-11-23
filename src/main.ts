@@ -20,7 +20,9 @@ DIR is the workspace (default: this folder). Its store is DIR/.witness.
 A hub exits by itself after ${600 / 60} minutes without use.
 
 Plumbing: \`witness mcp\` is the command MCP clients run (setup adds it). \`witness serve\` runs a hub in the
-foreground (--port N, --host HOST, --jobs N, --idle SECONDS, 0 = never exit).`;
+foreground (--port N, --host HOST, --jobs N, --idle SECONDS, 0 = never exit). --jobs is how many probes run at
+once: by default WITNESS_JOBS, else one per CPU core. A hub that an agent starts gets WITNESS_JOBS from the agent's
+environment.`;
 
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
@@ -28,7 +30,7 @@ const { values, positionals } = parseArgs({
     root: { type: "string" },
     port: { type: "string" },
     host: { type: "string", default: "127.0.0.1" },
-    jobs: { type: "string", default: "4" },
+    jobs: { type: "string" },
     idle: { type: "string", default: "0" },
     help: { type: "boolean", short: "h" },
     version: { type: "boolean", short: "v" },
@@ -92,9 +94,14 @@ switch (values.version ? "version" : values.help ? "help" : command) {
       console.error(`A hub already serves ${root} at ${other.url.href} (process ${other.pid}).`);
       process.exit(1);
     }
+    const jobs = values.jobs ?? process.env.WITNESS_JOBS;
+    if (jobs !== undefined && !/^[1-9]\d*$/.test(jobs)) {
+      console.error(`--jobs (or WITNESS_JOBS) must be a whole number of at least 1, not ${JSON.stringify(jobs)}.`);
+      process.exit(2);
+    }
     let hub: Hub;
     try {
-      hub = await Hub.open(root, { jobs: Number(values.jobs) });
+      hub = await Hub.open(root, jobs === undefined ? {} : { jobs: Number(jobs) });
     } catch (e) {
       console.error(`Could not open ${root}/.witness/graph: ${(e as Error).message}\nAnother process may hold the store. Only one hub can serve a workspace.`);
       process.exit(1);

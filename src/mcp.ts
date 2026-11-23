@@ -78,7 +78,8 @@ async function tool(fn: () => unknown) {
 }
 
 function server(hub: Hub): McpServer {
-  const s = new McpServer({ name: "witness", version: VERSION }, { instructions: GUIDE });
+  const instructions = `${GUIDE}\n- This hub runs ${hub.jobs} probes at a time. More asks wait in line.`;
+  const s = new McpServer({ name: "witness", version: VERSION }, { instructions });
 
   s.registerTool(
     "goal",

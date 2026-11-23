@@ -22,7 +22,7 @@ Use Bun for dependency installation, scripts, tests and builds. Bundle the page 
 - `bun test`: the hub with real uv probes, MCP, the page in a real browser engine, the schema (needs `uv`, and macOS WebKit or Chrome for `Bun.WebView`).
 - People get three commands: `setup`, `open [DIR]`, `replay [DIR]`. Keep it at three. `mcp` and `serve` are plumbing.
 - `bun src/main.ts mcp`: MCP over stdio for one agent. It finds the workspace's hub (`.witness/hub.json`) or starts one in the background with `--idle 600`, keeps it alive with a heartbeat, and starts a new one if it goes away.
-- `bun src/main.ts serve --root DIR`: a hub in the foreground. `--idle 0` (the default here) never exits.
+- `bun src/main.ts serve --root DIR`: a hub in the foreground. `--idle 0` (the default here) never exits. `--jobs N` sets how many probes run at once: by default `WITNESS_JOBS`, else one per CPU core. The MCP instructions tell agents the number.
 - The skill is `skill/witness/`. `witness setup` links it into `~/.claude/skills`, `~/.agents/skills` (Codex) and Pi's `~/.pi/agent/skills`, and registers the MCP server with Claude Code, Codex and Pi. Codex and Pi get a 300 s tool timeout, because `ask` waits up to 240 s. Pi gets `direct` exposure: four small tools, declared to the model without a search step. Change the skill when a tool, the probe format or the way agents work with Witness changes. The skill teaches the tools, the loop that uses them (measure, change form, render, look, ask the next question) and how to ask well. A task prompt states the task and its rules.
 
 ## Code
