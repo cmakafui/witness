@@ -42,7 +42,7 @@ export type Ask = {
 
 export type Event =
   | { type: "graph"; nodes: GNode[]; rels: GRel[] }
-  | { type: "states"; states: Status[] };
+  | { type: "states"; states: Status[]; hot?: Record<string, number> };
 
 type Question = { id: string; rule: string; probe: string; inputs: string[]; timeout: number };
 type Run = { id: string; key: string; answer: "yes" | "no" | "failed"; reason: string | null; measured: boolean | null };
@@ -60,6 +60,7 @@ export class Hub {
   private running = new Map<string, string>(); // question -> its run in progress
   private retries = new Set<string>(); // asks of a crashed question, awaiting a worker slot
   private hashes = new Map<string, { stamp: string; sha: string }>();
+  private heat = new Map<string, { value: number; at: number }>(); // ephemeral live attention, never persisted
   private listeners = new Set<(e: Event) => void>();
   private wakers = new Set<() => void>();
   private timer: Timer | undefined;
@@ -74,10 +75,11 @@ export class Hub {
     private filesDir: string,
     private seq: number,
     private jobs: number,
+    private heatHalfLifeMs: number,
   ) {}
 
   /** Opens the workspace's store, in root/.witness, and creates it the first time. */
-  static async open(root: string, { pollMs = 1000, jobs = 4 } = {}): Promise<Hub> {
+  static async open(root: string, { pollMs = 1000, jobs = 4, heatHalfLifeMs = 300_000 } = {}): Promise<Hub> {
     const dir = join(root, ".witness");
     const graphDir = join(dir, "graph");
     const filesDir = join(dir, "files");
@@ -86,7 +88,7 @@ export class Hub {
     const db = Relate.open(graphDir);
     if (fresh) await applySchema(db);
     const [row] = db.query("MATCH (n) WHERE n.seq IS NOT NULL RETURN max(n.seq) AS seq");
-    const hub = new Hub(root, db, graphDir, filesDir, Number(row?.seq ?? 0), jobs);
+    const hub = new Hub(root, db, graphDir, filesDir, Number(row?.seq ?? 0), jobs, heatHalfLifeMs);
     const { nodes, rels } = snapshot(db);
     hub.remember(nodes.sort((a, b) => Number(a.props.seq ?? 0) - Number(b.props.seq ?? 0)), rels);
     if (pollMs > 0) {
@@ -242,6 +244,36 @@ export class Hub {
     return s;
   }
 
+  /** Deposits ephemeral heat on a question. Never written to Relate; evaporates lazily. */
+  private warm(id: string, amount: number, now = Date.now()) {
+    const prev = this.heat.get(id);
+    const base = prev ? prev.value * 0.5 ** (Math.max(0, now - prev.at) / this.heatHalfLifeMs) : 0;
+    this.heat.set(id, { value: base + amount, at: now });
+  }
+
+  /** Decayed live heat entries above threshold, hottest first. Prunes cooled entries. */
+  private hotEntries(now = Date.now()): [string, number][] {
+    const out: [string, number][] = [];
+    for (const [id, entry] of this.heat) {
+      const value = entry.value * 0.5 ** (Math.max(0, now - entry.at) / this.heatHalfLifeMs);
+      if (value < 0.25) this.heat.delete(id);
+      else if (value >= 0.5) out.push([id, value]);
+    }
+    return out.sort((a, b) => b[1] - a[1]);
+  }
+
+  /** Question ids with active live pheromone, ordered hottest-first. */
+  hotIds(now = Date.now()): string[] {
+    return this.hotEntries(now).map(([id]) => id);
+  }
+
+  /** Normalized 0..1 live heat intensities for the page's quiet halo ring. */
+  hotMap(now = Date.now()): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const [id, value] of this.hotEntries(now)) out[id] = Number(Math.min(1, value / 3).toFixed(2));
+    return out;
+  }
+
   /** Starts the pending questions, oldest first, while fewer than `jobs` run. Tells listeners when states change. */
   check(): Status[] {
     const all = this.resolve();
@@ -251,10 +283,11 @@ export class Hub {
       if (r.status.state === "pending" && r.key) (this.start(r), (started = true));
     }
     const statuses = started ? this.statuses() : all.map((r) => r.status);
-    const shown = JSON.stringify(statuses);
+    const hot = this.hotMap();
+    const shown = JSON.stringify({ statuses, hot });
     if (shown !== this.shown) {
       this.shown = shown;
-      this.emit({ type: "states", states: statuses });
+      this.emit({ type: "states", states: statuses, hot });
     }
     return statuses;
   }
@@ -358,6 +391,7 @@ export class Hub {
         ],
       );
     } finally {
+      this.warm(q.id, 1.0);
       o.cleanup();
     }
   }
@@ -417,6 +451,13 @@ export class Hub {
         ],
       );
     }
+    // Deposit evaporating live pheromone on grounded actions: this question, upstream producers, and reused probe.
+    this.warm(id, 1.0);
+    for (const name of inputs) {
+      const ref = OUTPUT_REF.exec(name);
+      if (ref) this.warm(ref[1]!, 1.5);
+    }
+    if (a.probeRef) this.warm(a.probeRef, 1.0);
     // A crash or a timeout settles nothing, so asking again retries it. Concurrent asks join one queued or running retry.
     const now = this.status(id);
     if (now.state === "failed" && now.run && !this.measured.has(now.run)) this.retries.add(id);
@@ -500,7 +541,7 @@ export class Hub {
   query(cypher: string, params: Record<string, Param> = {}, limit = 200): { rows: Row[]; truncated: boolean } {
     const reader = Relate.open(this.graphDir, { readOnly: true });
     try {
-      const rows = reader.query(cypher, { ...answerParams(this.statuses(), this.db.query(GOALS) as Goal[], this.replaces), ...params });
+      const rows = reader.query(cypher, { ...answerParams(this.statuses(), this.db.query(GOALS) as Goal[], this.replaces, this.hotIds()), ...params });
       return { rows: rows.slice(0, limit), truncated: rows.length > limit };
     } finally {
       reader.close();
@@ -511,11 +552,13 @@ export class Hub {
   look(ref: string): { name: string; path: string; type: string; bytes: number } {
     let file: string | undefined;
     let name = ref;
+    let lookedQuestion: string | null = null;
     if (/^[0-9a-f]{64}$/.test(ref)) file = ref;
     else {
       const m = /^([qr]-[0-9a-f]{12})\/(.+)$/.exec(ref);
       if (!m) throw new Refusal(`${ref} is not a file. Give q-…/name, r-…/name, or a file's SHA-256.`);
-      const run = m[1]!.startsWith("q-") ? this.status(m[1]!).run : m[1]!;
+      if (m[1]!.startsWith("q-")) lookedQuestion = m[1]!;
+      const run = lookedQuestion ? this.status(lookedQuestion).run : m[1]!;
       if (!run) throw new Refusal(`${m[1]} has no run yet, so it saved no files.`);
       name = m[2]!;
       file = this.saved(run).find((s) => s.name === name)?.file;
@@ -523,6 +566,10 @@ export class Hub {
     }
     const path = join(this.filesDir, file);
     if (!existsSync(path)) throw new Refusal(`The hub keeps no file ${file}.`);
+    if (lookedQuestion) {
+      this.warm(lookedQuestion, 1.0);
+      this.check();
+    }
     return { name, path, type: Bun.file(name).type, bytes: statSync(path).size };
   }
 

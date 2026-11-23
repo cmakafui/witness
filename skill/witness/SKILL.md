@@ -66,7 +66,7 @@ Start from [assets/probe.py](assets/probe.py).
 
 ## Querying and reporting
 
-When resuming a large graph, zoom out first: query goals, lane counts (`q.asker`), and the latest 15–20 questions (`ORDER BY q.seq DESC LIMIT 15`) with only `id`, `asker`, `state`, and `text`. Pull `r.results`, `SAVED` files, or `q.probe` only for the specific question ids you need—never in bulk.
+When resuming a large graph, zoom out first: query goals, lane counts (`q.asker`), `$hot` (questions with recent live `look`, `NEEDS`, `probe_ref`, or run activity; evaporates with a 5-minute half-life), and the latest 15–20 questions (`ORDER BY q.seq DESC LIMIT 15`) with only `id`, `asker`, `state`, and `text`. Pull `r.results`, `SAVED` files, or `q.probe` only for the specific question ids you need—never in bulk.
 
 ```cypher
 MATCH (q:Question)

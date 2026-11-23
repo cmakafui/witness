@@ -208,3 +208,29 @@ test("ask refuses a probe with dependencies and no fixed exclude-newer date", as
   // A probe without dependencies installs nothing, so it needs no date.
   expect((await hub.ask({ text: "y?", rule: "$x = 1", probe: measure({ x: 1 }) })).state).toBe("yes");
 });
+
+test("live pheromone ($hot) tracks look, NEEDS, probe_ref and ask, and evaporates without writing to Relate", async () => {
+  await hub.idle();
+  hub.close();
+  hub = await Hub.open(root, { pollMs: 0, heatHalfLifeMs: 150 });
+  const a = await hub.ask({
+    text: "Save a file.",
+    rule: "$ok",
+    probe: `# /// script\n# dependencies = []\n# ///\nimport json, os\nopen(os.path.join(os.environ["WITNESS_OUT"], "f.txt"), "w").write("hi")\nprint("WITNESS_RESULT", json.dumps({"ok": True}))\n`,
+  });
+  const b = await hub.ask({
+    text: "Read a's file.",
+    rule: "$ok",
+    inputs: [`${a.id}/f.txt`],
+    probe: `# /// script\n# dependencies = []\n# ///\nimport json\nassert open("${a.id}/f.txt").read() == "hi"\nprint("WITNESS_RESULT", json.dumps({"ok": True}))\n`,
+  });
+  hub.look(`${a.id}/f.txt`);
+  const hotNow = hub.query("RETURN $hot AS hot").rows[0]!.hot as string[];
+  expect(hotNow[0]).toBe(a.id);
+  expect(hotNow).toContain(b.id);
+  // Wait several half-lives: heat evaporates completely and query itself deposits no heat.
+  await Bun.sleep(700);
+  expect(hub.query("RETURN $hot AS hot").rows[0]!.hot).toEqual([]);
+  // Heat is never stored as a property in Relate.
+  expect(hub.query("MATCH (q:Question) RETURN q.heat AS heat").rows.every((r) => r.heat === null)).toBe(true);
+});
