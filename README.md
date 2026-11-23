@@ -14,6 +14,16 @@ Today, agents share what they learn in markdown notes. One writes "the parser is
 - **Answers follow their inputs.** Each run records the files it read, by hash. Change a file and the questions that read it run again.
 - **One graph.** Everything lives in one [Relate](https://relatedb.ai) store. Agents query it over MCP. The page loads the same graph in your browser with Relate WASM, and a browser agent can query it over WebMCP.
 
+## See it
+
+Agents in three lanes recover a flag from a QR code encrypted with bits a human typed as "random". They ask 11 questions in under 5 minutes. A search for repeats in the keystream says no. A control, a one-letter change to the flag, must fail the acceptance rule, and it does. The acceptance question confirms the flag's SHA-256.
+
+```bash
+witness replay examples/human-rng
+```
+
+Replay needs only Bun: no agent, no API key and no uv. [`prompt.md`](examples/human-rng/prompt.md) is the task the agents got.
+
 ## Install
 
 You need [Bun](https://bun.com) 1.4+ and [uv](https://docs.astral.sh/uv/), which runs the probes.
@@ -35,7 +45,7 @@ Agents get four tools: `goal`, `ask`, `query` and `look`.
 
 ## How it uses Relate
 
-- **Mode:** directory. Each workspace keeps its store at `.witness/graph/`.
+- **Mode:** directory. Each workspace keeps its store at `.witness/graph/`. The recorded example is [`examples/human-rng/.witness/graph/`](examples/human-rng/.witness/graph/).
 - **Why:** the hub writes every record as it happens, so the graph is always on disk. The hub is the only writer, through `bun:ffi`. Agents, the CLI and replay open the same folder read-only.
 - **Rules** are Cypher, evaluated by Relate on an empty in-memory store that refuses writes. The page loads the same graph into Relate WASM.
 - **Search:** full-text indexes on each question's text, rule and probe, and on why runs failed. Before an agent asks, it searches for the words. A hit comes with its answer now, so a ruled-out direction stays ruled out.

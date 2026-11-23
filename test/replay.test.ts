@@ -263,3 +263,17 @@ test("the recorded page supports goal and evidence navigation and WebMCP", async
     server.stop(true);
   }
 }, 30_000);
+
+test("the recorded example replays its solve: the goal is complete and the control says no", async () => {
+  const server = replay(join(import.meta.dir, "..", "examples", "human-rng"), { port: 0 });
+  const client = new Client({ name: "replay-reader", version: "1" });
+  try {
+    await client.connect(new StreamableHTTPClientTransport(new URL("/mcp", server.url)));
+    const run = async (cypher: string) => ((await client.callTool({ name: "query", arguments: { cypher } })).structuredContent as { rows: unknown[] }).rows;
+    expect(await run("MATCH (g:Goal)-[:ACCEPTED_BY]->(q) RETURN g.id IN $complete AS complete, q.id IN $yes AS yes")).toEqual([{ complete: true, yes: true }]);
+    expect(await run("MATCH (q:Question) WHERE q.id IN $no RETURN count(q) AS no")).toEqual([{ no: 2 }]);
+  } finally {
+    await client.close();
+    server.stop(true);
+  }
+}, 30_000);
