@@ -66,6 +66,17 @@ Start from [assets/probe.py](assets/probe.py).
 
 ## Querying and reporting
 
+When resuming a large graph, zoom out first: query goals, lane counts (`q.asker`), and the latest 15–20 questions (`ORDER BY q.seq DESC LIMIT 15`) with only `id`, `asker`, `state`, and `text`. Pull `r.results`, `SAVED` files, or `q.probe` only for the specific question ids you need—never in bulk.
+
+```cypher
+MATCH (q:Question)
+RETURN q.asker AS lane, count(q) AS total,
+       sum(CASE WHEN q.id IN $yes THEN 1 ELSE 0 END) AS yes,
+       sum(CASE WHEN q.id IN $no THEN 1 ELSE 0 END) AS no,
+       sum(CASE WHEN q.id IN $running THEN 1 ELSE 0 END) AS running
+ORDER BY total DESC
+```
+
 Relate Cypher gotchas: pass `$vars` via `params` (missing params error); `WITH` drops every variable it does not list, so list each one you use later (`WITH q, r, count(f) AS files`); bound traversals (`*0..5`) and `LIMIT 50`; no Neo4j/APOC procedures. Use `$current` for current runs and `WHERE q.id IN $failed AND NOT q.id IN $replaced` for open failures. Read `q.probe` from the graph, not `scratch/`.
 
 The schema writes `{name}` for a property a relationship has. In a query, give it a value (`-[:NEEDS {name: 'q-…/file'}]->`) or leave it out. `NEEDS` has one edge per file, so a question that reads two files from one producer has two edges to it: walk `NEEDS` with `DISTINCT`.
