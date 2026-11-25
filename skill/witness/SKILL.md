@@ -40,6 +40,7 @@ Work counts only when it is in the graph. A claim with a question id can be quer
 
 - **Subagents.** Give each subagent its own lane. It uses `ask`, `look` and `query` as you do. A question id and a `q-…/name` path give another agent all that it needs. Start subagents with the native subagent tool of the host. Then the subagent is in the same session, and the caller selects its model. A process that you start from a shell is not in the session. The hub runs a fixed number of probes at the same time (the MCP instructions give the number). More probes wait in line.
 - **Joining live work.** Separate sessions and model families can share one folder and one hub. No coordinator is necessary. Before you ask, query `$running` (the questions that measure now) and the latest questions of each lane (`ORDER BY q.seq DESC`). Then select a direction that no lane holds. When you use the answer or a file of another session, declare its `q-…` id as an input. That edge is how sessions share work.
+- **Running probes.** Never stop a probe process, also when a newer question replaces its question. Other agents share the machine, and a stopped run settles nothing. Let the run finish. Only a person on the page can cancel a run.
 
 ## Asking well
 

@@ -19,6 +19,7 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 - look: see a file that a run saved.
 - The same ask on the same inputs returns the recorded answer. When an input changes, the question runs again. When the inputs change back, their recorded answer comes back. Thus a probe must only measure. It must not send or deploy.
 - A run that did not measure (crashed or timed out) settles nothing. The same ask runs it again.
+- Never stop a probe process. Let a run you no longer need finish. Only a person on the page can cancel a run.
 - Use one short lane name for each direction of work, for example "fourier" or "qr".
 - The witness skill tells how to ask well.`;
 
