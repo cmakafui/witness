@@ -45,7 +45,7 @@ witness open [DIR]    # watch a workspace's graph live
 witness replay [DIR]  # read a recorded session
 ```
 
-Agents get four tools: `goal`, `ask`, `query` and `look`.
+Agents get five tools: `goal`, `ask`, `query`, `look` and `watch`.
 
 ## How it uses Relate
 

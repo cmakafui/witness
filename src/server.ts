@@ -15,7 +15,7 @@ export function serve(hub: Hub, { port = 4747, hostname = "127.0.0.1" } = {}) {
   const server = Bun.serve({
     port,
     hostname,
-    idleTimeout: 255, // the most Bun allows: ask waits for its answer, up to wait_s (at most 240 s)
+    idleTimeout: 255, // the most Bun allows: ask and watch wait, up to wait_s (at most 240 s)
     routes: {
       "/": page,
       "/mcp": (req, srv): Promise<Response> | Response => {

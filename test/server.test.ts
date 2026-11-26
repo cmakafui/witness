@@ -43,7 +43,7 @@ const json = (r: Awaited<ReturnType<Client["callTool"]>>) => JSON.parse((r.conte
 
 test("an agent asks over MCP, queries the graph, and gets a refusal it can fix", async () => {
   const client = await agent();
-  expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(["ask", "goal", "look", "query"]);
+  expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(["ask", "goal", "look", "query", "watch"]);
   const g = json(await client.callTool({ name: "goal", arguments: { text: "The total of data.txt exceeds 10." } }));
   expect(g).toMatchObject({ state: "open", complete: false });
   const a = json(await client.callTool({ name: "ask", arguments: { accepts: g.id, text: "Is the total of data.txt more than 10?", rule: "$total > 10", probe: PROBE, inputs: ["data.txt"], lane: "tester" } }));
@@ -98,6 +98,7 @@ test("every tool declares its output schema, and results carry structured conten
   expect(props("look")).toEqual(["bytes", "file", "name", "text", "truncated", "type"]);
   expect(props("ask")).toEqual(["goal", "id", "question", "reason", "results", "run", "saved", "state", "was"]);
   expect(props("goal")).toEqual(["acceptance", "complete", "id", "reason", "state", "text"]);
+  expect(props("watch")).toEqual(["cursor", "events"]);
 
   // The client checks each result against the schema it listed. The JSON text is still there for older clients.
   const g = await client.callTool({ name: "goal", arguments: { text: "Structured." } });
@@ -112,6 +113,9 @@ test("every tool declares its output schema, and results carry structured conten
   expect(JSON.parse((l.structuredContent as { text: string }).text)).toEqual({ total: 15 });
   expect((l.content as { text: string }[])[0]!.text).toBe((l.structuredContent as { text: string }).text);
   expect((l.structuredContent as { file: string }).file).toMatch(/^[0-9a-f]{64}$/);
+  const w = await client.callTool({ name: "watch", arguments: { after: 0, wait_s: 0 } });
+  expect(w.structuredContent).toEqual(json(w));
+  expect((w.structuredContent as { events: { kind: string; question: string; run?: string }[] }).events).toContainEqual(expect.objectContaining({ kind: "answered", question: (a.structuredContent as { id: string }).id, run: (a.structuredContent as { run: string }).run, answer: "yes" }));
 
   // A refusal is an error, with no structured content to check.
   const missing = await client.callTool({ name: "look", arguments: { file: "nonsense" } });

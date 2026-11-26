@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { MAIN } from "./connect.ts";
 
 const SKILL = join(import.meta.dir, "..", "skill", "witness");
-/** ask waits up to 240 s for an answer. Codex and Pi give up on a tool call sooner unless its server says otherwise. */
+/** ask and watch wait up to 240 s. Codex and Pi give up on a tool call sooner unless its server says otherwise. */
 const CODEX_TIMEOUT_S = 300;
 const PI_TIMEOUT_S = 300;
 /** Pi's config folder. PI_CODING_AGENT_DIR moves it. */
@@ -66,7 +66,7 @@ export function setup() {
   if (Bun.which("pi")) {
     done.push(linkSkill(join(piDir(), "skills", "witness"), "Pi"));
     Bun.spawnSync(["pi", "mcp", "remove", "witness"], { stdout: "ignore", stderr: "ignore" });
-    // Four small tools that agents call all the time: declare them to the model, without a search step.
+    // Five small tools that agents call all the time: declare them to the model, without a search step.
     const description = "Tested answers for a team of agents: ask yes/no questions that a probe measures and a rule decides.";
     const r = Bun.spawnSync(["pi", "mcp", "add", "witness", "--exposure", "direct", "--description", description, "--", ...command], { stderr: "pipe" });
     const config = join(piDir(), "mcp.json");
@@ -75,7 +75,7 @@ export function setup() {
   }
 
   if (Bun.which("agy")) {
-    // agy has no tool timeout setting for MCP servers, so ask keeps agy's default.
+    // agy has no tool timeout setting for MCP servers, so ask and watch keep agy's default.
     done.push(linkSkill(join(homedir(), ".gemini", "config", "skills", "witness"), "agy"));
     Bun.spawnSync(["agy", "mcp", "remove", "witness"], { stdout: "ignore", stderr: "ignore" });
     const r = Bun.spawnSync(["agy", "mcp", "add", "witness", "--", ...command], { stderr: "pipe" });

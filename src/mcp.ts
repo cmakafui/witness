@@ -17,6 +17,7 @@ const GUIDE = `Witness keeps the tested answers of a team of agents in one graph
 - ask: give a yes/no question, a rule, a probe and the files that the probe reads. Witness runs the probe and returns the answer.
 - query: read the graph with Cypher. Search it by words before you ask. Another agent may have measured the same thing.
 - look: see a file that a run saved.
+- watch: wait for new questions and answers in a lane. Pass its cursor back as after.
 - The same ask on the same inputs returns the recorded answer. When an input changes, the question runs again. When the inputs change back, their recorded answer comes back. Thus a probe must only measure. It must not send or deploy.
 - A run that did not measure (crashed or timed out) settles nothing. The same ask runs it again.
 - Never stop a probe process. Let a run you no longer need finish. Only a person on the page can cancel a run.
@@ -58,6 +59,21 @@ const LOOKED = {
   bytes: z.number().int().describe("Its size in bytes"),
   text: z.string().nullable().describe("Its text, up to 50,000 characters. Null for an image or binary data"),
   truncated: z.boolean().describe("True when text holds only the start of the file"),
+};
+const WATCHED = {
+  events: z
+    .array(
+      z.object({
+        seq: z.number().int().describe("Its place in the recorded order"),
+        kind: z.enum(["asked", "answered"]).describe("asked: a new question. answered: a run ended"),
+        question: z.string().describe("The question id, q-…"),
+        lane: z.string().nullable(),
+        answer: z.enum(["yes", "no", "failed"]).optional().describe("answered: the answer of the run"),
+        run: z.string().optional().describe("answered: the run id, r-…"),
+      }),
+    )
+    .describe("What happened, oldest first. 100 at most"),
+  cursor: z.number().int().describe("Give it as after in the next watch"),
 };
 const LIMIT = 50_000;
 
@@ -125,6 +141,22 @@ function server(hub: Hub): McpServer {
       outputSchema: ASKED,
     },
     (a) => tool(() => hub.ask({ ...a, probeRef: a.probe_ref, timeoutS: a.timeout_s, waitS: a.wait_s })),
+  );
+
+  s.registerTool(
+    "watch",
+    {
+      description:
+        "Wait for what happens in a lane: an agent asks a question, or a run ends with its answer. Returns as soon as there is an event, or with no events after wait_s. Give the returned cursor as after in the next watch, and you miss nothing. An event holds ids only: use query and look for the detail.",
+      inputSchema: {
+        lane: z.string().optional().describe("The lane to watch. Without it, watch every lane."),
+        after: z.number().int().min(0).optional().describe("The cursor from the last watch. Without it, watch from now."),
+        wait_s: z.number().int().min(0).max(240).optional().describe("How long to wait for an event, in seconds. The maximum is 240, and the default is 120."),
+      },
+      outputSchema: WATCHED,
+      annotations: { readOnlyHint: true },
+    },
+    (a) => tool(() => hub.watch({ after: a.after, lane: a.lane, waitS: a.wait_s })),
   );
 
   registerReadTools(s, hub);
@@ -197,7 +229,7 @@ const handler = (make: () => McpServer) => async (req: Request): Promise<Respons
   return transport.handleRequest(req);
 };
 
-/** MCP for agents: all four tools. */
+/** MCP for agents: all five tools. */
 export const mcp = (hub: Hub) => handler(() => server(hub));
 
 /** MCP for witness replay: query and look only. */

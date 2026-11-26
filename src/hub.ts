@@ -45,7 +45,13 @@ export type Event =
   | { type: "graph"; nodes: GNode[]; rels: GRel[] }
   | { type: "states"; states: Status[] };
 
-type Question = { id: string; rule: string; probe: string; inputs: string[]; timeout: number };
+/** A record in a watch: a question asked, or a run that ended with its answer. */
+export type Happened = { seq: number; kind: "asked" | "answered"; question: string; lane: string | null; answer?: Run["answer"]; run?: string };
+
+/** The most events one watch returns. The cursor lets the agent read the rest. */
+const EVENTS = 100;
+
+type Question = { id: string; rule: string; probe: string; inputs: string[]; timeout: number; lane: string | null };
 type Run = { id: string; key: string; answer: "yes" | "no" | "failed"; reason: string | null; measured: boolean };
 type Saved = { name: string; file: string };
 type Input = { name: string; mount?: string; file: string; path?: string; content?: Uint8Array };
@@ -59,6 +65,7 @@ export class Hub {
   private measured = new Set<string>(); // the runs whose probe measured
   private savedBy = new Map<string, Saved[]>(); // run -> the files it saved
   private replaces: { from: string; to: string }[] = []; // new question -> the crashed question it fixes
+  private log: Happened[] = []; // every question and run, in the order of their seq
   private running = new Map<string, string>(); // question -> its run in progress
   private aborts = new Map<string, AbortController>(); // question -> the handle that stops its running probe
   private retries = new Set<string>(); // asks of a crashed question, awaiting a worker slot
@@ -130,6 +137,22 @@ export class Hub {
     });
     this.remember(nodes, rels);
     this.emit({ type: "graph", nodes, rels });
+    this.wake();
+  }
+
+  /** Wakes everything that waits: each waiter checks again what it waits for. */
+  private wake() {
+    const wake = [...this.wakers];
+    this.wakers.clear();
+    for (const w of wake) w();
+  }
+
+  /** Waits for the next write or run end, or for the deadline. */
+  private sleep(deadline: number) {
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
+      this.wakers.add(() => (clearTimeout(timer), resolve()));
+    });
   }
 
   /** Adds written records to the hub's memory of the store. Records arrive in the order of their seq. */
@@ -139,13 +162,18 @@ export class Hub {
     for (const n of nodes) {
       const p = n.props;
       if (n.label === "Goal") this.goalsById.set(n.id, { id: n.id, text: String(p.text), acceptance: null });
-      if (n.label === "Question" && !this.byId.has(n.id))
-        this.byId.set(n.id, { id: n.id, rule: String(p.rule), probe: String(p.probe), inputs: p.inputs as string[], timeout: Number(p.timeout) });
+      if (n.label === "Question" && !this.byId.has(n.id)) {
+        const lane = (p.lane as string | null) ?? null;
+        this.byId.set(n.id, { id: n.id, rule: String(p.rule), probe: String(p.probe), inputs: p.inputs as string[], timeout: Number(p.timeout), lane });
+        this.log.push({ seq: Number(p.seq), kind: "asked", question: n.id, lane });
+      }
       if (n.label === "Run") {
         const run: Run = { id: n.id, key: String(p.key), answer: p.answer as Run["answer"], reason: (p.reason as string | null) ?? null, measured: p.measured === true };
-        add(this.runsOf, of.get(n.id)!, run);
+        const question = of.get(n.id)!;
+        add(this.runsOf, question, run);
         this.runResults.set(run.id, String(p.results));
         if (run.measured) this.measured.add(run.id);
+        this.log.push({ seq: Number(p.seq), kind: "answered", question, lane: this.byId.get(question)!.lane, answer: run.answer, run: run.id });
       }
     }
     for (const r of rels) {
@@ -298,9 +326,7 @@ export class Hub {
       .finally(() => {
         this.running.delete(q.id);
         this.aborts.delete(q.id);
-        const wake = [...this.wakers];
-        this.wakers.clear();
-        for (const w of wake) w();
+        this.wake();
         this.check();
       });
   }
@@ -440,15 +466,32 @@ export class Hub {
     const deadline = Date.now() + (a.waitS ?? 120) * 1000;
     let s = this.status(id);
     while (!this.settled(s) && Date.now() < deadline) {
-      await new Promise<void>((resolve) => {
-        this.wakers.add(resolve);
-        setTimeout(resolve, Math.max(0, deadline - Date.now()));
-      });
+      await this.sleep(deadline);
       s = this.status(id);
     }
     const done = s.state === "yes" || s.state === "no" || s.state === "failed";
     const results = done ? JSON.parse(this.runResults.get(s.run!)!) : [];
     return { ...s, question: a.text, results, saved: done ? this.saved(s.run!).map((x) => `${id}/${x.name}`) : [], goal: goal ? this.goals().find((g) => g.id === goal)! : null };
+  }
+
+  /**
+   * The questions asked and the runs ended after the cursor `after`, in one lane or in all, oldest first. The returned
+   * cursor covers every record read, so the next read with the same lane misses nothing and reads nothing twice.
+   */
+  since(after: number, lane?: string): { events: Happened[]; cursor: number } {
+    const events = this.log.filter((e) => e.seq > after && (lane === undefined || e.lane === lane)).slice(0, EVENTS);
+    return { events, cursor: events.length === EVENTS ? events.at(-1)!.seq : Math.max(after, this.seq) };
+  }
+
+  /** Waits until something happens after the cursor, or until the deadline. With no cursor it starts from now. */
+  async watch({ after = this.seq, lane, waitS = 120 }: { after?: number; lane?: string; waitS?: number } = {}) {
+    const deadline = Date.now() + waitS * 1000;
+    let got = this.since(after, lane);
+    while (!got.events.length && Date.now() < deadline) {
+      await this.sleep(deadline);
+      got = this.since(after, lane);
+    }
+    return got;
   }
 
   /** Answered, or nothing is left that could change it. */

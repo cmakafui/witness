@@ -29,6 +29,7 @@ To set agents on a problem, start one in the folder of the problem and give it t
 - `ask`: a question, its rule, its probe and its inputs. `probe_ref: "q-…"` uses the probe of another question. `accepts: "g-…"` makes the question the acceptance question of a goal, before it runs. `replaces: "q-…"` fixes the probe of a question whose run did not measure (crashed or timed out). `lane` names the direction of work.
 - `query`: read-only Cypher.
 - `look`: a saved file. Images come back as images.
+- `watch`: waits for new questions and run answers in a lane. Give its `cursor` back as `after` to get the next ones.
 
 Each tool declares an output schema and returns structured content, so a code-mode client can chain calls in one program.
 
