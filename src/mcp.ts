@@ -117,7 +117,7 @@ function server(hub: Hub): McpServer {
         probe: z
           .string()
           .optional()
-          .describe('A Python script with a PEP 723 header. uv runs it in an empty folder that holds only the inputs. It prints each measurement as WITNESS_RESULT and one JSON object, for example WITNESS_RESULT {"p": 0.003}. It saves files for other questions in $WITNESS_OUT. If it installs packages, it sets exclude-newer under [tool.uv] to a fixed date.'),
+          .describe('A Python script with a PEP 723 header. Declare PyPI packages in dependencies and uv installs them for the run. With dependencies, set exclude-newer under [tool.uv] to a fixed date. uv runs the probe in an empty folder that holds only the inputs. It prints each measurement as WITNESS_RESULT and one JSON object, for example WITNESS_RESULT {"p": 0.003}. It saves files for other questions in $WITNESS_OUT.'),
         probe_ref: z.string().optional().describe("The id of a question in this workspace (q-…). Witness uses the probe of that question. Give the rule and the inputs of this question."),
         inputs: z
           .array(z.string())

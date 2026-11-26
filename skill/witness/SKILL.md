@@ -1,6 +1,6 @@
 ---
 name: witness
-description: Use Witness to record findings as tested answers, not notes. Ask a yes/no question with a rule and a probe. The probe is a uv Python script that measures. The rule is a Cypher expression that decides yes or no from the measurements. Witness runs the probe on its declared files only, and runs the question again when a file changes. All agents in the workspace share the answers. Work in a closed loop: measure, render, look, and let each answer choose the next question. Use when the witness MCP tools (goal, ask, query, look, watch) are available, before you say that something works or does not work, and before you use the result of another agent.
+description: Use Witness to record findings as tested answers, not notes. Probes can use the full PyPI catalog. Declare Python dependencies inline and uv installs them for the probe. Ask a yes/no question with a probe that measures and a Cypher rule that decides from the measurements. Witness runs probes on declared files and reruns questions when inputs change. All agents in the workspace share the answers. Work in a closed loop: measure, render, look, and let each answer choose the next question. Use when the witness MCP tools (goal, ask, query, look, watch) are available, before you say that something works or does not work, and before you use the result of another agent.
 ---
 
 # Witness
@@ -11,7 +11,9 @@ No agent writes an answer. A probe measures, and a Cypher rule decides.
 
 Work in a loop: measure, change the form, render, look, ask the next question.
 
-A problem can have many forms: text, numbers, a matrix, a graph, an image, a sound, a spectrum. Each form shows what the other forms hide. PyPI has the packages of every field that works with a form, so a probe can move the evidence into any form.
+A problem can have many forms: text, numbers, a matrix, a graph, an image, a sound, a spectrum. Each form shows what the other forms hide.
+
+Pick a library from PyPI that fits the evidence. Use Mido for MIDI events, Pillow for image crops, or SciPy for a spectrum. Declare the package in the probe and uv installs it for the run.
 
 You read text and you see images. A probe can draw the object that it measures (the matrix, the graph, the signal, the layout) as a PNG in `$WITNESS_OUT`. Call `look` on `q-…/name.png` to see the picture. A picture often shows structure that a column of numbers hides: a block, a symmetry, a stripe, an outlier.
 
@@ -67,7 +69,7 @@ ORDER BY g.seq
 Start from [assets/probe.py](assets/probe.py).
 
 - **Probe.** A PEP 723 `uv` script. It runs in an empty temporary folder that holds only its declared `inputs`. It prints `WITNESS_RESULT` and one JSON object for each measurement. Change numpy values to Python values with `int()` or `float()`. It saves outputs for other questions in `$WITNESS_OUT`. A probe only measures. It must not send or deploy.
-- **Dependencies.** A probe that installs packages sets `[tool.uv] exclude-newer = "YYYY-MM-DDTHH:MM:SSZ"` to a fixed date. Do not use a relative date.
+- **Dependencies.** List PyPI packages in the script header, for example `dependencies = ["mido"]`. Set `exclude-newer = "YYYY-MM-DDTHH:MM:SSZ"` under `[tool.uv]` to a fixed date.
 - **Failures.** If the measurement did not occur, stop the probe with an error. A crash gives `failed`, not `no`, and other questions cannot read its files. To fix the probe of a question that did not measure, ask the fix with `replaces: "q-…"`.
 - **Noise.** To measure a noisy quantity, loop in one probe, and let the rule judge `$results`.
 - **Rule.** One Cypher expression over `$name` (the last value) and `$results` (all measurement objects). Examples: `$mean > 10`, `all(r IN $results WHERE r.error <= 0.3)`. Use `=` for equality, not `==`. A missing field gives `null`, and `null` gives `failed`, not `no`. Use `coalesce(...)` to say what a missing value means.
